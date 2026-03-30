@@ -17,14 +17,6 @@ import {
   SanocareAdvantage,
 } from "@/components";
 
-import type { Metadata } from 'next'
-
-export const metadata: Metadata = {
-  title: 'Home',
-  other: {
-    'facebook-domain-verification': 'kfszus13qiekuol0cdt8784x8bdgb6',
-  },
-}
 
 export default function Home() {
   return (
