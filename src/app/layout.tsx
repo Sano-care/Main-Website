@@ -89,6 +89,9 @@ export const metadata: Metadata = {
   verification: {
     // Add your verification codes here when available
     // google: "google-site-verification-code",
+    other: {
+      "facebook-domain-verification": "kfszus13qiekuol0cdt8784x8bdgb6",
+    },
   },
 };
 
