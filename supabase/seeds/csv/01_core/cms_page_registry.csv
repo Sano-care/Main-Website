@@ -1,0 +1,13 @@
+id,slug,title,status,seo_title,seo_description,seo_keywords,og_image_asset_id,published_at
+10000000-0000-0000-0000-000000000001,home,Home,published,SanoCare | Home,"Doorstep healthcare with rapid response across Delhi NCR.","homecare,teleconsultation,doorstep healthcare",,2026-04-14T00:00:00Z
+10000000-0000-0000-0000-000000000002,services,Services,published,SanoCare | Services,"Explore homecare, diagnostics, teleconsultation, and chronic care.","services,homecare,telehealth",,2026-04-14T00:00:00Z
+10000000-0000-0000-0000-000000000003,now,SanoCare NOW,published,SanoCare NOW | 30-Min Care,"Rapid healthcare at your doorstep with transparent pricing.","sanocare now,rapid response,home visit",,2026-04-14T00:00:00Z
+10000000-0000-0000-0000-000000000004,carehub,CareHub,published,CareHub | Society Healthcare,"Community healthcare model for gated societies.","carehub,society healthcare,rwa",,2026-04-14T00:00:00Z
+10000000-0000-0000-0000-000000000005,contact,Contact,published,SanoCare | Contact,"Contact SanoCare for service and partnership inquiries.","contact,sanocare support",,2026-04-14T00:00:00Z
+10000000-0000-0000-0000-000000000006,research,Research,published,SanoCare | Research,"Healthcare insights, facts, and expert resources.","health insights,research,blog",,2026-04-14T00:00:00Z
+10000000-0000-0000-0000-000000000007,about,About,published,SanoCare | About,"Mission, values, and leadership behind SanoCare.","about sanocare,mission,team",,2026-04-14T00:00:00Z
+10000000-0000-0000-0000-000000000008,blog,Blog,published,SanoCare | Blog,"Health tips and educational content from SanoCare experts.","blog,health tips,articles",,2026-04-14T00:00:00Z
+10000000-0000-0000-0000-000000000009,portal,Portal,published,SanoCare | Portal,"Patient portal launch updates and future capabilities.","portal,patient records",,2026-04-14T00:00:00Z
+10000000-0000-0000-0000-000000000010,not-found,Not Found,published,SanoCare | 404,"Fallback route for missing pages.","404,not found",,2026-04-14T00:00:00Z
+10000000-0000-0000-0000-000000000011,coming-soon,Coming Soon,published,SanoCare | Coming Soon,"Upcoming pages and launches.","coming soon,launch",,2026-04-14T00:00:00Z
+10000000-0000-0000-0000-000000000012,shared,Shared Content,published,SanoCare | Shared Content,"Cross-page CMS content for navbar, footer, and banners.","shared content,navigation,footer",,2026-04-14T00:00:00Z

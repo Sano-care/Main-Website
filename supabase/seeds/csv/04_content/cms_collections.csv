@@ -1,0 +1,9 @@
+collection_key,item_key,title,subtitle,description,content_json,display_order,is_active
+about_team,team-member-1,Chief Medical Officer,Leadership,"Primary clinical governance role.","{}",10,false
+about_team,team-member-2,Head of Operations,Leadership,"Operational excellence and service delivery.","{}",20,false
+about_team,team-member-3,Director of Nursing,Leadership,"Nursing quality and training ownership.","{}",30,false
+about_team,team-member-4,Patient Experience Lead,Leadership,"Patient support, feedback, and care experience.","{}",40,false
+about_milestones,milestone-1,The Foundation,,"Started with a vision to transform homecare.","{}",10,false
+about_milestones,milestone-2,First 1000 Patients,,"Reached first major trust milestone.","{}",20,false
+about_milestones,milestone-3,Team Expansion,,"Scaled multidisciplinary care team.","{}",30,false
+about_milestones,milestone-4,Leading Homecare,,"Serving thousands with integrated care.","{}",40,false

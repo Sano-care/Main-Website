@@ -3,22 +3,9 @@
 import { motion } from "framer-motion";
 import { 
   Zap, 
-  Clock, 
-  Home, 
-  Stethoscope, 
-  Activity, 
-  Shield, 
   CheckCircle2, 
   ArrowRight,
   Phone,
-  IndianRupee,
-  Syringe,
-  HeartPulse,
-  Thermometer,
-  TestTube,
-  MapPin,
-  BadgeCheck,
-  FileText,
   Timer,
 } from "lucide-react";
 import Image from "next/image";
@@ -26,93 +13,8 @@ import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui";
-
-const services = [
-  {
-    icon: Stethoscope,
-    title: "Paramedic Home Visit",
-    description: "Trained paramedics at your doorstep for consultations, vitals checks, and initial assessments",
-    price: "₹499",
-    duration: "15 mins",
-  },
-  {
-    icon: Syringe,
-    title: "Nursing & Injections",
-    description: "IV administration, injections, wound dressing, and post-operative care by trained nurses",
-    price: "₹349",
-    duration: "Per visit",
-  },
-  {
-    icon: HeartPulse,
-    title: "Vitals Monitoring",
-    description: "BP, SpO2, temperature, blood sugar monitoring with digital records",
-    price: "₹199",
-    duration: "Per check",
-  },
-  {
-    icon: TestTube,
-    title: "Lab Sample Collection",
-    description: "Blood tests, urine tests, and other diagnostic sample collection at home",
-    price: "₹99",
-    duration: "+ Lab fees",
-  },
-  {
-    icon: Thermometer,
-    title: "Chronic Care Visits",
-    description: "Regular monitoring visits for diabetes, hypertension, and other chronic conditions",
-    price: "₹399",
-    duration: "Per visit",
-  },
-  {
-    icon: Activity,
-    title: "ECG at Home",
-    description: "12-lead ECG with immediate digital report shared with you and your doctor",
-    price: "₹599",
-    duration: "With report",
-  },
-];
-
-const howItWorks = [
-  {
-    step: "01",
-    title: "Book Online",
-    description: "Fill the quick form or call us. Tell us your symptoms and location.",
-    icon: Phone,
-  },
-  {
-    step: "02",
-    title: "We Dispatch",
-    description: "Nearest available paramedic is dispatched to your location immediately.",
-    icon: MapPin,
-  },
-  {
-    step: "03",
-    title: "Care at Home",
-    description: "Receive professional care in the comfort of your home within 30 minutes.",
-    icon: Home,
-  },
-  {
-    step: "04",
-    title: "Digital Records",
-    description: "Get prescriptions and reports digitally on WhatsApp and email.",
-    icon: FileText,
-  },
-];
-
-const advantages = [
-  {
-    title: "No Waiting Rooms",
-    description: "Skip the queues. Healthcare comes to your doorstep.",
-  },
-  {
-    title: "Transparent Pricing",
-    description: "Know the cost upfront. No hidden fees or surprises.",
-  },
-  {
-    title: "Trained Professionals",
-    description: "All staff are verified, certified, and background-checked.",
-  },
-];
+import { useCmsSection } from "@/hooks/useCmsSection";
+import { NOW_PAGE_CONTENT } from "@/constants/cms-content";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -128,6 +30,56 @@ const itemVariants = {
 };
 
 export default function SanocareNowPage() {
+  const { data: nowPageCopy } = useCmsSection(
+    "now",
+    "page_copy",
+    NOW_PAGE_CONTENT.pageCopy,
+  );
+  const { data: nowServices } = useCmsSection(
+    "now",
+    "services",
+    NOW_PAGE_CONTENT.services,
+  );
+  const { data: nowHowItWorks } = useCmsSection(
+    "now",
+    "how_it_works",
+    NOW_PAGE_CONTENT.howItWorks,
+  );
+  const { data: nowAdvantages } = useCmsSection(
+    "now",
+    "advantages",
+    NOW_PAGE_CONTENT.advantages,
+  );
+  const { data: nowStats } = useCmsSection(
+    "now",
+    "stats",
+    NOW_PAGE_CONTENT.stats,
+  );
+  const { data: pricingPoints } = useCmsSection(
+    "now",
+    "pricing_points",
+    NOW_PAGE_CONTENT.pricingPoints,
+  );
+  const { data: trustPoints } = useCmsSection(
+    "now",
+    "trust_points",
+    NOW_PAGE_CONTENT.trustPoints,
+  );
+
+  const services = nowServices.map((service, index) => ({
+    ...service,
+    icon: service.icon ?? NOW_PAGE_CONTENT.services[index]?.icon ?? Zap,
+  }));
+  const howItWorks = nowHowItWorks.map((item, index) => ({
+    ...item,
+    icon: item.icon ?? NOW_PAGE_CONTENT.howItWorks[index]?.icon ?? Phone,
+  }));
+  const advantages = nowAdvantages;
+  const stats = nowStats.map((stat, index) => ({
+    ...stat,
+    icon: stat.icon ?? NOW_PAGE_CONTENT.stats[index]?.icon ?? Timer,
+  }));
+
   return (
     <main className="min-h-screen bg-background-light relative overflow-x-hidden">
       {/* Background Decorations */}
@@ -152,29 +104,29 @@ export default function SanocareNowPage() {
               >
                 <div className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-primary shadow-sm">
                   <Zap className="size-3.5" />
-                  Direct to Consumer
+                  {nowPageCopy.hero.badge}
                 </div>
                 
                 <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-medium leading-[1.1] tracking-tight text-text-main">
-                  Sanocare <br />
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-600 italic">NOW</span>
+                  {nowPageCopy.hero.titlePrefix} <br />
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-600 italic">{nowPageCopy.hero.titleHighlight}</span>
                 </h1>
                 
                 <p className="text-lg lg:text-xl leading-relaxed text-text-secondary max-w-xl font-light">
-                  Healthcare that comes to you. Get paramedics, nurses, and diagnostics at your doorstep within 30 minutes. No appointments, no waiting rooms.
+                  {nowPageCopy.hero.description}
                 </p>
                 
                 <div className="flex flex-wrap gap-4 pt-4">
-                  <Link href="/#hero-booking-form">
+                  <Link href={nowPageCopy.hero.primaryCtaHref}>
                     <Button className="rounded-full px-8 py-4 bg-primary hover:bg-primary-dark shadow-xl shadow-primary/20 hover:-translate-y-1 transition-transform">
-                      Book a Visit Now
+                      {nowPageCopy.hero.primaryCtaLabel}
                       <ArrowRight className="w-4 h-4" />
                     </Button>
                   </Link>
-                  <a href="tel:+919571608318">
+                  <a href={nowPageCopy.hero.secondaryCtaHref}>
                     <Button variant="outline" className="rounded-full px-8 py-4 border-slate-200 hover:border-primary/30">
                       <Phone className="w-4 h-4" />
-                      +91-9571608318
+                      {nowPageCopy.hero.secondaryCtaLabel}
                     </Button>
                   </a>
                 </div>
@@ -189,8 +141,8 @@ export default function SanocareNowPage() {
               >
                 <div className="aspect-[4/3] rounded-[2rem] overflow-hidden shadow-2xl relative z-10 border-8 border-white">
                   <Image
-                    src="https://images.unsplash.com/photo-1584820927498-cfe5211fd8bf?q=80&w=2942&auto=format&fit=crop"
-                    alt="Healthcare professional at home visit"
+                    src={nowPageCopy.hero.imageSrc}
+                    alt={nowPageCopy.hero.imageAlt}
                     fill
                     className="object-cover"
                     priority
@@ -206,9 +158,9 @@ export default function SanocareNowPage() {
                 >
                   <div className="flex items-center gap-3 mb-2">
                     <Timer className="w-5 h-5 text-primary" />
-                    <span className="text-xs font-bold uppercase tracking-widest">Quick Response</span>
+                    <span className="text-xs font-bold uppercase tracking-widest">{nowPageCopy.hero.floatingCardLabel}</span>
                   </div>
-                  <p className="text-[11px] text-text-secondary">Our team reaches you in under 30 minutes, guaranteed.</p>
+                  <p className="text-[11px] text-text-secondary">{nowPageCopy.hero.floatingCardText}</p>
                 </motion.div>
               </motion.div>
             </div>
@@ -224,13 +176,8 @@ export default function SanocareNowPage() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
             >
-              {[
-                { icon: Clock, value: "30 Min", label: "Response Time" },
-                { icon: IndianRupee, value: "₹499", label: "Starting Price" },
-                { icon: BadgeCheck, value: "100%", label: "Verified Staff" },
-                { icon: FileText, value: "Digital", label: "Health Records" },
-              ].map((stat, index) => {
-                const Icon = stat.icon;
+              {stats.map((stat, index) => {
+                const Icon = typeof stat.icon === "function" ? stat.icon : Timer;
                 return (
                   <motion.div
                     key={index}
@@ -264,13 +211,13 @@ export default function SanocareNowPage() {
               viewport={{ once: true }}
             >
               <span className="text-primary font-bold tracking-widest text-xs uppercase mb-3 block">
-                Our Services
+                {nowPageCopy.servicesSection.badge}
               </span>
               <h2 className="font-serif text-3xl lg:text-5xl font-medium text-text-main mb-6">
-                What We Bring to Your Door
+                {nowPageCopy.servicesSection.title}
               </h2>
               <p className="text-text-secondary font-light">
-                Comprehensive healthcare services delivered by verified, trained professionals.
+                {nowPageCopy.servicesSection.description}
               </p>
             </motion.div>
 
@@ -282,7 +229,7 @@ export default function SanocareNowPage() {
               className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8"
             >
               {services.map((service, index) => {
-                const Icon = service.icon;
+                const Icon = typeof service.icon === "function" ? service.icon : Zap;
                 return (
                   <motion.div
                     key={index}
@@ -324,8 +271,8 @@ export default function SanocareNowPage() {
               >
                 <div className="aspect-square rounded-3xl overflow-hidden shadow-2xl relative">
                   <Image
-                    src="https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?q=80&w=2864&auto=format&fit=crop"
-                    alt="Healthcare at home"
+                    src={nowPageCopy.processSection.imageSrc}
+                    alt={nowPageCopy.processSection.imageAlt}
                     fill
                     className="object-cover"
                   />
@@ -341,18 +288,18 @@ export default function SanocareNowPage() {
                 viewport={{ once: true }}
               >
                 <span className="text-primary font-bold tracking-widest text-xs uppercase mb-3 block">
-                  Simple Process
+                  {nowPageCopy.processSection.badge}
                 </span>
                 <h2 className="font-serif text-3xl lg:text-5xl font-medium text-text-main mb-6 lg:mb-8">
-                  How It Works
+                  {nowPageCopy.processSection.title}
                 </h2>
                 <p className="text-lg text-text-secondary font-light leading-relaxed mb-10 lg:mb-12">
-                  Getting healthcare at home is simple with Sanocare NOW. Just four easy steps.
+                  {nowPageCopy.processSection.description}
                 </p>
                 
                 <div className="space-y-8">
                   {howItWorks.map((item, index) => {
-                    const Icon = item.icon;
+                    const Icon = typeof item.icon === "function" ? item.icon : Phone;
                     return (
                       <motion.div
                         key={item.step}
@@ -398,10 +345,10 @@ export default function SanocareNowPage() {
                 viewport={{ once: true }}
               >
                 <span className="text-primary font-bold tracking-widest text-xs uppercase mb-3 block">
-                  Why Sanocare NOW
+                  {nowPageCopy.advantagesSection.badge}
                 </span>
                 <h2 className="font-serif text-3xl lg:text-5xl font-medium text-text-main mb-8">
-                  Healthcare, Redefined
+                  {nowPageCopy.advantagesSection.title}
                 </h2>
                 
                 <div className="space-y-8">
@@ -438,22 +385,16 @@ export default function SanocareNowPage() {
               >
                 <div className="bg-gradient-to-br from-primary/5 via-blue-50/50 to-white rounded-3xl p-8 lg:p-10 border border-primary/10 shadow-xl">
                   <div className="text-center mb-8">
-                    <span className="text-primary font-bold tracking-widest text-xs uppercase">Transparent Pricing</span>
+                    <span className="text-primary font-bold tracking-widest text-xs uppercase">{nowPageCopy.pricingCard.badge}</span>
                     <div className="mt-4">
-                      <span className="text-sm text-text-secondary">Starting at just</span>
-                      <div className="text-6xl font-bold text-primary mt-1">₹499</div>
-                      <span className="text-sm text-text-secondary">for 15-minute consultation</span>
+                      <span className="text-sm text-text-secondary">{nowPageCopy.pricingCard.startingAtLabel}</span>
+                      <div className="text-6xl font-bold text-primary mt-1">{nowPageCopy.pricingCard.price}</div>
+                      <span className="text-sm text-text-secondary">{nowPageCopy.pricingCard.subtitle}</span>
                     </div>
                   </div>
                   
                   <div className="space-y-4 mb-8">
-                    {[
-                      "Base consultation: ₹499 for first 15 minutes",
-                      "Additional time: ₹100 per 5 minutes",
-                      "Lab tests: Sample collection ₹99 + lab fees",
-                      "Nursing: Starting ₹349 per visit",
-                      "ECG at home: ₹599 with digital report",
-                    ].map((item, i) => (
+                    {pricingPoints.map((item, i) => (
                       <div key={i} className="flex items-start gap-3">
                         <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
                         <span className="text-text-main text-sm">{item}</span>
@@ -461,9 +402,9 @@ export default function SanocareNowPage() {
                     ))}
                   </div>
                   
-                  <Link href="/#hero-booking-form">
+                  <Link href={nowPageCopy.pricingCard.ctaHref}>
                     <Button variant="primary" size="lg" className="w-full rounded-full shadow-lg shadow-primary/20">
-                      Book Your Visit
+                      {nowPageCopy.pricingCard.ctaLabel}
                       <ArrowRight className="w-4 h-4" />
                     </Button>
                   </Link>
@@ -493,23 +434,17 @@ export default function SanocareNowPage() {
                 viewport={{ once: true }}
               >
                 <span className="text-primary font-bold tracking-widest text-xs uppercase mb-3 block">
-                  Trust & Safety
+                  {nowPageCopy.trustSection.badge}
                 </span>
                 <h2 className="font-serif text-3xl lg:text-5xl font-medium text-white mb-6">
-                  Your Safety is Our Priority
+                  {nowPageCopy.trustSection.title}
                 </h2>
                 <p className="text-white/70 mb-8 leading-relaxed text-lg">
-                  Every Sanocare NOW professional undergoes rigorous background verification, skill assessment, and regular training to ensure you receive the best care.
+                  {nowPageCopy.trustSection.description}
                 </p>
 
                 <div className="space-y-4 mb-8">
-                  {[
-                    "Aadhar and police verification for all staff",
-                    "Certified paramedics and trained nurses only",
-                    "Real-time tracking of your caregiver",
-                    "Digital records shared with you instantly",
-                    "24/7 customer support for any concerns"
-                  ].map((item, i) => (
+                  {trustPoints.map((item, i) => (
                     <div key={i} className="flex items-start gap-3">
                       <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
                       <span className="text-white/80">{item}</span>
@@ -526,8 +461,8 @@ export default function SanocareNowPage() {
               >
                 <div className="aspect-[4/3] rounded-3xl overflow-hidden shadow-2xl">
                   <Image
-                    src="https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=2940&auto=format&fit=crop"
-                    alt="Healthcare professional"
+                    src={nowPageCopy.trustSection.imageSrc}
+                    alt={nowPageCopy.trustSection.imageAlt}
                     fill
                     className="object-cover"
                   />
@@ -546,22 +481,22 @@ export default function SanocareNowPage() {
               viewport={{ once: true }}
             >
               <h2 className="font-serif text-3xl md:text-4xl font-bold text-white mb-4">
-                Need Healthcare Now?
+                {nowPageCopy.ctaSection.title}
               </h2>
               <p className="text-white/80 mb-8 max-w-xl mx-auto">
-                Don&apos;t wait in queues. Get professional medical care at your doorstep within 30 minutes.
+                {nowPageCopy.ctaSection.description}
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href="/#hero-booking-form">
+                <Link href={nowPageCopy.ctaSection.primaryCtaHref}>
                   <Button variant="ghost" size="lg" className="w-full sm:w-auto bg-white text-primary hover:bg-slate-100 hover:text-primary rounded-full px-8">
-                    Book a Visit
+                    {nowPageCopy.ctaSection.primaryCtaLabel}
                     <ArrowRight className="w-4 h-4" />
                   </Button>
                 </Link>
-                <a href="tel:+919571608318">
+                <a href={nowPageCopy.ctaSection.secondaryCtaHref}>
                   <Button variant="outline" size="lg" className="w-full sm:w-auto border-white text-white hover:bg-white/10 rounded-full px-8">
                     <Phone className="w-4 h-4" />
-                    Emergency? Call Now
+                    {nowPageCopy.ctaSection.secondaryCtaLabel}
                   </Button>
                 </a>
               </div>

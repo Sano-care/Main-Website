@@ -19,6 +19,9 @@ import { useParams } from "next/navigation";
 import { notFound } from "next/navigation";
 import { Navbar, Footer } from "@/components";
 import { getBlogPostBySlug, BLOG_POSTS, BlogPost } from "@/data/blog-posts";
+import { useCmsSection } from "@/hooks/useCmsSection";
+import { useCmsBlogPost } from "@/hooks/useCmsBlogPost";
+import { BLOG_PAGE_CONTENT } from "@/constants/cms-content";
 import ReactMarkdown from "react-markdown";
 
 // Related posts (exclude current)
@@ -38,13 +41,19 @@ function formatDate(dateString: string): string {
 export default function BlogPostPage() {
   const params = useParams();
   const slug = params.slug as string;
-  
-  const post = getBlogPostBySlug(slug);
-  
+  const { data: blogTemplateCopy } = useCmsSection(
+    "blog",
+    "template",
+    BLOG_PAGE_CONTENT.template,
+  );
+
+  const fallbackPost = getBlogPostBySlug(slug) ?? null;
+  const { data: post } = useCmsBlogPost(slug, fallbackPost);
+
   if (!post) {
     notFound();
   }
-  
+
   const relatedPosts = getRelatedPosts(slug);
 
   return (
@@ -60,14 +69,14 @@ export default function BlogPostPage() {
           className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500 mb-8"
         >
           <Link href="/#insights" className="hover:text-primary transition-colors">
-            Insights
+            {blogTemplateCopy.breadcrumbHomeLabel}
           </Link>
           <ChevronRight className="w-3 h-3" />
           <Link href="/#insights" className="hover:text-primary transition-colors">
             {post.category}
           </Link>
           <Circle className="w-2 h-2 text-primary fill-primary" />
-          <span className="text-primary">Featured Article</span>
+          <span className="text-primary">{blogTemplateCopy.featuredLabel}</span>
         </motion.nav>
 
         {/* Article Header */}
@@ -105,7 +114,7 @@ export default function BlogPostPage() {
             
             <div className="text-sm text-slate-500 flex items-center gap-2">
               <Calendar className="w-4 h-4" />
-              Published {formatDate(post.publishedAt)}
+              {blogTemplateCopy.publishedPrefix} {formatDate(post.publishedAt)}
             </div>
             
             <div className="text-sm text-slate-500 flex items-center gap-2">
@@ -126,7 +135,7 @@ export default function BlogPostPage() {
               }}
             >
               <Share2 className="w-4 h-4" />
-              Share
+              {blogTemplateCopy.shareButtonLabel}
             </button>
           </div>
 
@@ -187,13 +196,13 @@ export default function BlogPostPage() {
                     <div className="my-12 p-8 bg-slate-50 rounded-2xl border border-slate-200">
                       <div className="flex items-center justify-between mb-6">
                         <div>
-                          <h4 className="font-bold text-slate-900">Key Takeaway</h4>
-                          <p className="text-sm text-slate-500">From this article</p>
+                          <h4 className="font-bold text-slate-900">{blogTemplateCopy.keyTakeawayTitle}</h4>
+                          <p className="text-sm text-slate-500">{blogTemplateCopy.keyTakeawaySubtitle}</p>
                         </div>
                         <Stethoscope className="w-6 h-6 text-primary" />
                       </div>
                       <p className="text-slate-700 font-serif">
-                        Healthcare is evolving rapidly with technology and patient-centered approaches leading the way.
+                        {blogTemplateCopy.keyTakeawayText}
                       </p>
                     </div>
                   ),
@@ -216,17 +225,16 @@ export default function BlogPostPage() {
                 </div>
                 <div className="text-center md:text-left">
                   <h3 className="text-xl font-bold text-slate-900 mb-2">
-                    Need Expert Healthcare at Home?
+                    {blogTemplateCopy.cta.title}
                   </h3>
                   <p className="text-slate-600 mb-4">
-                    Our verified healthcare professionals can visit your home for consultations, 
-                    nursing care, and lab tests.
+                    {blogTemplateCopy.cta.description}
                   </p>
                   <Link
-                    href="/"
+                    href={blogTemplateCopy.cta.ctaHref}
                     className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white font-semibold rounded-xl hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20"
                   >
-                    Book a Home Visit
+                    {blogTemplateCopy.cta.ctaLabel}
                   </Link>
                 </div>
               </div>
@@ -244,7 +252,7 @@ export default function BlogPostPage() {
                 className="bg-slate-50 rounded-2xl p-6 border border-slate-100"
               >
                 <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-6">
-                  About the Author
+                  {blogTemplateCopy.authorSection.title}
                 </h4>
                 <div className="flex gap-4 items-start">
                   <div className="size-16 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0">
@@ -254,12 +262,12 @@ export default function BlogPostPage() {
                     <p className="font-bold text-slate-900 leading-tight">{post.author.name}</p>
                     <p className="text-sm text-primary mb-3">{post.author.role}</p>
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      Expert healthcare professional dedicated to improving patient outcomes through evidence-based practices.
+                      {blogTemplateCopy.authorSection.description}
                     </p>
                   </div>
                 </div>
                 <button className="w-full mt-6 py-3 border border-slate-200 rounded-xl text-sm font-bold hover:bg-white hover:border-primary hover:text-primary transition-all">
-                  View Profile
+                  {blogTemplateCopy.authorSection.viewProfileLabel}
                 </button>
               </motion.div>
 
@@ -271,7 +279,7 @@ export default function BlogPostPage() {
                   transition={{ delay: 0.4 }}
                 >
                   <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-6">
-                    Related Articles
+                    {blogTemplateCopy.relatedArticlesLabel}
                   </h4>
                   <div className="space-y-6">
                     {relatedPosts.map((relatedPost, index) => (
@@ -304,25 +312,25 @@ export default function BlogPostPage() {
                 className="bg-primary p-8 rounded-2xl text-white shadow-xl shadow-primary/20"
               >
                 <Mail className="w-8 h-8 mb-4" />
-                <h4 className="text-xl font-bold mb-2">Health Insights Weekly</h4>
+                <h4 className="text-xl font-bold mb-2">{blogTemplateCopy.newsletter.title}</h4>
                 <p className="text-sm text-white/80 leading-relaxed mb-6">
-                  Get the latest health tips and medical insights delivered to your inbox every week.
+                  {blogTemplateCopy.newsletter.description}
                 </p>
                 <form className="space-y-3" onSubmit={(e) => e.preventDefault()}>
                   <input
                     type="email"
-                    placeholder="your@email.com"
+                    placeholder={blogTemplateCopy.newsletter.emailPlaceholder}
                     className="w-full rounded-xl border-none bg-white/10 placeholder:text-white/50 text-sm focus:ring-2 focus:ring-white px-4 py-3"
                   />
                   <button 
                     type="submit"
                     className="w-full bg-white text-primary py-3 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors"
                   >
-                    Subscribe to Insights
+                    {blogTemplateCopy.newsletter.ctaLabel}
                   </button>
                 </form>
                 <p className="mt-4 text-[10px] text-white/60 text-center">
-                  We respect your privacy. Unsubscribe anytime.
+                  {blogTemplateCopy.newsletter.privacyNote}
                 </p>
               </motion.div>
             </div>
@@ -341,7 +349,7 @@ export default function BlogPostPage() {
             className="inline-flex items-center gap-2 text-slate-600 hover:text-primary transition-colors font-medium"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to All Articles
+            {blogTemplateCopy.backLabel}
           </Link>
         </motion.div>
       </main>

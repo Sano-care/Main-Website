@@ -1,37 +1,21 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Shield, UserCheck, Clock, BadgeCheck, Stethoscope } from "lucide-react";
-
-const trustBadges = [
-  { 
-    icon: UserCheck, 
-    name: "Verified Healthcare Staff",
-    description: "100% Background Checked"
-  },
-  { 
-    icon: Shield, 
-    name: "DISHA Compliant",
-    description: "Data Security Certified"
-  },
-  { 
-    icon: Clock, 
-    name: "24/7 Support",
-    description: "Always Available"
-  },
-  { 
-    icon: BadgeCheck, 
-    name: "Licensed & Insured",
-    description: "Fully Accredited"
-  },
-  { 
-    icon: Stethoscope, 
-    name: "Quality Assured",
-    description: "ISO 9001 Standards"
-  },
-];
+import { useCmsSection } from "@/hooks/useCmsSection";
+import { HOME_CONTENT } from "@/constants/cms-content";
 
 export function Accreditations() {
+  const defaultTrustIcon = HOME_CONTENT.trust.badges[0].icon;
+  const { data: trustContent } = useCmsSection(
+    "home",
+    "trust",
+    HOME_CONTENT.trust,
+  );
+  const trustBadges = trustContent.badges.map((badge, index) => ({
+    ...badge,
+    icon: badge.icon ?? HOME_CONTENT.trust.badges[index]?.icon ?? defaultTrustIcon,
+  }));
+
   return (
     <section className="border-t border-slate-200 bg-white/50 py-16" id="trust">
       <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
@@ -41,7 +25,7 @@ export function Accreditations() {
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
         >
-          Why Thousands Trust Sanocare
+          {trustContent.sectionTitle ?? HOME_CONTENT.trust.sectionTitle}
         </motion.p>
         <motion.div
           className="flex flex-wrap items-center justify-center gap-8 lg:gap-16"
@@ -50,7 +34,7 @@ export function Accreditations() {
           viewport={{ once: true }}
         >
           {trustBadges.map((item, index) => {
-            const Icon = item.icon;
+            const Icon = typeof item.icon === "function" ? item.icon : defaultTrustIcon;
             return (
               <motion.div
                 key={item.name}
@@ -69,8 +53,7 @@ export function Accreditations() {
             );
           })}
         </motion.div>
-        
-        {/* Additional Trust Line */}
+
         <motion.div
           className="mt-12 pt-8 border-t border-slate-100 flex flex-wrap items-center justify-center gap-6 text-xs text-text-secondary"
           initial={{ opacity: 0 }}
@@ -78,20 +61,15 @@ export function Accreditations() {
           viewport={{ once: true }}
           transition={{ delay: 0.5 }}
         >
-          <span className="flex items-center gap-2">
-            <span className="size-2 rounded-full bg-green-500" />
-            5000+ Consultations Completed
-          </span>
-          <span className="hidden sm:block">•</span>
-          <span className="flex items-center gap-2">
-            <span className="size-2 rounded-full bg-green-500" />
-            4.9★ Average Rating
-          </span>
-          <span className="hidden sm:block">•</span>
-          <span className="flex items-center gap-2">
-            <span className="size-2 rounded-full bg-green-500" />
-            Serving Delhi NCR Since 2024
-          </span>
+          {trustContent.metrics.map((line, index) => (
+            <span key={line} className="flex items-center gap-2">
+              <span className="size-2 rounded-full bg-green-500" />
+              {line}
+              {index < trustContent.metrics.length - 1 ? (
+                <span className="hidden sm:block">•</span>
+              ) : null}
+            </span>
+          ))}
         </motion.div>
       </div>
     </section>

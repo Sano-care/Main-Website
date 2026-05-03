@@ -1,0 +1,4 @@
+message,highlight_text,icon_key,link_url,link_label,start_at,end_at,display_order,is_active
+"Sanocare NOW is now live in Kalkaji & Govindpuri Extension!",Sanocare NOW,rocket,/now,Explore NOW,,,10,true
+"Launching permanent CareHubs in South Delhi Gated Societies soon.",CareHubs,check-circle,/carehub,Learn About CareHub,,,20,true
+"Emergency? Call +91-9571608318 for instant doorstep care.",+91-9571608318,phone,tel:+919571608318,Call Now,,,30,true

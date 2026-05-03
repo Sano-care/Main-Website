@@ -3,12 +3,8 @@
 import { motion } from "framer-motion";
 import { useInView } from "framer-motion";
 import { useRef } from "react";
-
-const stats = [
-  { value: "30", suffix: "min", label: "Average Response Time", subtext: "Quick care when you need it" },
-  { value: "100", suffix: "%", label: "Highly Qualified Doctors", subtext: "MBBS & specialist qualified" },
-  { value: "24", suffix: "/7", label: "Support Available", subtext: "Healthcare never stops" },
-];
+import { useCmsSection } from "@/hooks/useCmsSection";
+import { HOME_CONTENT } from "@/constants/cms-content";
 
 function AnimatedNumber({ value, suffix }: { value: string; suffix: string }) {
   const ref = useRef(null);
@@ -29,6 +25,13 @@ function AnimatedNumber({ value, suffix }: { value: string; suffix: string }) {
 }
 
 export function StatsBar() {
+  const { data: statsBarContent } = useCmsSection(
+    "home",
+    "stats_bar",
+    HOME_CONTENT.statsBar,
+  );
+  const stats = statsBarContent.stats;
+
   return (
     <section className="relative py-20 bg-text-main text-white overflow-hidden">
       {/* Dot pattern background */}

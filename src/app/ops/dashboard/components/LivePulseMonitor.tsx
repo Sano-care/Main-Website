@@ -427,7 +427,7 @@ export function LivePulseMonitor({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {Object.entries(statusConfig).map(([status, config]) => {
           const count = bookings.filter((b) => b.status === status).length;
-          const Icon = config.icon;
+          const Icon = typeof config.icon === "function" ? config.icon : Clock;
           return (
             <div
               key={status}

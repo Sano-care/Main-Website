@@ -1,0 +1,5 @@
+canonical_slug,label,display_order,is_active,legacy_aliases
+homecare,"Homecare (Doctor Visit, Nursing, Vitals)",10,TRUE,"""{home-visit,nursing}"""
+teleconsult,Teleconsultation (Video Consult),20,TRUE,"""{teleconsultation,video-consult}"""
+chronic,Chronic Disease Management,30,TRUE,"""{chronic-care}"""
+diagnostics,Early Risk Diagnostics,40,TRUE,"""{lab,ecg,tests}"""

@@ -5,3 +5,4 @@
 
 export * from './booking';
 export * from './geolocation';
+export * from './cms';

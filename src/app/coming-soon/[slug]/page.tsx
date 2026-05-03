@@ -6,55 +6,18 @@ import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui";
 import { useParams } from "next/navigation";
-
-// Page metadata for different "coming soon" pages
-const pageInfo: Record<string, { title: string; description: string; eta?: string }> = {
-  'about': {
-    title: 'About Us',
-    description: 'Learn more about Sanocare\'s mission, vision, and the team behind reimagining primary healthcare.',
-    eta: 'Q2 2026',
-  },
-  'privacy': {
-    title: 'Privacy Policy',
-    description: 'Our commitment to protecting your health data and personal information.',
-    eta: 'Q1 2026',
-  },
-  'terms': {
-    title: 'Terms of Service',
-    description: 'Terms and conditions for using Sanocare services.',
-    eta: 'Q1 2026',
-  },
-  'sitemap': {
-    title: 'Sitemap',
-    description: 'A comprehensive map of all pages and resources on our website.',
-    eta: 'Q1 2026',
-  },
-  'blog': {
-    title: 'Health Blog',
-    description: 'Medical insights, health tips, and wellness articles from our expert doctors.',
-    eta: 'Q2 2026',
-  },
-  'careers': {
-    title: 'Careers',
-    description: 'Join our mission to make quality healthcare accessible to every household.',
-    eta: 'Q2 2026',
-  },
-  'chat': {
-    title: 'Live Chat Support',
-    description: 'Get instant help from our care coordinators via chat.',
-    eta: 'Q2 2026',
-  },
-  'default': {
-    title: 'Coming Soon',
-    description: 'We\'re working hard to bring you this feature. Check back soon!',
-    eta: 'Soon',
-  },
-};
+import { useCmsSection } from "@/hooks/useCmsSection";
+import { COMING_SOON_PAGE_CONTENT } from "@/constants/cms-content";
 
 export default function ComingSoonPage() {
   const params = useParams();
   const slug = params.slug as string;
-  const info = pageInfo[slug] || pageInfo['default'];
+  const { data: comingSoonCopy } = useCmsSection(
+    "coming-soon",
+    "page_copy",
+    COMING_SOON_PAGE_CONTENT,
+  );
+  const info = comingSoonCopy.entries[slug as keyof typeof comingSoonCopy.entries] || comingSoonCopy.defaultEntry;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white flex flex-col">
@@ -64,19 +27,19 @@ export default function ComingSoonPage() {
           <Link href="/" className="flex items-center gap-3 group">
             <Image
               src="/logo.svg"
-              alt="Sanocare"
+              alt={comingSoonCopy.logoAlt}
               width={40}
               height={40}
               className="w-10 h-10"
             />
             <h2 className="text-2xl font-serif font-bold tracking-tight text-text-main">
-              Sano<span className="text-primary font-normal italic">care</span>
+              {comingSoonCopy.brandWordmarkPrefix}<span className="text-primary font-normal italic">{comingSoonCopy.brandWordmarkHighlight}</span>
             </h2>
           </Link>
           <Link href="/">
             <Button variant="outline" size="sm" className="rounded-full">
               <ArrowLeft className="w-4 h-4" />
-              Back to Home
+              {comingSoonCopy.backToHomeLabel}
             </Button>
           </Link>
         </div>
@@ -108,14 +71,14 @@ export default function ComingSoonPage() {
             className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-medium mb-6"
           >
             <Clock className="w-4 h-4" />
-            {info.eta && `Expected: ${info.eta}`}
+            {info.eta && `${comingSoonCopy.expectedPrefix} ${info.eta}`}
           </motion.div>
 
           {/* Heading */}
           <h1 className="text-3xl lg:text-4xl font-serif font-bold text-text-main mb-4">
             {info.title}
             <br />
-            <span className="text-primary italic font-light">Under Construction</span>
+            <span className="text-primary italic font-light">{comingSoonCopy.headingSuffix}</span>
           </h1>
 
           {/* Description */}
@@ -128,7 +91,7 @@ export default function ComingSoonPage() {
             <Link href="/">
               <Button variant="primary" size="lg" className="rounded-full w-full sm:w-auto">
                 <ArrowLeft className="w-4 h-4" />
-                Go Back Home
+                {comingSoonCopy.goBackHomeLabel}
               </Button>
             </Link>
             <Button 
@@ -137,20 +100,20 @@ export default function ComingSoonPage() {
               className="rounded-full"
               onClick={() => {
                 // TODO: Implement notification signup
-                alert('Thanks! We\'ll notify you when this page is ready.');
+                alert(comingSoonCopy.notifyToast);
               }}
             >
               <Bell className="w-4 h-4" />
-              Notify Me
+              {comingSoonCopy.notifyLabel}
             </Button>
           </div>
 
           {/* Contact CTA */}
           <div className="mt-12 pt-8 border-t border-slate-100">
             <p className="text-sm text-text-secondary">
-              Need immediate help? Call us at{" "}
-              <a href="tel:+919571608318" className="text-primary hover:underline font-medium">
-                +91-9571608318
+              {comingSoonCopy.contactHelpLabel}{" "}
+              <a href={comingSoonCopy.contactPhoneHref} className="text-primary hover:underline font-medium">
+                {comingSoonCopy.contactPhone}
               </a>
             </p>
           </div>

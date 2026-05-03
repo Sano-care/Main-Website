@@ -5,8 +5,16 @@ import { Construction, Bell, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui";
+import { useCmsSection } from "@/hooks/useCmsSection";
+import { PORTAL_PAGE_CONTENT } from "@/constants/cms-content";
 
 export default function PatientPortalPage() {
+  const { data: portalCopy } = useCmsSection(
+    "portal",
+    "page_copy",
+    PORTAL_PAGE_CONTENT,
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white flex flex-col">
       {/* Simple Header */}
@@ -15,19 +23,19 @@ export default function PatientPortalPage() {
           <Link href="/" className="flex items-center gap-3 group">
             <Image
               src="/logo.svg"
-              alt="Sanocare"
+              alt={portalCopy.logoAlt}
               width={40}
               height={40}
               className="w-10 h-10"
             />
             <h2 className="text-2xl font-serif font-bold tracking-tight text-text-main">
-              Sano<span className="text-primary font-normal italic">care</span>
+              {portalCopy.brandWordmarkPrefix}<span className="text-primary font-normal italic">{portalCopy.brandWordmarkHighlight}</span>
             </h2>
           </Link>
           <Link href="/">
             <Button variant="outline" size="sm" className="rounded-full">
               <ArrowLeft className="w-4 h-4" />
-              Back to Home
+              {portalCopy.backToHomeLabel}
             </Button>
           </Link>
         </div>
@@ -59,48 +67,47 @@ export default function PatientPortalPage() {
             className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-medium mb-6"
           >
             <span className="size-2 rounded-full bg-primary animate-pulse" />
-            SanoPulse is in Beta
+            {portalCopy.badgeLabel}
           </motion.div>
 
           {/* Heading */}
           <h1 className="text-3xl lg:text-4xl font-serif font-bold text-text-main mb-4">
-            Patient Portal <br />
-            <span className="text-primary italic font-light">Coming Soon</span>
+            {portalCopy.titlePrefix} <br />
+            <span className="text-primary italic font-light">{portalCopy.titleHighlight}</span>
           </h1>
 
           {/* Description */}
           <p className="text-text-secondary mb-8 leading-relaxed">
-            We&apos;re building something special for you. Soon you&apos;ll be able to view your medical history, 
-            track appointments, access prescriptions, and manage your health — all in one place.
+            {portalCopy.description}
           </p>
 
           {/* Features Preview */}
           <div className="bg-slate-50 rounded-2xl p-6 mb-8 text-left">
-            <h3 className="text-sm font-bold text-text-main mb-4">What&apos;s coming:</h3>
+            <h3 className="text-sm font-bold text-text-main mb-4">{portalCopy.featureTitle}</h3>
             <ul className="space-y-3 text-sm text-text-secondary">
               <li className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                   <span className="text-green-600 text-xs">✓</span>
                 </div>
-                View & download medical records
+                {portalCopy.features[0]}
               </li>
               <li className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                   <span className="text-green-600 text-xs">✓</span>
                 </div>
-                Track upcoming appointments
+                {portalCopy.features[1]}
               </li>
               <li className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                   <span className="text-green-600 text-xs">✓</span>
                 </div>
-                Access digital prescriptions
+                {portalCopy.features[2]}
               </li>
               <li className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                   <span className="text-green-600 text-xs">✓</span>
                 </div>
-                Chat with your care team
+                {portalCopy.features[3]}
               </li>
             </ul>
           </div>
@@ -109,18 +116,18 @@ export default function PatientPortalPage() {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button variant="primary" size="lg" className="rounded-full">
               <Bell className="w-4 h-4" />
-              Notify Me When Ready
+              {portalCopy.notifyButtonLabel}
             </Button>
-            <Link href="/">
+            <Link href={portalCopy.bookingButtonHref}>
               <Button variant="outline" size="lg" className="rounded-full w-full sm:w-auto">
-                Book a Consultation
+                {portalCopy.bookingButtonLabel}
               </Button>
             </Link>
           </div>
 
           {/* Timeline */}
           <p className="mt-8 text-xs text-text-secondary">
-            Expected launch: <span className="font-medium text-primary">Q2 2026</span>
+            {portalCopy.expectedLaunchLabel} <span className="font-medium text-primary">{portalCopy.expectedLaunchValue}</span>
           </p>
         </motion.div>
       </main>
@@ -128,7 +135,7 @@ export default function PatientPortalPage() {
       {/* Footer */}
       <footer className="border-t border-slate-100 py-6">
         <p className="text-center text-xs text-text-secondary">
-          © 2026 Sanocare Health Services. All rights reserved.
+          {portalCopy.footerText}
         </p>
       </footer>
     </div>

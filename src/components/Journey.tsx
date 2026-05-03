@@ -1,35 +1,18 @@
 "use client";
 
 import { motion } from "framer-motion";
-
-const journeySteps = [
-  {
-    number: 1,
-    title: "Book Your Visit",
-    description:
-      "Share your details and preferred time slot. Our care coordinator contacts you within 30 minutes to understand your needs.",
-    image:
-      "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=800&auto=format&fit=crop",
-  },
-  {
-    number: 2,
-    title: "Doctor at Your Doorstep",
-    description:
-      "A verified paramedic arrives at your home with necessary equipment for consultation, vitals check, and initial diagnosis.",
-    image:
-      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?q=80&w=800&auto=format&fit=crop",
-  },
-  {
-    number: 3,
-    title: "Complete Care & Follow-up",
-    description:
-      "Receive digital prescription, lab sample collection at home if needed, and ongoing support for your recovery journey.",
-    image:
-      "https://images.unsplash.com/photo-1631815588090-d4bfec5b1b89?q=80&w=800&auto=format&fit=crop",
-  },
-];
+import { useCmsSection } from "@/hooks/useCmsSection";
+import { HOME_CONTENT } from "@/constants/cms-content";
 
 export function Journey() {
+  const { data: journeyContent } = useCmsSection(
+    "home",
+    "journey",
+    HOME_CONTENT.journey,
+  );
+  const header = journeyContent.header ?? HOME_CONTENT.journey.header;
+  const journeySteps = journeyContent.steps;
+
   return (
     <section className="py-24 bg-text-main text-white relative overflow-hidden">
       {/* Dot pattern background */}
@@ -50,14 +33,13 @@ export function Journey() {
           viewport={{ once: true }}
         >
           <span className="text-primary font-bold tracking-widest text-xs uppercase mb-2 block">
-            How It Works
+            {header.badge}
           </span>
           <h2 className="font-serif text-4xl lg:text-5xl font-medium text-white">
-            Your Care Journey
+            {header.title}
           </h2>
           <p className="mt-4 text-white/70 max-w-2xl mx-auto">
-            From booking to recovery, healthcare has never been this convenient.
-            We bring the clinic to you.
+            {header.description}
           </p>
         </motion.div>
 

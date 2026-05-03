@@ -9,87 +9,19 @@ import {
   Mail, 
   MapPin, 
   ArrowRight, 
-  Shield, 
-  Clock, 
-  Heart, 
-  Activity,
   CheckCircle2,
   Loader2,
   User,
   MessageSquare,
   Zap,
-  Calendar,
-  Stethoscope,
-  Home,
 } from "lucide-react";
 import Image from "next/image";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { Button, Input } from "@/components/ui";
+import { useCmsSection } from "@/hooks/useCmsSection";
 import { supabase } from "@/lib/supabase";
-
-const benefits = [
-  {
-    icon: Clock,
-    title: "Priority Response",
-    description: "Dedicated response team with <15 min arrival time for society residents. No more waiting."
-  },
-  {
-    icon: Shield,
-    title: "Dedicated Care Team",
-    description: "Assigned paramedics and nurses who know your community and residents personally."
-  },
-  {
-    icon: Activity,
-    title: "Health Dashboard",
-    description: "Society-wide health analytics, resident tracking, and emergency response monitoring."
-  },
-  {
-    icon: Heart,
-    title: "Preventive Programs",
-    description: "Regular health camps, screenings, vaccinations, and wellness drives for all age groups."
-  },
-  {
-    icon: Users,
-    title: "Family Health Records",
-    description: "Centralized digital health records for all family members, accessible anytime."
-  },
-  {
-    icon: Building2,
-    title: "On-site Clinic Option",
-    description: "Setup of mini health center within your society premises with regular OPD hours."
-  }
-];
-
-const howItWorks = [
-  {
-    step: "01",
-    title: "Society Inquiry",
-    description: "RWA or management submits an inquiry. We conduct a free health infrastructure assessment.",
-  },
-  {
-    step: "02",
-    title: "Custom Plan",
-    description: "We design a tailored healthcare plan based on society size, demographics, and needs.",
-  },
-  {
-    step: "03",
-    title: "Onboarding",
-    description: "Dedicated team assigned, resident registration, and emergency protocols established.",
-  },
-  {
-    step: "04",
-    title: "Go Live",
-    description: "24/7 healthcare support activated. Regular health camps and monitoring begins.",
-  },
-];
-
-const stats = [
-  { value: "<15 min", label: "Priority Response" },
-  { value: "24/7", label: "Dedicated Support" },
-  { value: "50+", label: "Societies Trust Us" },
-  { value: "10,000+", label: "Families Covered" },
-];
+import { CAREHUB_PAGE_CONTENT } from "@/constants/cms-content";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -105,6 +37,37 @@ const itemVariants = {
 };
 
 export default function CareHubPage() {
+  const { data: carehubCopy } = useCmsSection(
+    "carehub",
+    "page_copy",
+    CAREHUB_PAGE_CONTENT.pageCopy,
+  );
+  const { data: benefitsData } = useCmsSection(
+    "carehub",
+    "benefits",
+    CAREHUB_PAGE_CONTENT.benefits,
+  );
+  const { data: howItWorks } = useCmsSection(
+    "carehub",
+    "how_it_works",
+    CAREHUB_PAGE_CONTENT.howItWorks,
+  );
+  const { data: stats } = useCmsSection(
+    "carehub",
+    "stats",
+    CAREHUB_PAGE_CONTENT.stats,
+  );
+  const { data: inquiryBenefits } = useCmsSection(
+    "carehub",
+    "inquiry_benefits",
+    CAREHUB_PAGE_CONTENT.inquiryBenefits,
+  );
+
+  const benefits = benefitsData.map((benefit, index) => ({
+    ...benefit,
+    icon: benefit.icon ?? CAREHUB_PAGE_CONTENT.benefits[index]?.icon ?? Building2,
+  }));
+
   const [formData, setFormData] = useState({
     contactName: "",
     phone: "",
@@ -201,29 +164,29 @@ export default function CareHubPage() {
               >
                 <div className="inline-flex w-fit items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-indigo-600 shadow-sm">
                   <Building2 className="size-3.5" />
-                  For Gated Communities
+                  {carehubCopy.hero.badge}
                 </div>
                 
                 <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-medium leading-[1.1] tracking-tight text-text-main">
-                  CareHub for <br />
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 italic">Your Society</span>
+                  {carehubCopy.hero.titlePrefix} <br />
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 italic">{carehubCopy.hero.titleHighlight}</span>
                 </h1>
                 
                 <p className="text-lg lg:text-xl leading-relaxed text-text-secondary max-w-xl font-light">
-                  Transform your gated community into a health-first neighborhood with dedicated healthcare infrastructure, priority response, and resident wellness programs.
+                  {carehubCopy.hero.description}
                 </p>
                 
                 <div className="flex flex-wrap gap-4 pt-4">
-                  <a href="#inquiry-form">
+                  <a href={carehubCopy.hero.primaryCtaHref}>
                     <Button className="rounded-full px-8 py-4 bg-indigo-600 hover:bg-indigo-700 shadow-xl shadow-indigo-500/20 hover:-translate-y-1 transition-transform">
-                      Request CareHub
+                      {carehubCopy.hero.primaryCtaLabel}
                       <ArrowRight className="w-4 h-4" />
                     </Button>
                   </a>
-                  <a href="tel:+919571608318">
+                  <a href={carehubCopy.hero.secondaryCtaHref}>
                     <Button variant="outline" className="rounded-full px-8 py-4 border-slate-200 hover:border-indigo-300">
                       <Phone className="w-4 h-4" />
-                      Talk to Us
+                      {carehubCopy.hero.secondaryCtaLabel}
                     </Button>
                   </a>
                 </div>
@@ -238,8 +201,8 @@ export default function CareHubPage() {
               >
                 <div className="aspect-[16/10] rounded-[2rem] overflow-hidden shadow-2xl relative z-10 border-8 border-white">
                   <Image
-                    src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2940&auto=format&fit=crop"
-                    alt="Modern residential society"
+                    src={carehubCopy.hero.imageSrc}
+                    alt={carehubCopy.hero.imageAlt}
                     fill
                     className="object-cover"
                     priority
@@ -255,9 +218,9 @@ export default function CareHubPage() {
                 >
                   <div className="flex items-center gap-3 mb-2">
                     <Zap className="w-5 h-5 text-indigo-600" />
-                    <span className="text-xs font-bold uppercase tracking-widest">Priority Care</span>
+                    <span className="text-xs font-bold uppercase tracking-widest">{carehubCopy.hero.floatingCardLabel}</span>
                   </div>
-                  <p className="text-[11px] text-text-secondary">Response time under 15 minutes for all CareHub residents.</p>
+                  <p className="text-[11px] text-text-secondary">{carehubCopy.hero.floatingCardText}</p>
                 </motion.div>
               </motion.div>
             </div>
@@ -300,13 +263,13 @@ export default function CareHubPage() {
               viewport={{ once: true }}
             >
               <span className="text-indigo-600 font-bold tracking-widest text-xs uppercase mb-3 block">
-                CareHub Benefits
+                {carehubCopy.benefitsSection.badge}
               </span>
               <h2 className="font-serif text-3xl lg:text-5xl font-medium text-text-main mb-6">
-                What Your Society Gets
+                {carehubCopy.benefitsSection.title}
               </h2>
               <p className="text-text-secondary font-light">
-                A comprehensive healthcare solution designed specifically for residential communities.
+                {carehubCopy.benefitsSection.description}
               </p>
             </motion.div>
 
@@ -318,7 +281,7 @@ export default function CareHubPage() {
               viewport={{ once: true }}
             >
               {benefits.map((benefit, index) => {
-                const Icon = benefit.icon;
+                const Icon = typeof benefit.icon === "function" ? benefit.icon : Building2;
                 return (
                   <motion.div
                     key={index}
@@ -352,13 +315,13 @@ export default function CareHubPage() {
                 viewport={{ once: true }}
               >
                 <span className="text-indigo-600 font-bold tracking-widest text-xs uppercase mb-3 block">
-                  Simple Process
+                  {carehubCopy.processSection.badge}
                 </span>
                 <h2 className="font-serif text-3xl lg:text-5xl font-medium text-text-main mb-6 lg:mb-8">
-                  How CareHub Works
+                  {carehubCopy.processSection.title}
                 </h2>
                 <p className="text-lg text-text-secondary font-light leading-relaxed mb-10 lg:mb-12">
-                  Getting CareHub for your society is simple. We handle everything from assessment to implementation.
+                  {carehubCopy.processSection.description}
                 </p>
                 
                 <div className="space-y-8">
@@ -396,8 +359,8 @@ export default function CareHubPage() {
               >
                 <div className="aspect-square rounded-3xl overflow-hidden shadow-2xl relative">
                   <Image
-                    src="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?q=80&w=2940&auto=format&fit=crop"
-                    alt="Community healthcare"
+                    src={carehubCopy.processSection.imageSrc}
+                    alt={carehubCopy.processSection.imageAlt}
                     fill
                     className="object-cover"
                   />
@@ -429,22 +392,17 @@ export default function CareHubPage() {
                 viewport={{ once: true }}
               >
                 <span className="text-indigo-400 font-bold tracking-widest text-xs uppercase mb-3 block">
-                  Get Started
+                  {carehubCopy.inquirySection.badge}
                 </span>
                 <h2 className="font-serif text-3xl lg:text-5xl font-medium text-white mb-6">
-                  Request CareHub for Your Society
+                  {carehubCopy.inquirySection.title}
                 </h2>
                 <p className="text-white/70 mb-8 leading-relaxed text-lg">
-                  Fill out the form and our partnership team will reach out within 24 hours to discuss how CareHub can transform healthcare in your community.
+                  {carehubCopy.inquirySection.description}
                 </p>
 
                 <div className="space-y-4 mb-8">
-                  {[
-                    "Free consultation and community health assessment",
-                    "Customized plans based on society size and needs",
-                    "No upfront infrastructure costs",
-                    "Flexible subscription models for residents"
-                  ].map((item, i) => (
+                  {inquiryBenefits.map((item, i) => (
                     <div key={i} className="flex items-start gap-3">
                       <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
                       <span className="text-white/80">{item}</span>
@@ -454,14 +412,14 @@ export default function CareHubPage() {
 
                 <div className="p-5 rounded-2xl bg-white/5 border border-white/10">
                   <p className="text-white/60 text-sm mb-2">
-                    Prefer to talk directly?
+                    {carehubCopy.inquirySection.directTalkLabel}
                   </p>
                   <a 
-                    href="tel:+919571608318" 
+                    href={carehubCopy.hero.secondaryCtaHref} 
                     className="inline-flex items-center gap-2 text-white font-bold hover:text-indigo-400 transition-colors"
                   >
                     <Phone className="w-4 h-4" />
-                    +91-9571608318
+                    {carehubCopy.inquirySection.directTalkPhone}
                   </a>
                 </div>
               </motion.div>
@@ -478,33 +436,33 @@ export default function CareHubPage() {
                       <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
                         <CheckCircle2 className="w-8 h-8 text-green-500" />
                       </div>
-                      <h3 className="text-xl font-bold text-text-main mb-2">Request Submitted!</h3>
+                      <h3 className="text-xl font-bold text-text-main mb-2">{carehubCopy.inquirySection.successTitle}</h3>
                       <p className="text-text-secondary mb-6">{submitStatus.message}</p>
                       <Button
                         variant="outline"
                         onClick={() => setSubmitStatus(null)}
                       >
-                        Submit Another Inquiry
+                        {carehubCopy.inquirySection.successCtaLabel}
                       </Button>
                     </div>
                   ) : (
                     <form onSubmit={handleSubmit} className="space-y-4">
-                      <h3 className="text-xl font-bold text-text-main mb-4">Society Inquiry Form</h3>
+                      <h3 className="text-xl font-bold text-text-main mb-4">{carehubCopy.inquirySection.formTitle}</h3>
                       
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Input
-                          label="Your Name"
+                          label={carehubCopy.formFields.contactNameLabel}
                           icon={User}
-                          placeholder="Contact Person Name"
+                          placeholder={carehubCopy.formFields.contactNamePlaceholder}
                           value={formData.contactName}
                           onChange={(e) => setFormData(prev => ({ ...prev, contactName: e.target.value }))}
                           required
                         />
                         <Input
-                          label="Phone Number"
+                          label={carehubCopy.formFields.phoneLabel}
                           icon={Phone}
                           type="tel"
-                          placeholder="+91 98765 43210"
+                          placeholder={carehubCopy.formFields.phonePlaceholder}
                           value={formData.phone}
                           onChange={handlePhoneChange}
                           required
@@ -512,19 +470,19 @@ export default function CareHubPage() {
                       </div>
 
                       <Input
-                        label="Email Address"
+                        label={carehubCopy.formFields.emailLabel}
                         icon={Mail}
                         type="email"
-                        placeholder="your@email.com"
+                        placeholder={carehubCopy.formFields.emailPlaceholder}
                         value={formData.email}
                         onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                         required
                       />
 
                       <Input
-                        label="Society / Complex Name"
+                        label={carehubCopy.formFields.societyNameLabel}
                         icon={Building2}
-                        placeholder="e.g., Green Valley Apartments"
+                        placeholder={carehubCopy.formFields.societyNamePlaceholder}
                         value={formData.societyName}
                         onChange={(e) => setFormData(prev => ({ ...prev, societyName: e.target.value }))}
                         required
@@ -532,18 +490,18 @@ export default function CareHubPage() {
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Input
-                          label="Location / Area"
+                          label={carehubCopy.formFields.locationLabel}
                           icon={MapPin}
-                          placeholder="e.g., Sector 62, Noida"
+                          placeholder={carehubCopy.formFields.locationPlaceholder}
                           value={formData.location}
                           onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
                           required
                         />
                         <Input
-                          label="Total Flats (Approx)"
+                          label={carehubCopy.formFields.totalFlatsLabel}
                           icon={Users}
                           type="number"
-                          placeholder="e.g., 500"
+                          placeholder={carehubCopy.formFields.totalFlatsPlaceholder}
                           value={formData.totalFlats}
                           onChange={(e) => setFormData(prev => ({ ...prev, totalFlats: e.target.value }))}
                         />
@@ -551,12 +509,12 @@ export default function CareHubPage() {
 
                       <div>
                         <label className="block text-sm font-semibold text-text-main mb-1.5">
-                          Additional Message (Optional)
+                          {carehubCopy.formFields.messageLabel}
                         </label>
                         <div className="relative">
                           <MessageSquare className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                           <textarea
-                            placeholder="Tell us about your society's healthcare needs..."
+                            placeholder={carehubCopy.formFields.messagePlaceholder}
                             value={formData.message}
                             onChange={(e) => setFormData(prev => ({ ...prev, message: e.target.value }))}
                             rows={3}
@@ -581,18 +539,18 @@ export default function CareHubPage() {
                         {isSubmitting ? (
                           <>
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            Submitting...
+                            {carehubCopy.formFields.submittingLabel}
                           </>
                         ) : (
                           <>
-                            Request CareHub
+                            {carehubCopy.formFields.submitLabel}
                             <ArrowRight className="w-4 h-4" />
                           </>
                         )}
                       </Button>
 
                       <p className="text-xs text-center text-slate-500">
-                        Our team will contact you within 24 hours
+                        {carehubCopy.inquirySection.within24HoursNote}
                       </p>
                     </form>
                   )}
@@ -611,22 +569,22 @@ export default function CareHubPage() {
               viewport={{ once: true }}
             >
               <h2 className="font-serif text-3xl md:text-4xl font-bold text-white mb-4">
-                Join the Health-First Community Movement
+                {carehubCopy.ctaSection.title}
               </h2>
               <p className="text-white/80 mb-8 max-w-xl mx-auto">
-                50+ societies have already transformed their healthcare. Is yours next?
+                {carehubCopy.ctaSection.description}
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <a href="#inquiry-form">
+                <a href={carehubCopy.ctaSection.primaryCtaHref}>
                   <Button variant="ghost" size="lg" className="w-full sm:w-auto bg-white text-indigo-600 hover:bg-slate-100 hover:text-indigo-600 rounded-full px-8">
-                    Get CareHub
+                    {carehubCopy.ctaSection.primaryCtaLabel}
                     <ArrowRight className="w-4 h-4" />
                   </Button>
                 </a>
-                <a href="tel:+919571608318">
+                <a href={carehubCopy.ctaSection.secondaryCtaHref}>
                   <Button variant="outline" size="lg" className="w-full sm:w-auto border-white text-white hover:bg-white/10 rounded-full px-8">
                     <Phone className="w-4 h-4" />
-                    Call Us
+                    {carehubCopy.ctaSection.secondaryCtaLabel}
                   </Button>
                 </a>
               </div>
