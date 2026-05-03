@@ -1,5 +1,3 @@
-"use client";
-
 import { DNABackground } from "@/components/ui";
 import {
   Navbar,

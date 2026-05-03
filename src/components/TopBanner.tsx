@@ -2,42 +2,37 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
-import { X, Rocket, CheckCircle, Phone } from "lucide-react";
-
-const announcements = [
-  {
-    icon: Rocket,
-    text: "Sanocare NOW is now live in Kalkaji & Govindpuri Extension!",
-    highlight: "Sanocare NOW",
-  },
-  {
-    icon: CheckCircle,
-    text: "Launching permanent CareHubs in South Delhi Gated Societies soon.",
-    highlight: "CareHubs",
-  },
-  {
-    icon: Phone,
-    text: "Emergency? Call +91-9571608318 for instant doorstep care.",
-    highlight: "+91-9571608318",
-  },
-];
+import { X } from "lucide-react";
+import { useCmsSection } from "@/hooks/useCmsSection";
+import { SHARED_CONTENT } from "@/constants/cms-content";
 
 export function TopBanner() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isVisible, setIsVisible] = useState(true);
+  const defaultAnnouncementIcon = SHARED_CONTENT.topBannerAnnouncements[0].icon;
+  const { data: announcements } = useCmsSection(
+    "shared",
+    "top_banner_announcements",
+    SHARED_CONTENT.topBannerAnnouncements,
+  );
 
   useEffect(() => {
+    if (announcements.length === 0) {
+      return;
+    }
+
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % announcements.length);
     }, 5000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [announcements.length]);
 
-  if (!isVisible) return null;
+  if (!isVisible || announcements.length === 0) return null;
 
   const currentAnnouncement = announcements[currentIndex];
-  const Icon = currentAnnouncement.icon;
+  const candidateIcon = currentAnnouncement.icon ?? SHARED_CONTENT.topBannerAnnouncements[currentIndex]?.icon ?? defaultAnnouncementIcon;
+  const Icon = typeof candidateIcon === "function" ? candidateIcon : defaultAnnouncementIcon;
 
   // Highlight the special text
   const highlightText = (text: string, highlight: string) => {

@@ -3,10 +3,8 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { 
-  MapPin, 
   Phone, 
   Mail, 
-  Clock,
   Send,
   CheckCircle2,
   Loader2,
@@ -17,40 +15,26 @@ import {
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { GlassCard, Button, Input } from "@/components/ui";
+import { useCmsSection } from "@/hooks/useCmsSection";
 import { supabase } from "@/lib/supabase";
-
-const contactInfo = [
-  {
-    icon: MapPin,
-    title: "Visit Us",
-    details: ["1666/2, Govindpuri Ext.", "Kalkaji, New Delhi, India"],
-    link: "https://www.google.com/maps/search/?api=1&query=1666/2,+Govindpuri+Ext.,+Kalkaji,+New+Delhi",
-    linkText: "Get Directions",
-  },
-  {
-    icon: Phone,
-    title: "Call Us",
-    details: ["+91-9571608318", "Mon-Sat: 8AM - 10PM"],
-    link: "tel:+919571608318",
-    linkText: "Call Now",
-  },
-  {
-    icon: Mail,
-    title: "Email Us",
-    details: ["contact@sanocare.in", "support@sanocare.in"],
-    link: "mailto:contact@sanocare.in",
-    linkText: "Send Email",
-  },
-  {
-    icon: Clock,
-    title: "Working Hours",
-    details: ["Mon - Sat: 8:00 AM - 10:00 PM", "Sunday: 9:00 AM - 6:00 PM"],
-    link: null,
-    linkText: null,
-  },
-];
+import { CONTACT_PAGE_CONTENT } from "@/constants/cms-content";
 
 export default function ContactPage() {
+  const { data: contactPageCopy } = useCmsSection(
+    "contact",
+    "page_copy",
+    CONTACT_PAGE_CONTENT.pageCopy,
+  );
+  const { data: contactInfoData } = useCmsSection(
+    "contact",
+    "contact_info",
+    CONTACT_PAGE_CONTENT.contactInfo,
+  );
+  const contactInfo = contactInfoData.map((info, index) => ({
+    ...info,
+    icon: info.icon ?? CONTACT_PAGE_CONTENT.contactInfo[index]?.icon ?? MessageSquare,
+  }));
+
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -126,11 +110,10 @@ export default function ContactPage() {
             className="text-center max-w-3xl mx-auto"
           >
             <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-bold text-text-main mb-6">
-              Get in <span className="text-primary italic">Touch</span>
+              {contactPageCopy.hero.titlePrefix} <span className="text-primary italic">{contactPageCopy.hero.titleHighlight}</span>
             </h1>
             <p className="text-lg text-text-secondary max-w-2xl mx-auto">
-              Have questions about our services? Want to partner with us? 
-              Or just want to say hello? We&apos;d love to hear from you.
+              {contactPageCopy.hero.description}
             </p>
           </motion.div>
         </div>
@@ -141,7 +124,7 @@ export default function ContactPage() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {contactInfo.map((info, index) => {
-              const Icon = info.icon;
+              const Icon = typeof info.icon === "function" ? info.icon : MessageSquare;
               return (
                 <motion.div
                   key={index}
@@ -186,7 +169,7 @@ export default function ContactPage() {
               viewport={{ once: true }}
             >
               <h2 className="font-serif text-2xl lg:text-3xl font-bold text-text-main mb-6">
-                Send Us a Message
+                {contactPageCopy.formSection.title}
               </h2>
               
               <GlassCard variant="solid" className="p-6 lg:p-8">
@@ -195,50 +178,50 @@ export default function ContactPage() {
                     <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
                       <CheckCircle2 className="w-8 h-8 text-green-500" />
                     </div>
-                    <h3 className="text-xl font-bold text-text-main mb-2">Message Sent!</h3>
+                    <h3 className="text-xl font-bold text-text-main mb-2">{contactPageCopy.formSection.successTitle}</h3>
                     <p className="text-text-secondary mb-6">{submitStatus.message}</p>
                     <Button
                       variant="outline"
                       onClick={() => setSubmitStatus(null)}
                     >
-                      Send Another Message
+                      {contactPageCopy.formSection.successCtaLabel}
                     </Button>
                   </div>
                 ) : (
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <Input
-                        label="Your Name"
+                        label={contactPageCopy.formSection.fields.nameLabel}
                         icon={User}
-                        placeholder="Full Name"
+                        placeholder={contactPageCopy.formSection.fields.namePlaceholder}
                         value={formData.name}
                         onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                         required
                       />
                       <Input
-                        label="Phone Number"
+                        label={contactPageCopy.formSection.fields.phoneLabel}
                         icon={Phone}
                         type="tel"
-                        placeholder="+91 98765 43210"
+                        placeholder={contactPageCopy.formSection.fields.phonePlaceholder}
                         value={formData.phone}
                         onChange={handlePhoneChange}
                       />
                     </div>
 
                     <Input
-                      label="Email Address"
+                      label={contactPageCopy.formSection.fields.emailLabel}
                       icon={Mail}
                       type="email"
-                      placeholder="your@email.com"
+                      placeholder={contactPageCopy.formSection.fields.emailPlaceholder}
                       value={formData.email}
                       onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                       required
                     />
 
                     <Input
-                      label="Subject"
+                      label={contactPageCopy.formSection.fields.subjectLabel}
                       icon={Building2}
-                      placeholder="What is this regarding?"
+                      placeholder={contactPageCopy.formSection.fields.subjectPlaceholder}
                       value={formData.subject}
                       onChange={(e) => setFormData(prev => ({ ...prev, subject: e.target.value }))}
                       required
@@ -246,12 +229,12 @@ export default function ContactPage() {
 
                     <div>
                       <label className="block text-sm font-semibold text-text-main mb-1.5">
-                        Your Message
+                        {contactPageCopy.formSection.fields.messageLabel}
                       </label>
                       <div className="relative">
                         <MessageSquare className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                         <textarea
-                          placeholder="Tell us how we can help you..."
+                          placeholder={contactPageCopy.formSection.fields.messagePlaceholder}
                           value={formData.message}
                           onChange={(e) => setFormData(prev => ({ ...prev, message: e.target.value }))}
                           rows={5}
@@ -277,11 +260,11 @@ export default function ContactPage() {
                       {isSubmitting ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          Sending...
+                          {contactPageCopy.formSection.submittingLabel}
                         </>
                       ) : (
                         <>
-                          Send Message
+                          {contactPageCopy.formSection.submitLabel}
                           <Send className="w-4 h-4" />
                         </>
                       )}
@@ -299,27 +282,26 @@ export default function ContactPage() {
               className="flex flex-col"
             >
               <h2 className="font-serif text-2xl lg:text-3xl font-bold text-text-main mb-6">
-                Find Us
+                {contactPageCopy.mapSection.title}
               </h2>
               
               <div className="flex-1 bg-slate-200 rounded-2xl overflow-hidden min-h-[400px]">
                 <iframe
-                  src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3505.0!2d77.26!3d28.54!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2sGovindpuri%20Extension%2C%20Kalkaji%2C%20New%20Delhi!5e0!3m2!1sen!2sin!4v1600000000000!5m2!1sen!2sin"
+                  src={contactPageCopy.mapSection.mapEmbedUrl}
                   width="100%"
                   height="100%"
                   style={{ border: 0, minHeight: '400px' }}
                   allowFullScreen
                   loading="lazy"
                   referrerPolicy="no-referrer-when-downgrade"
-                  title="Sanocare Location"
+                  title={contactPageCopy.mapSection.iframeTitle}
                 />
               </div>
 
               <div className="mt-6 p-4 bg-primary/5 rounded-xl border border-primary/10">
-                <h3 className="font-bold text-text-main mb-2">Service Areas</h3>
+                <h3 className="font-bold text-text-main mb-2">{contactPageCopy.mapSection.serviceAreasTitle}</h3>
                 <p className="text-sm text-text-secondary">
-                  We currently serve <strong>Delhi NCR</strong> including South Delhi, 
-                  Noida, Gurgaon, Faridabad, and Ghaziabad. Expanding to more cities soon!
+                  {contactPageCopy.mapSection.serviceAreasDescription}
                 </p>
               </div>
             </motion.div>
@@ -336,21 +318,21 @@ export default function ContactPage() {
             viewport={{ once: true }}
           >
             <h2 className="font-serif text-2xl md:text-3xl font-bold text-text-main mb-4">
-              Have Questions About Our Services?
+                {contactPageCopy.faqCta.title}
             </h2>
             <p className="text-text-secondary mb-6">
-              Check out our services page or book a free consultation call with our team.
+                {contactPageCopy.faqCta.description}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <a href="/services">
+                <a href={contactPageCopy.faqCta.primaryCtaHref}>
                 <Button variant="primary" size="lg">
-                  View Services
+                    {contactPageCopy.faqCta.primaryCtaLabel}
                 </Button>
               </a>
-              <a href="tel:+919571608318">
+                <a href={contactPageCopy.faqCta.secondaryCtaHref}>
                 <Button variant="outline" size="lg">
                   <Phone className="w-4 h-4" />
-                  Call Us Now
+                    {contactPageCopy.faqCta.secondaryCtaLabel}
                 </Button>
               </a>
             </div>

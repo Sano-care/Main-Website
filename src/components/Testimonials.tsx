@@ -2,33 +2,21 @@
 
 import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Star } from "lucide-react";
-
-// TODO: Replace with real patient testimonials once available
-const testimonials = [
-  {
-    quote:
-      "Getting a doctor at home within an hour was a lifesaver for my elderly mother. The doctor was professional and took time to explain everything.",
-    name: "Sanyam Modi", // PLACEHOLDER
-    treatment: "Home Doctor Visit",
-    initial: "P",
-  },
-  {
-    quote:
-      "The teleconsultation was so convenient. I got my prescription digitally and even had medicines delivered. No more waiting in long queues!",
-    name: "Abhishek Bisht", // PLACEHOLDER
-    treatment: "Teleconsultation",
-    initial: "P",
-  },
-  {
-    quote:
-      "Lab sample collection at home saved my entire day. The paramedic was punctual and the reports came quickly. Highly recommend Sanocare!",
-    name: "Aamir Sohai", // PLACEHOLDER
-    treatment: "Lab Collection at Home",
-    initial: "P",
-  },
-];
+import { useCmsSection } from "@/hooks/useCmsSection";
+import { HOME_CONTENT } from "@/constants/cms-content";
 
 export function Testimonials() {
+  const { data: testimonialsHeader } = useCmsSection(
+    "home",
+    "testimonials_header",
+    HOME_CONTENT.testimonialsHeader,
+  );
+  const { data: testimonials } = useCmsSection(
+    "home",
+    "testimonials",
+    HOME_CONTENT.testimonials,
+  );
+
   return (
     <section className="py-24 relative bg-background-light">
       <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
@@ -40,10 +28,10 @@ export function Testimonials() {
             viewport={{ once: true }}
           >
             <span className="text-primary font-bold tracking-widest text-xs uppercase mb-3 block">
-              Real Stories
+              {testimonialsHeader.badge}
             </span>
             <h2 className="font-serif text-4xl font-medium text-text-main">
-              Patient Testimonials
+              {testimonialsHeader.title}
             </h2>
           </motion.div>
           <div className="hidden sm:flex gap-3">

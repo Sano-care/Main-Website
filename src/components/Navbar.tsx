@@ -9,18 +9,23 @@ import { Button } from "@/components/ui";
 import { BookingModal } from "@/components/BookingModal";
 import { useBookingStore } from "@/store/bookingStore";
 import { cn } from "@/lib/utils";
-
-const navLinks = [
-  { href: "/services", label: "Services" },
-  { href: "/research", label: "Insights" },
-  { href: "/about", label: "About Us" },
-  { href: "/contact", label: "Contact" },
-];
+import { useCmsSection } from "@/hooks/useCmsSection";
+import { useCmsSiteGlobals } from "@/hooks/useCmsSiteGlobals";
+import { SHARED_CONTENT } from "@/constants/cms-content";
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { isModalOpen, openModal, closeModal } = useBookingStore();
+  const { data: navbarCopy } = useCmsSection(
+    "shared",
+    "navbar",
+    SHARED_CONTENT.navbar,
+  );
+  const siteGlobals = useCmsSiteGlobals();
+  const logoAlt = siteGlobals?.logoAlt ?? siteGlobals?.companyName ?? navbarCopy.logoAlt;
+  const logoSrc = siteGlobals?.logoUrl ?? "/logo.svg";
+  const navLinks = navbarCopy.navLinks;
 
   useEffect(() => {
     const handleScroll = () => {
@@ -45,15 +50,15 @@ export function Navbar() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 md:gap-3 group">
             <Image
-              src="/logo.svg"
-              alt="Sanocare"
+              src={logoSrc}
+              alt={logoAlt}
               width={40}
               height={40}
               className="w-8 h-8 md:w-10 md:h-10"
               priority
             />
             <h2 className="text-xl md:text-2xl font-serif font-bold tracking-tight text-text-main">
-              Sano<span className="text-primary font-normal italic">care</span>
+              {navbarCopy.brandWordmarkPrefix}<span className="text-primary font-normal italic">{navbarCopy.brandWordmarkHighlight}</span>
             </h2>
           </Link>
 
@@ -78,11 +83,11 @@ export function Navbar() {
                 className="rounded-full"
                 onClick={openModal}
               >
-                Book Now
+                {navbarCopy.primaryCtaLabel}
               </Button>
               <Link href="/portal">
                 <Button variant="outline" size="md" className="rounded-full">
-                  Patient Portal
+                  {navbarCopy.portalLabel}
                 </Button>
               </Link>
             </div>
@@ -131,11 +136,11 @@ export function Navbar() {
                     openModal();
                   }}
                 >
-                  Book Now
+                  {navbarCopy.primaryCtaLabel}
                 </Button>
                 <Link href="/portal" onClick={() => setIsMobileMenuOpen(false)}>
                   <Button variant="outline" size="md" className="rounded-full w-full">
-                    Patient Portal
+                    {navbarCopy.portalLabel}
                   </Button>
                 </Link>
               </nav>

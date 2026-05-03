@@ -7,15 +7,11 @@ import { Button, Input, Select } from "@/components/ui";
 import { useBookingStore } from "@/store/bookingStore";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useBookingSubmit } from "@/hooks/useBookingSubmit";
+import { useCmsSection } from "@/hooks/useCmsSection";
 import { BookingConfirmation } from "@/components/BookingConfirmation";
+import { HOME_CONTENT } from "@/constants/cms-content";
 
-const serviceOptions = [
-  { value: "", label: "Select Service" },
-  { value: "home-visit", label: "Doctor Home Visit" },
-  { value: "teleconsult", label: "Teleconsultation" },
-  { value: "nursing", label: "Nursing & Paramedic" },
-  { value: "lab", label: "Lab Sample Collection" },
-];
+const serviceOptions = HOME_CONTENT.bookingModal.serviceOptions;
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -42,6 +38,11 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const { detectLocation } = useGeolocation();
   const { submitBooking } = useBookingSubmit();
+  const { data: modalCopy } = useCmsSection(
+    "home",
+    "booking_modal",
+    HOME_CONTENT.bookingModal,
+  );
   const [submitStatus, setSubmitStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const handleGetLocation = async () => {
@@ -151,7 +152,7 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
             {/* Header */}
             <div className="bg-primary px-6 py-4 flex items-center justify-between">
               <h3 className="text-xl font-bold text-white">
-                Book a Home Visit
+                {modalCopy.headerTitle}
               </h3>
               <button
                 onClick={onClose}
@@ -166,14 +167,14 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
               {/* Left - Info */}
               <div className="p-6 lg:p-8 bg-slate-50 border-r border-slate-100">
                 <h4 className="text-lg font-bold text-text-main mb-2">
-                  Healthcare at Your Doorstep
+                  {modalCopy.leftPanel.title}
                 </h4>
                 <p className="text-sm text-text-secondary mb-6">
-                  Doctors, nurses & diagnostics — right at your home
+                  {modalCopy.leftPanel.subtitle}
                 </p>
 
                 <div className="space-y-4">
-                  <h5 className="text-sm font-bold text-text-main">What Happens Next?</h5>
+                  <h5 className="text-sm font-bold text-text-main">{modalCopy.leftPanel.nextStepsTitle}</h5>
                   
                   <div className="flex items-start gap-3">
                     <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
@@ -181,7 +182,7 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
                     </div>
                     <div className="pt-1">
                       <p className="text-sm text-text-secondary">
-                        Our care coordinator calls you within 30 minutes
+                        {modalCopy.leftPanel.nextSteps[0]}
                       </p>
                     </div>
                   </div>
@@ -192,7 +193,7 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
                     </div>
                     <div className="pt-1">
                       <p className="text-sm text-text-secondary">
-                        We understand your needs and assign the right doctor
+                        {modalCopy.leftPanel.nextSteps[1]}
                       </p>
                     </div>
                   </div>
@@ -203,7 +204,7 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
                     </div>
                     <div className="pt-1">
                       <p className="text-sm text-text-secondary">
-                        Doctor arrives at your preferred time slot
+                        {modalCopy.leftPanel.nextSteps[2]}
                       </p>
                     </div>
                   </div>
@@ -212,16 +213,16 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
                 {/* Stats */}
                 <div className="mt-8 pt-6 border-t border-slate-200 grid grid-cols-3 gap-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">30</div>
-                    <div className="text-xs text-text-secondary">Min Response</div>
+                    <div className="text-2xl font-bold text-primary">{modalCopy.leftPanel.stats[0].value}</div>
+                    <div className="text-xs text-text-secondary">{modalCopy.leftPanel.stats[0].label}</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">100%</div>
-                    <div className="text-xs text-text-secondary">Verified</div>
+                    <div className="text-2xl font-bold text-primary">{modalCopy.leftPanel.stats[1].value}</div>
+                    <div className="text-xs text-text-secondary">{modalCopy.leftPanel.stats[1].label}</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">24/7</div>
-                    <div className="text-xs text-text-secondary">Support</div>
+                    <div className="text-2xl font-bold text-primary">{modalCopy.leftPanel.stats[2].value}</div>
+                    <div className="text-xs text-text-secondary">{modalCopy.leftPanel.stats[2].label}</div>
                   </div>
                 </div>
               </div>
@@ -237,18 +238,18 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
                 ) : (
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <Input
-                      label="Patient Name"
+                      label={modalCopy.form.fields.patientNameLabel}
                       icon={User}
-                      placeholder="Enter Full Name"
+                      placeholder={modalCopy.form.fields.patientNamePlaceholder}
                       value={name}
                       onChange={(e) => setDetails({ name: e.target.value })}
                     />
 
                     <Input
-                      label="Phone Number"
+                      label={modalCopy.form.fields.phoneLabel}
                       icon={Phone}
                       type="tel"
-                      placeholder="+91 98765 43210"
+                      placeholder={modalCopy.form.fields.phonePlaceholder}
                       value={phone}
                       onChange={handlePhoneChange}
                     />
@@ -263,16 +264,16 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
                       />
                       <span className="text-xs text-text-secondary group-hover:text-text-main transition-colors flex items-center gap-1">
                         <Users className="w-3 h-3" />
-                        Booking for someone else
+                        {modalCopy.form.fields.bookingForOtherLabel}
                       </span>
                     </label>
 
                     {/* Location with detect button */}
                     <div className="relative">
                       <Input
-                        label="Patient Address"
+                        label={modalCopy.form.fields.patientAddressLabel}
                         icon={MapPin}
-                        placeholder="House/Flat No, Building, Street, Locality"
+                        placeholder={modalCopy.form.fields.patientAddressPlaceholder}
                         value={location}
                         onChange={(e) => setDetails({ location: e.target.value })}
                       />
@@ -286,12 +287,12 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
                           {isLocating ? (
                             <>
                               <Loader2 className="w-3 h-3 animate-spin" />
-                              Detecting...
+                              {modalCopy.form.geolocation.detectingLabel}
                             </>
                           ) : (
                             <>
                               <Crosshair className="w-3 h-3" />
-                              Add GPS
+                              {modalCopy.form.geolocation.addGpsLabel}
                             </>
                           )}
                         </button>
@@ -301,7 +302,7 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
                       {gpsLocation && !isBookingForOther && (
                         <div className="mt-1 flex items-center gap-1 text-xs text-green-600">
                           <CheckCircle2 className="w-3 h-3" />
-                          GPS added (±{gpsLocation.accuracy}m) — helps paramedic navigate
+                          {modalCopy.form.geolocation.gpsAddedTemplate.replace("{accuracy}", `±${gpsLocation.accuracy}m`)}
                         </div>
                       )}
                       {locationError && (
@@ -313,19 +314,19 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
                       {!gpsLocation && !locationError && !isLocating && !isBookingForOther && (
                         <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
                           <Crosshair className="w-3 h-3" />
-                          GPS optional but helps with faster arrival
+                          {modalCopy.form.geolocation.gpsOptionalNote}
                         </div>
                       )}
                       {isBookingForOther && (
                         <div className="mt-1 flex items-center gap-1 text-xs text-blue-600">
                           <Users className="w-3 h-3" />
-                          Enter the patient&apos;s complete address
+                          {modalCopy.form.geolocation.bookingForOtherNote}
                         </div>
                       )}
                     </div>
 
                     <Select
-                      label="Service Type"
+                      label={modalCopy.form.fields.serviceTypeLabel}
                       icon={Calendar}
                       options={serviceOptions}
                       value={serviceCategory}
@@ -336,7 +337,7 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
                     <div className="flex justify-center">
                       <span className="inline-flex items-center gap-1 bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full">
                         <Check className="w-3 h-3" />
-                        First Consultation FREE
+                        {modalCopy.form.promoLabel}
                       </span>
                     </div>
 
@@ -359,11 +360,11 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
                       {isSubmitting ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          Submitting...
+                          {modalCopy.form.submittingLabel}
                         </>
                       ) : (
                         <>
-                          Book Appointment
+                          {modalCopy.form.ctaLabel}
                           <ArrowRight className="w-4 h-4" />
                         </>
                       )}
@@ -371,7 +372,7 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
 
                     <p className="text-center text-xs text-gray-400 flex items-center justify-center gap-1">
                       <Clock className="w-3 h-3" />
-                      Average response time: 30 minutes
+                      {modalCopy.form.responseTimeNote}
                     </p>
                   </form>
                 )}

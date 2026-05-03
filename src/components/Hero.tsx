@@ -7,15 +7,11 @@ import { GlassCard, Button, Input, Select } from "@/components/ui";
 import { useBookingStore } from "@/store/bookingStore";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useBookingSubmit } from "@/hooks/useBookingSubmit";
+import { useCmsSection } from "@/hooks/useCmsSection";
 import { BookingConfirmation } from "@/components/BookingConfirmation";
+import { HOME_CONTENT } from "@/constants/cms-content";
 
-const serviceOptions = [
-  { value: "", label: "Select Service" },
-  { value: "homecare", label: "Homecare (Doctor Visit, Nursing, Vitals)" },
-  { value: "teleconsult", label: "Teleconsultation (Video Consult)" },
-  { value: "chronic", label: "Chronic Disease Management" },
-  { value: "diagnostics", label: "Early Risk Diagnostics" },
-];
+const serviceOptions = HOME_CONTENT.hero.serviceOptions;
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -51,6 +47,12 @@ export function Hero() {
   
   const { detectLocation } = useGeolocation();
   const { submitBooking } = useBookingSubmit();
+  const { data: heroCopy } = useCmsSection("home", "hero", HOME_CONTENT.hero);
+  const { data: bookingCopy } = useCmsSection(
+    "home",
+    "hero_booking_form",
+    HOME_CONTENT.hero.bookingForm,
+  );
   const [submitStatus, setSubmitStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const handleGetLocation = async () => {
@@ -114,7 +116,7 @@ export function Hero() {
         <div 
           className="absolute inset-0 bg-cover bg-center opacity-10 pointer-events-none"
           style={{
-            backgroundImage: `url("https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?q=80&w=2906&auto=format&fit=crop")`,
+            backgroundImage: `url("${heroCopy.backgroundImageSrc}")`,
             filter: "grayscale(100%)",
           }}
         />
@@ -137,7 +139,7 @@ export function Hero() {
               className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-white/70 backdrop-blur-sm px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-primary shadow-sm"
             >
               <span className="size-2 rounded-full bg-primary animate-pulse" />
-              Now Serving Delhi NCR
+              {heroCopy.badgeText}
             </motion.div>
 
             {/* Heading */}
@@ -145,9 +147,9 @@ export function Hero() {
               variants={itemVariants}
               className="font-serif text-4xl sm:text-5xl lg:text-7xl font-bold leading-[1.1] tracking-tight text-text-main"
             >
-              Healthcare at <br />
+              {heroCopy.headingPrefix} <br />
               <span className="italic text-transparent bg-clip-text bg-linear-to-r from-primary via-blue-500 to-indigo-500 font-light inline-block pb-2 pr-2.5">
-                your Doorstep.
+                {heroCopy.headingHighlight}
               </span>
             </motion.h1>
 
@@ -156,7 +158,7 @@ export function Hero() {
               variants={itemVariants}
               className="text-lg leading-relaxed text-text-secondary/80 max-w-xl font-medium"
             >
-              We bridge the gap between virtual and physical care. Get doctors, nurses, and diagnostics right at your home or within your gated society.
+              {heroCopy.description}
             </motion.p>
 
             {/* Stats */}
@@ -165,23 +167,23 @@ export function Hero() {
               className="flex items-center gap-6 lg:gap-8 pt-4"
             >
               <div className="flex flex-col">
-                <span className="text-2xl lg:text-3xl font-bold text-text-main">30 Mins</span>
+                <span className="text-2xl lg:text-3xl font-bold text-text-main">{heroCopy.stats[0].value}</span>
                 <span className="text-xs font-bold uppercase tracking-wider text-text-secondary">
-                  Response Time
+                  {heroCopy.stats[0].label}
                 </span>
               </div>
               <div className="h-10 w-px bg-slate-200" />
               <div className="flex flex-col">
-                <span className="text-2xl lg:text-3xl font-bold text-text-main">MBBS</span>
+                <span className="text-2xl lg:text-3xl font-bold text-text-main">{heroCopy.stats[1].value}</span>
                 <span className="text-xs font-bold uppercase tracking-wider text-text-secondary">
-                  Qualified Doctors
+                  {heroCopy.stats[1].label}
                 </span>
               </div>
               <div className="h-10 w-px bg-slate-200" />
               <div className="flex flex-col">
-                <span className="text-2xl lg:text-3xl font-bold text-text-main">₹499</span>
+                <span className="text-2xl lg:text-3xl font-bold text-text-main">{heroCopy.stats[2].value}</span>
                 <span className="text-xs font-bold uppercase tracking-wider text-text-secondary">
-                  Starting Price
+                  {heroCopy.stats[2].label}
                 </span>
               </div>
             </motion.div>
@@ -199,7 +201,7 @@ export function Hero() {
                   />
                 ))}
                 <div className="w-10 h-10 rounded-full border-2 border-white bg-primary text-white flex items-center justify-center text-xs font-bold">
-                  +2k
+                  {heroCopy.trust.badgeLabel}
                 </div>
               </div>
               <div className="text-sm font-semibold text-text-main">
@@ -210,7 +212,7 @@ export function Hero() {
                     </svg>
                   ))}
                 </div>
-                Trusted by families
+                {heroCopy.trust.text}
               </div>
             </motion.div>
           </motion.div>
@@ -239,27 +241,27 @@ export function Hero() {
                     </div>
 
                     <h3 className="text-xl lg:text-2xl font-bold text-text-main mb-0.5">
-                      Book Consultation
+                      {bookingCopy.title}
                     </h3>
                     <p className="text-xs lg:text-sm text-text-secondary mb-4 lg:mb-6">
-                      First consultation is free*
+                      {bookingCopy.subtitle}
                     </p>
 
                     <form onSubmit={handleSubmit} className="space-y-3 lg:space-y-4">
                       <Input
-                        label="Patient Name"
+                        label={bookingCopy.fields.patientNameLabel}
                         icon={User}
-                        placeholder="Enter Full Name"
+                        placeholder={bookingCopy.fields.patientNamePlaceholder}
                         value={name}
                         onChange={(e) => setDetails({ name: e.target.value })}
                         required
                       />
 
                       <Input
-                        label="Phone Number"
+                        label={bookingCopy.fields.phoneLabel}
                         icon={Phone}
                         type="tel"
-                        placeholder="+91 98765 43210"
+                        placeholder={bookingCopy.fields.phonePlaceholder}
                         value={phone}
                         onChange={handlePhoneChange}
                         required
@@ -275,16 +277,16 @@ export function Hero() {
                         />
                         <span className="text-xs text-text-secondary group-hover:text-text-main transition-colors flex items-center gap-1">
                           <Users className="w-3 h-3" />
-                          Booking for someone else
+                          {bookingCopy.fields.bookingForOtherLabel}
                         </span>
                       </label>
 
                       {/* Location with detect button */}
                       <div className="relative">
                         <Input
-                          label="Patient Address"
+                          label={bookingCopy.fields.patientAddressLabel}
                           icon={MapPin}
-                          placeholder="House/Flat No, Building, Street, Locality"
+                          placeholder={bookingCopy.fields.patientAddressPlaceholder}
                           value={location}
                           onChange={(e) => setDetails({ location: e.target.value })}
                           required
@@ -299,12 +301,12 @@ export function Hero() {
                             {isLocating ? (
                               <>
                                 <Loader2 className="w-3 h-3 animate-spin" />
-                                <span>Detecting...</span>
+                                <span>{bookingCopy.geolocation.detectingLabel}</span>
                               </>
                             ) : (
                               <>
                                 <Crosshair className="w-3 h-3" />
-                                <span>Add GPS</span>
+                                <span>{bookingCopy.geolocation.addGpsLabel}</span>
                               </>
                             )}
                           </button>
@@ -313,7 +315,7 @@ export function Hero() {
                         {gpsLocation && !isBookingForOther && (
                           <div className="mt-1 text-xs text-green-600 flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3" />
-                            GPS added (±{gpsLocation.accuracy}m) — helps paramedic navigate
+                            {bookingCopy.geolocation.gpsAddedTemplate.replace("{accuracy}", `±${gpsLocation.accuracy}m`)}
                           </div>
                         )}
                         {locationError && (
@@ -325,19 +327,19 @@ export function Hero() {
                         {!gpsLocation && !locationError && !isLocating && !isBookingForOther && (
                           <div className="mt-1 text-xs text-slate-500 flex items-center gap-1">
                             <Crosshair className="w-3 h-3" />
-                            GPS optional but helps with faster arrival
+                            {bookingCopy.geolocation.gpsOptionalNote}
                           </div>
                         )}
                         {isBookingForOther && (
                           <div className="mt-1 text-xs text-blue-600 flex items-center gap-1">
                             <Users className="w-3 h-3" />
-                            Enter the patient&apos;s complete address
+                            {bookingCopy.geolocation.bookingForOtherNote}
                           </div>
                         )}
                       </div>
 
                       <Select
-                        label="Service Type"
+                        label={bookingCopy.fields.serviceTypeLabel}
                         icon={Crosshair}
                         options={serviceOptions}
                         value={serviceCategory}
@@ -363,11 +365,11 @@ export function Hero() {
                         {isSubmitting ? (
                           <>
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            Submitting...
+                            {bookingCopy.submittingLabel}
                           </>
                         ) : (
                           <>
-                            Book a Visit
+                            {bookingCopy.ctaLabel}
                             <ArrowRight className="w-4 h-4" />
                           </>
                         )}
@@ -375,7 +377,7 @@ export function Hero() {
 
                       <div className="text-center mt-3 lg:mt-4 flex items-center justify-center gap-1 text-xs text-gray-400">
                         <Lock className="w-3 h-3" />
-                        Your information is 100% secure
+                        {bookingCopy.secureNote}
                       </div>
                     </form>
                   </>

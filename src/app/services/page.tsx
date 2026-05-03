@@ -2,123 +2,17 @@
 
 import { motion } from "framer-motion";
 import { 
-  Stethoscope, 
-  Video, 
-  Activity, 
-  TestTube,
   ArrowRight,
-  Clock,
-  Home,
-  Syringe,
-  HeartPulse,
-  Thermometer,
-  Pill,
-  UserCheck,
-  Shield,
   Zap,
-  Heart,
-  Brain,
-  Baby,
-  Bone,
   Phone,
-  FileText,
-  Users,
-  Sparkles,
-  Target,
-  HandHeart,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui";
-
-// Main service categories for the grid
-const medicalServices = [
-  {
-    id: "homecare",
-    title: "Homecare Services",
-    description: "Professional paramedics and nurses at your doorstep for comprehensive in-home medical care, vitals monitoring, and nursing support.",
-    icon: Home,
-    link: "/now",
-  },
-  {
-    id: "teleconsult",
-    title: "Teleconsultation",
-    description: "Video consultations with qualified doctors from the comfort of your home. Get prescriptions and follow-up care digitally.",
-    icon: Video,
-    link: "/now",
-  },
-  {
-    id: "chronic",
-    title: "Chronic Care Management",
-    description: "Structured care programs for diabetes, hypertension, and other chronic conditions with regular monitoring and support.",
-    icon: Activity,
-    link: "/now",
-  },
-  {
-    id: "diagnostics",
-    title: "Home Diagnostics",
-    description: "Blood tests, ECG, and comprehensive health screenings conducted at your home with rapid results delivery.",
-    icon: TestTube,
-    link: "/now",
-  },
-  {
-    id: "pediatrics",
-    title: "Pediatric Care",
-    description: "Dedicated healthcare for infants, children, and adolescents with gentle, family-friendly care at home.",
-    icon: Baby,
-    link: "/now",
-  },
-  {
-    id: "elderly",
-    title: "Elderly Care",
-    description: "Specialized care programs for senior citizens including mobility support, medication management, and companionship.",
-    icon: Heart,
-    link: "/now",
-  },
-];
-
-// Why choose us points
-const advantagePoints = [
-  {
-    number: "01",
-    title: "30-Minute Response",
-    description: "Our paramedics and nurses are dispatched immediately. We guarantee arrival within 30 minutes in our coverage areas.",
-  },
-  {
-    number: "02",
-    title: "Qualified Professionals",
-    description: "All our healthcare workers are certified ANMs, DNMs, and trained paramedics with verified backgrounds.",
-  },
-  {
-    number: "03",
-    title: "Transparent Pricing",
-    description: "No hidden fees, no surge pricing. Fixed rates starting at ₹499 for home visits with all costs disclosed upfront.",
-  },
-];
-
-// Signature programs
-const signaturePrograms = [
-  {
-    title: "CareHub for Societies",
-    description: "Transform your gated community into a health-first environment with dedicated on-site paramedics and priority response.",
-    icon: Users,
-    link: "/carehub",
-  },
-  {
-    title: "Corporate Wellness",
-    description: "Comprehensive employee health programs including on-site health camps, teleconsultations, and emergency response.",
-    icon: Target,
-    link: "/contact",
-  },
-  {
-    title: "Post-Surgery Recovery",
-    description: "Structured home-based recovery programs with regular paramedic visits, wound care, and physiotherapy support.",
-    icon: HandHeart,
-    link: "/now",
-  },
-];
+import { useCmsSection } from "@/hooks/useCmsSection";
+import { SERVICES_PAGE_CONTENT } from "@/constants/cms-content";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -134,6 +28,45 @@ const itemVariants = {
 };
 
 export default function ServicesPage() {
+  const { data: servicesPageCopy } = useCmsSection(
+    "services",
+    "page_copy",
+    SERVICES_PAGE_CONTENT.pageCopy,
+  );
+  const { data: medicalServicesData } = useCmsSection(
+    "services",
+    "medical_services",
+    SERVICES_PAGE_CONTENT.medicalServices,
+  );
+  const { data: advantagePoints } = useCmsSection(
+    "services",
+    "advantage_points",
+    SERVICES_PAGE_CONTENT.advantagePoints,
+  );
+  const { data: signatureProgramsData } = useCmsSection(
+    "services",
+    "signature_programs",
+    SERVICES_PAGE_CONTENT.signaturePrograms,
+  );
+  const { data: trustBadgesData } = useCmsSection(
+    "services",
+    "trust_badges",
+    SERVICES_PAGE_CONTENT.trustBadges,
+  );
+
+  const medicalServices = medicalServicesData.map((service, index) => ({
+    ...service,
+    icon: service.icon ?? SERVICES_PAGE_CONTENT.medicalServices[index]?.icon ?? Zap,
+  }));
+  const signaturePrograms = signatureProgramsData.map((program, index) => ({
+    ...program,
+    icon: program.icon ?? SERVICES_PAGE_CONTENT.signaturePrograms[index]?.icon ?? Zap,
+  }));
+  const trustBadges = trustBadgesData.map((badge, index) => ({
+    ...badge,
+    icon: badge.icon ?? SERVICES_PAGE_CONTENT.trustBadges[index]?.icon ?? Zap,
+  }));
+
   return (
     <main className="min-h-screen bg-background-light relative overflow-x-hidden">
       {/* Background Decorations */}
@@ -158,28 +91,28 @@ export default function ServicesPage() {
               >
                 <div className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-white/50 backdrop-blur-sm px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-primary shadow-sm">
                   <span className="size-2 rounded-full bg-primary animate-pulse" />
-                  Doorstep Medical Excellence
+                  {servicesPageCopy.hero.badge}
                 </div>
                 
                 <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-medium leading-[1.1] tracking-tight text-text-main">
-                  Comprehensive Care, <br />
-                  <span className="text-primary italic">Tailored for You.</span>
+                  {servicesPageCopy.hero.titlePrefix} <br />
+                  <span className="text-primary italic">{servicesPageCopy.hero.titleHighlight}</span>
                 </h1>
                 
                 <p className="text-lg lg:text-xl leading-relaxed text-text-secondary max-w-xl font-light">
-                  From preventive diagnostics to home nursing care, our team of paramedics, nurses, and doctors provides a seamless continuum of healthcare services—right at your doorstep.
+                  {servicesPageCopy.hero.description}
                 </p>
                 
                 <div className="flex flex-wrap gap-4 pt-4">
-                  <Link href="/#hero-booking-form">
+                  <Link href={servicesPageCopy.hero.primaryCtaHref}>
                     <Button className="rounded-full px-8 py-4 shadow-xl shadow-blue-500/20 hover:-translate-y-1 transition-transform">
-                      Book a Consultation
+                      {servicesPageCopy.hero.primaryCtaLabel}
                       <ArrowRight className="w-4 h-4" />
                     </Button>
                   </Link>
-                  <Link href="/now">
+                  <Link href={servicesPageCopy.hero.secondaryCtaHref}>
                     <Button variant="outline" className="rounded-full px-8 py-4 border-slate-200 hover:border-primary">
-                      View Pricing
+                      {servicesPageCopy.hero.secondaryCtaLabel}
                     </Button>
                   </Link>
                 </div>
@@ -194,8 +127,8 @@ export default function ServicesPage() {
               >
                 <div className="aspect-[16/10] rounded-[2rem] overflow-hidden shadow-2xl relative z-10 border-8 border-white">
                   <Image
-                    src="https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?q=80&w=2940&auto=format&fit=crop"
-                    alt="Healthcare professional with patient"
+                    src={servicesPageCopy.hero.imageSrc}
+                    alt={servicesPageCopy.hero.imageAlt}
                     fill
                     className="object-cover"
                     priority
@@ -211,9 +144,9 @@ export default function ServicesPage() {
                 >
                   <div className="flex items-center gap-3 mb-2">
                     <Zap className="w-5 h-5 text-primary" />
-                    <span className="text-xs font-bold uppercase tracking-widest">Rapid Response</span>
+                    <span className="text-xs font-bold uppercase tracking-widest">{servicesPageCopy.hero.floatingCardLabel}</span>
                   </div>
-                  <p className="text-[11px] text-text-secondary">Paramedics at your doorstep within 30 minutes of booking.</p>
+                  <p className="text-[11px] text-text-secondary">{servicesPageCopy.hero.floatingCardText}</p>
                 </motion.div>
               </motion.div>
             </div>
@@ -231,13 +164,13 @@ export default function ServicesPage() {
               viewport={{ once: true }}
             >
               <span className="text-primary font-bold tracking-widest text-xs uppercase mb-3 block">
-                Our Services
+                {servicesPageCopy.servicesSection.badge}
               </span>
               <h2 className="font-serif text-3xl lg:text-5xl font-medium text-text-main mb-6">
-                Healthcare Excellence at Your Doorstep
+                {servicesPageCopy.servicesSection.title}
               </h2>
               <p className="text-text-secondary font-light">
-                We bring comprehensive medical services to your home, eliminating the need for hospital visits while maintaining the highest standards of care.
+                {servicesPageCopy.servicesSection.description}
               </p>
             </motion.div>
 
@@ -250,7 +183,7 @@ export default function ServicesPage() {
               viewport={{ once: true }}
             >
               {medicalServices.map((service) => {
-                const Icon = service.icon;
+                const Icon = typeof service.icon === "function" ? service.icon : Zap;
                 return (
                   <motion.div
                     key={service.id}
@@ -270,7 +203,7 @@ export default function ServicesPage() {
                       href={service.link}
                       className="inline-flex items-center gap-2 text-primary text-sm font-bold uppercase tracking-wider group/link"
                     >
-                      Learn More
+                      {servicesPageCopy.servicesSection.cardCtaLabel}
                       <ArrowRight className="w-4 h-4 transition-transform group-hover/link:translate-x-1" />
                     </Link>
                   </motion.div>
@@ -291,13 +224,13 @@ export default function ServicesPage() {
                 viewport={{ once: true }}
               >
                 <span className="text-primary font-bold tracking-widest text-xs uppercase mb-3 block">
-                  The Sanocare Advantage
+                  {servicesPageCopy.advantageSection.badge}
                 </span>
                 <h2 className="font-serif text-3xl lg:text-5xl font-medium text-text-main mb-6 lg:mb-8">
-                  Why Choose Our Care
+                  {servicesPageCopy.advantageSection.title}
                 </h2>
                 <p className="text-lg text-text-secondary font-light leading-relaxed mb-10 lg:mb-12">
-                  We go beyond traditional healthcare by bringing medical excellence directly to your home. Your journey with us is designed to be as stress-free as it is healing.
+                  {servicesPageCopy.advantageSection.description}
                 </p>
                 
                 <div className="space-y-10 lg:space-y-12">
@@ -335,8 +268,8 @@ export default function ServicesPage() {
               >
                 <div className="aspect-square rounded-3xl overflow-hidden shadow-2xl relative">
                   <Image
-                    src="https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=2940&auto=format&fit=crop"
-                    alt="Healthcare professional caring for patient"
+                    src={servicesPageCopy.advantageSection.imageSrc}
+                    alt={servicesPageCopy.advantageSection.imageAlt}
                     fill
                     className="object-cover"
                   />
@@ -369,10 +302,10 @@ export default function ServicesPage() {
               viewport={{ once: true }}
             >
               <span className="text-primary font-bold tracking-widest text-xs uppercase mb-3 block">
-                Specialized Programs
+                {servicesPageCopy.programsSection.badge}
               </span>
               <h2 className="font-serif text-3xl lg:text-5xl font-medium text-white">
-                Beyond Individual Care
+                {servicesPageCopy.programsSection.title}
               </h2>
             </motion.div>
 
@@ -385,7 +318,7 @@ export default function ServicesPage() {
               viewport={{ once: true }}
             >
               {signaturePrograms.map((program) => {
-                const Icon = program.icon;
+                const Icon = typeof program.icon === "function" ? program.icon : Zap;
                 return (
                   <motion.div
                     key={program.title}
@@ -405,7 +338,7 @@ export default function ServicesPage() {
                       href={program.link}
                       className="inline-flex px-6 py-2 rounded-full border border-white/20 text-white text-xs font-bold uppercase tracking-wider group-hover:bg-white group-hover:text-text-main transition-all"
                     >
-                      Explore Program
+                      {servicesPageCopy.programsSection.cardCtaLabel}
                     </Link>
                   </motion.div>
                 );
@@ -423,7 +356,7 @@ export default function ServicesPage() {
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
             >
-              Trusted by Thousands Across Delhi NCR
+              {servicesPageCopy.trustSectionLabel}
             </motion.p>
             <motion.div
               className="flex flex-wrap items-center justify-center gap-8 lg:gap-16"
@@ -431,13 +364,8 @@ export default function ServicesPage() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
             >
-              {[
-                { icon: UserCheck, name: "Verified Paramedics", desc: "Background Checked" },
-                { icon: Shield, name: "DISHA Compliant", desc: "Data Security" },
-                { icon: Clock, name: "24/7 Support", desc: "Always Available" },
-                { icon: FileText, name: "Licensed & Insured", desc: "Fully Accredited" },
-              ].map((item, index) => {
-                const Icon = item.icon;
+              {trustBadges.map((item, index) => {
+                const Icon = typeof item.icon === "function" ? item.icon : Zap;
                 return (
                   <motion.div
                     key={item.name}
@@ -468,22 +396,22 @@ export default function ServicesPage() {
               viewport={{ once: true }}
             >
               <h2 className="font-serif text-3xl md:text-4xl font-bold text-white mb-4">
-                Ready to Experience Better Healthcare?
+                {servicesPageCopy.ctaSection.title}
               </h2>
               <p className="text-white/80 mb-8 max-w-xl mx-auto">
-                Book a consultation now and get professional medical care at your doorstep within 30 minutes.
+                {servicesPageCopy.ctaSection.description}
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href="/#hero-booking-form">
+                <Link href={servicesPageCopy.ctaSection.primaryCtaHref}>
                   <Button variant="ghost" size="lg" className="w-full sm:w-auto bg-white text-primary hover:bg-slate-100 hover:text-primary rounded-full px-8">
-                    Book a Visit
+                    {servicesPageCopy.ctaSection.primaryCtaLabel}
                     <ArrowRight className="w-4 h-4" />
                   </Button>
                 </Link>
-                <a href="tel:+919571608318">
+                <a href={servicesPageCopy.ctaSection.secondaryCtaHref}>
                   <Button variant="outline" size="lg" className="w-full sm:w-auto border-white text-white hover:bg-white/10 rounded-full px-8">
                     <Phone className="w-4 h-4" />
-                    Call: +91-9571608318
+                    {servicesPageCopy.ctaSection.secondaryCtaLabel}
                   </Button>
                 </a>
               </div>

@@ -1,0 +1,5 @@
+full_name,role,qualification,bio,profile_asset_id,specializations_json,display_order,is_active
+"Dr. Priya Sharma",Allergist and Immunologist,MBBS MD,"Focused on respiratory allergy management and long-term prevention plans.",,"[""Allergy"",""Immunology""]",10,true
+"Dr. Amit Patel",Healthcare Technology Specialist,MBBS MBA,"Supports telehealth workflows and digital care quality standards.",,"[""Telemedicine"",""Digital Health""]",20,true
+"Dr. Rahul Mehta",Cardiologist,MBBS MD DM,"Specialist in preventive cardiology and chronic cardiac risk management.",,"[""Cardiology"",""Preventive Care""]",30,true
+"Dr. Neha Verma",Primary Care Lead,MBBS,"Coordinates homecare protocol design and continuity pathways.",,"[""Primary Care"",""Homecare""]",40,true

@@ -2,125 +2,19 @@
 
 import { motion } from "framer-motion";
 import { 
-  FileText, 
-  TrendingUp, 
-  Users, 
   ArrowRight,
-  ExternalLink,
   BookOpen,
-  Lightbulb,
-  BarChart3,
   Heart,
-  Clock,
   Sparkles,
   Quote,
-  Newspaper,
-  Video,
-  Mic,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui";
-
-// Featured insights/facts
-const healthFacts = [
-  {
-    stat: "73%",
-    label: "of urban patients prefer home healthcare for non-emergency needs",
-    source: "Urban Health Survey 2025",
-  },
-  {
-    stat: "45 min",
-    label: "average time saved per medical visit with doorstep care",
-    source: "Sanocare Data",
-  },
-  {
-    stat: "89%",
-    label: "patient satisfaction rate with Sanocare services",
-    source: "Customer Feedback",
-  },
-  {
-    stat: "62%",
-    label: "reduction in hospital readmissions with home follow-up care",
-    source: "Clinical Outcomes Study",
-  },
-];
-
-// Blog posts / articles
-const featuredBlogs = [
-  {
-    title: "Home-Based Primary Care: A Viable Model for Urban India",
-    excerpt: "Exploring how doorstep healthcare is transforming the way urban families access medical services...",
-    category: "Healthcare Trends",
-    readTime: "5 min read",
-    image: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=2940&auto=format&fit=crop",
-    slug: "home-based-primary-care",
-  },
-  {
-    title: "The Rise of Telemedicine in Post-Pandemic India",
-    excerpt: "How virtual consultations have become an integral part of the healthcare ecosystem...",
-    category: "Digital Health",
-    readTime: "4 min read",
-    image: "https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=2940&auto=format&fit=crop",
-    slug: "telemedicine-india",
-  },
-  {
-    title: "Managing Chronic Diseases at Home: A Complete Guide",
-    excerpt: "Tips and best practices for monitoring diabetes, hypertension, and cardiac conditions from home...",
-    category: "Health Tips",
-    readTime: "7 min read",
-    image: "https://images.unsplash.com/photo-1559757175-5700dde675bc?q=80&w=2940&auto=format&fit=crop",
-    slug: "managing-chronic-diseases",
-  },
-];
-
-// Health tips / quick reads
-const healthTips = [
-  {
-    icon: Heart,
-    title: "Monitor Your Vitals Weekly",
-    description: "Regular tracking of BP, heart rate, and blood sugar can help detect issues early.",
-  },
-  {
-    icon: Clock,
-    title: "Don't Delay Emergency Care",
-    description: "Chest pain, severe breathing difficulty, or stroke symptoms need immediate attention.",
-  },
-  {
-    icon: Lightbulb,
-    title: "Keep Digital Health Records",
-    description: "Store your prescriptions and reports digitally for quick access during emergencies.",
-  },
-  {
-    icon: Users,
-    title: "Schedule Regular Checkups",
-    description: "Preventive screenings can catch potential health issues before they become serious.",
-  },
-];
-
-// Media mentions / press
-const mediaMentions = [
-  {
-    outlet: "Economic Times",
-    title: "Sanocare disrupting home healthcare in Delhi NCR",
-    type: "Article",
-    icon: Newspaper,
-  },
-  {
-    outlet: "Healthcare Executive",
-    title: "Interview: Building scalable homecare infrastructure",
-    type: "Interview",
-    icon: Mic,
-  },
-  {
-    outlet: "StartupNews",
-    title: "How Sanocare achieved 30-min response times",
-    type: "Feature",
-    icon: Video,
-  },
-];
+import { useCmsSection } from "@/hooks/useCmsSection";
+import { RESEARCH_PAGE_CONTENT } from "@/constants/cms-content";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -136,6 +30,41 @@ const itemVariants = {
 };
 
 export default function InsightsPage() {
+  const { data: researchPageCopy } = useCmsSection(
+    "research",
+    "page_copy",
+    RESEARCH_PAGE_CONTENT.pageCopy,
+  );
+  const { data: healthFacts } = useCmsSection(
+    "research",
+    "health_facts",
+    RESEARCH_PAGE_CONTENT.healthFacts,
+  );
+  const { data: featuredBlogs } = useCmsSection(
+    "research",
+    "featured_blogs",
+    RESEARCH_PAGE_CONTENT.featuredBlogs,
+  );
+  const { data: healthTipsData } = useCmsSection(
+    "research",
+    "health_tips",
+    RESEARCH_PAGE_CONTENT.healthTips,
+  );
+  const { data: mediaMentionsData } = useCmsSection(
+    "research",
+    "media_mentions",
+    RESEARCH_PAGE_CONTENT.mediaMentions,
+  );
+
+  const healthTips = healthTipsData.map((tip, index) => ({
+    ...tip,
+    icon: tip.icon ?? RESEARCH_PAGE_CONTENT.healthTips[index]?.icon ?? Heart,
+  }));
+  const mediaMentions = mediaMentionsData.map((mention, index) => ({
+    ...mention,
+    icon: mention.icon ?? RESEARCH_PAGE_CONTENT.mediaMentions[index]?.icon ?? BookOpen,
+  }));
+
   return (
     <main className="min-h-screen bg-background-light relative overflow-x-hidden">
       {/* Background Decorations */}
@@ -160,28 +89,28 @@ export default function InsightsPage() {
               >
                 <div className="inline-flex w-fit items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-indigo-600 shadow-sm">
                   <Sparkles className="size-3.5" />
-                  Knowledge Hub
+                  {researchPageCopy.hero.badge}
                 </div>
                 
                 <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-medium leading-[1.1] tracking-tight text-text-main">
-                  Health <span className="text-indigo-600 italic">Insights</span> <br />
-                  & Resources
+                  {researchPageCopy.hero.titlePrefix} <span className="text-indigo-600 italic">{researchPageCopy.hero.titleHighlight}</span> <br />
+                  {researchPageCopy.hero.titleSuffix}
                 </h1>
                 
                 <p className="text-lg lg:text-xl leading-relaxed text-text-secondary max-w-xl font-light">
-                  Stay informed with the latest healthcare trends, expert tips, and data-driven insights. Your go-to resource for making smarter health decisions.
+                  {researchPageCopy.hero.description}
                 </p>
                 
                 <div className="flex flex-wrap gap-4 pt-4">
-                  <Link href="#blogs">
+                  <Link href={researchPageCopy.hero.primaryCtaHref}>
                     <Button className="rounded-full px-8 py-4 bg-indigo-600 hover:bg-indigo-700 shadow-xl shadow-indigo-500/20 hover:-translate-y-1 transition-transform">
-                      Explore Articles
+                      {researchPageCopy.hero.primaryCtaLabel}
                       <ArrowRight className="w-4 h-4" />
                     </Button>
                   </Link>
-                  <Link href="#facts">
+                  <Link href={researchPageCopy.hero.secondaryCtaHref}>
                     <Button variant="outline" className="rounded-full px-8 py-4 border-slate-200 hover:border-indigo-300">
-                      View Health Facts
+                      {researchPageCopy.hero.secondaryCtaLabel}
                     </Button>
                   </Link>
                 </div>
@@ -196,8 +125,8 @@ export default function InsightsPage() {
               >
                 <div className="aspect-[16/10] rounded-[2rem] overflow-hidden shadow-2xl relative z-10 border-8 border-white">
                   <Image
-                    src="https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=2940&auto=format&fit=crop"
-                    alt="Healthcare insights and knowledge"
+                    src={researchPageCopy.hero.imageSrc}
+                    alt={researchPageCopy.hero.imageAlt}
                     fill
                     className="object-cover"
                     priority
@@ -213,9 +142,9 @@ export default function InsightsPage() {
                 >
                   <div className="flex items-center gap-3 mb-2">
                     <BookOpen className="w-5 h-5 text-indigo-600" />
-                    <span className="text-xs font-bold uppercase tracking-widest">Updated Weekly</span>
+                    <span className="text-xs font-bold uppercase tracking-widest">{researchPageCopy.hero.floatingCardLabel}</span>
                   </div>
-                  <p className="text-[11px] text-text-secondary">Fresh insights and health tips curated by our medical experts.</p>
+                  <p className="text-[11px] text-text-secondary">{researchPageCopy.hero.floatingCardText}</p>
                 </motion.div>
               </motion.div>
             </div>
@@ -232,10 +161,10 @@ export default function InsightsPage() {
               viewport={{ once: true }}
             >
               <span className="text-indigo-600 font-bold tracking-widest text-xs uppercase mb-3 block">
-                Did You Know?
+                {researchPageCopy.factsSection.badge}
               </span>
               <h2 className="font-serif text-3xl lg:text-4xl font-medium text-text-main">
-                Healthcare Facts & Figures
+                {researchPageCopy.factsSection.title}
               </h2>
             </motion.div>
 
@@ -273,13 +202,13 @@ export default function InsightsPage() {
               viewport={{ once: true }}
             >
               <span className="text-indigo-600 font-bold tracking-widest text-xs uppercase mb-3 block">
-                Featured Articles
+                {researchPageCopy.featuredBlogsSection.badge}
               </span>
               <h2 className="font-serif text-3xl lg:text-5xl font-medium text-text-main mb-6">
-                Latest from Our Blog
+                {researchPageCopy.featuredBlogsSection.title}
               </h2>
               <p className="text-text-secondary font-light">
-                Expert insights, health tips, and stories from the frontlines of home healthcare.
+                {researchPageCopy.featuredBlogsSection.description}
               </p>
             </motion.div>
 
@@ -322,7 +251,7 @@ export default function InsightsPage() {
                         href={`/blog/${blog.slug}`}
                         className="inline-flex items-center gap-2 text-indigo-600 text-sm font-bold group/link"
                       >
-                        Read More
+                        {researchPageCopy.featuredBlogsSection.cardCtaLabel}
                         <ArrowRight className="w-4 h-4 transition-transform group-hover/link:translate-x-1" />
                       </Link>
                     </div>
@@ -337,8 +266,8 @@ export default function InsightsPage() {
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
             >
-              <Link href="/blog" className="inline-flex items-center gap-2 text-indigo-600 font-semibold hover:underline">
-                View All Articles
+              <Link href={researchPageCopy.featuredBlogsSection.viewAllHref} className="inline-flex items-center gap-2 text-indigo-600 font-semibold hover:underline">
+                {researchPageCopy.featuredBlogsSection.viewAllLabel}
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </motion.div>
@@ -356,18 +285,18 @@ export default function InsightsPage() {
                 viewport={{ once: true }}
               >
                 <span className="text-indigo-600 font-bold tracking-widest text-xs uppercase mb-3 block">
-                  Expert Tips
+                  {researchPageCopy.tipsSection.badge}
                 </span>
                 <h2 className="font-serif text-3xl lg:text-5xl font-medium text-text-main mb-6 lg:mb-8">
-                  Quick Health Tips
+                  {researchPageCopy.tipsSection.title}
                 </h2>
                 <p className="text-lg text-text-secondary font-light leading-relaxed mb-10 lg:mb-12">
-                  Simple, actionable advice from our medical professionals to help you stay healthy and make informed decisions about your care.
+                  {researchPageCopy.tipsSection.description}
                 </p>
                 
                 <div className="space-y-6">
                   {healthTips.map((tip, index) => {
-                    const Icon = tip.icon;
+                    const Icon = typeof tip.icon === "function" ? tip.icon : Heart;
                     return (
                       <motion.div
                         key={tip.title}
@@ -401,15 +330,15 @@ export default function InsightsPage() {
                   <Quote className="w-16 h-16 opacity-20 absolute top-6 right-6" />
                   <div className="relative z-10">
                     <p className="text-xl lg:text-2xl font-light leading-relaxed mb-8">
-                      &quot;Prevention is better than cure. Regular health monitoring at home has helped us catch potential issues early and provide timely interventions for our patients.&quot;
+                      &quot;{researchPageCopy.tipsSection.quote}&quot;
                     </p>
                     <div className="flex items-center gap-4">
                       <div className="size-12 rounded-full bg-white/20 flex items-center justify-center">
                         <Heart className="w-6 h-6" />
                       </div>
                       <div>
-                        <p className="font-bold">Dr. Medical Team</p>
-                        <p className="text-white/70 text-sm">Sanocare Health Experts</p>
+                        <p className="font-bold">{researchPageCopy.tipsSection.quoteAuthor}</p>
+                        <p className="text-white/70 text-sm">{researchPageCopy.tipsSection.quoteRole}</p>
                       </div>
                     </div>
                   </div>
@@ -440,10 +369,10 @@ export default function InsightsPage() {
               viewport={{ once: true }}
             >
               <span className="text-indigo-400 font-bold tracking-widest text-xs uppercase mb-3 block">
-                In The Press
+                {researchPageCopy.mediaSection.badge}
               </span>
               <h2 className="font-serif text-3xl lg:text-5xl font-medium text-white">
-                Media & Mentions
+                {researchPageCopy.mediaSection.title}
               </h2>
             </motion.div>
 
@@ -455,7 +384,7 @@ export default function InsightsPage() {
               viewport={{ once: true }}
             >
               {mediaMentions.map((mention) => {
-                const Icon = mention.icon;
+                const Icon = typeof mention.icon === "function" ? mention.icon : BookOpen;
                 return (
                   <motion.div
                     key={mention.title}
@@ -488,21 +417,21 @@ export default function InsightsPage() {
               viewport={{ once: true }}
             >
               <h2 className="font-serif text-3xl md:text-4xl font-bold text-white mb-4">
-                Stay Updated on Health Insights
+                {researchPageCopy.ctaSection.title}
               </h2>
               <p className="text-white/80 mb-8 max-w-xl mx-auto">
-                Get the latest health tips, articles, and updates delivered to your inbox.
+                {researchPageCopy.ctaSection.description}
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href="/#hero-booking-form">
+                <Link href={researchPageCopy.ctaSection.primaryCtaHref}>
                   <Button variant="ghost" size="lg" className="w-full sm:w-auto bg-white text-indigo-600 hover:bg-slate-100 hover:text-indigo-600 rounded-full px-8">
-                    Book a Health Checkup
+                    {researchPageCopy.ctaSection.primaryCtaLabel}
                     <ArrowRight className="w-4 h-4" />
                   </Button>
                 </Link>
-                <Link href="/contact">
+                <Link href={researchPageCopy.ctaSection.secondaryCtaHref}>
                   <Button variant="outline" size="lg" className="w-full sm:w-auto border-white text-white hover:bg-white/10 rounded-full px-8">
-                    Contact Us
+                    {researchPageCopy.ctaSection.secondaryCtaLabel}
                   </Button>
                 </Link>
               </div>

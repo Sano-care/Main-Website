@@ -1,0 +1,18 @@
+location,label,href,display_order,is_active
+navbar,Services,/services,10,true
+navbar,Insights,/research,20,true
+navbar,About Us,/about,30,true
+navbar,Contact,/contact,40,true
+footer_services,Sanocare NOW,/now,10,true
+footer_services,CareHub for Societies,/carehub,20,true
+footer_services,All Services,/services,30,true
+footer_services,Teleconsultations,/services#teleconsult,40,true
+footer_resources,Book a Visit,/#hero-booking-form,10,true
+footer_resources,About Us,/about,20,true
+footer_resources,Insights,/research,30,true
+footer_resources,Contact,/contact,40,true
+floating_sidebar,Book Now,/#hero-booking-form,10,true
+floating_sidebar,Call Us,tel:+919571608318,20,true
+floating_sidebar,WhatsApp,https://wa.me/919571608318,30,true
+mobile_sticky,Call,tel:+919571608318,10,true
+mobile_sticky,Book Consultation,/#hero-booking-form,20,true

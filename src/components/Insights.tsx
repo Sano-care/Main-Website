@@ -2,41 +2,18 @@
 
 import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-
-const articles = [
-  {
-    slug: "managing-seasonal-allergies",
-    category: "Wellness",
-    readTime: "5 min read",
-    title: "Managing Seasonal Allergies Effectively",
-    description:
-      "Learn how to handle the changing seasons effectively with our comprehensive guide.",
-    image:
-      "https://images.unsplash.com/photo-1490750967868-88aa4486c946?q=80&w=800&auto=format&fit=crop",
-  },
-  {
-    slug: "future-of-telehealth",
-    category: "Technology",
-    readTime: "3 min read",
-    title: "The Future of Telehealth and Virtual Care",
-    description:
-      "Virtual care is changing the landscape of medicine, making it easier than ever to see a specialist.",
-    image:
-      "https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=800&auto=format&fit=crop",
-  },
-  {
-    slug: "heart-health-basics",
-    category: "Cardiology",
-    readTime: "7 min read",
-    title: "Heart Health Basics for Longevity",
-    description:
-      "Simple steps for a healthier, longer life. Understand the vital signs.",
-    image:
-      "https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?q=80&w=800&auto=format&fit=crop",
-  },
-];
+import { useCmsSection } from "@/hooks/useCmsSection";
+import { HOME_CONTENT } from "@/constants/cms-content";
 
 export function Insights() {
+  const { data: insightsContent } = useCmsSection(
+    "home",
+    "insights",
+    HOME_CONTENT.insights,
+  );
+  const sectionTitle = insightsContent.sectionTitle ?? HOME_CONTENT.insights.sectionTitle;
+  const articles = insightsContent.articles;
+
   return (
     <section className="py-24 relative" id="insights">
       <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
@@ -48,7 +25,7 @@ export function Insights() {
             viewport={{ once: true }}
           >
             <h2 className="font-serif text-4xl font-medium text-text-main">
-              Medical Insights
+              {sectionTitle}
             </h2>
           </motion.div>
           <div className="hidden sm:flex gap-3">

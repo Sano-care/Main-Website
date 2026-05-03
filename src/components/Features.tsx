@@ -1,42 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Home, Video, HeartPulse, Activity, ArrowRight } from "lucide-react";
-
-const services = [
-  {
-    icon: Home,
-    title: "Homecare",
-    description:
-      "Medic-led doorstep execution for acute needs. Professional healthcare delivered to your home within 30 minutes.",
-    features: ["Vitals Capture", "Injections", "Wound Dressing", "Sample Collection"],
-    price: "₹499/15min",
-  },
-  {
-    icon: Video,
-    title: "Teleconsultation",
-    description:
-      "24/7 virtual access to dedicated MBBS doctors. Get expert medical advice without leaving your home.",
-    features: ["Video Consult", "Digital Rx", "Follow-up Guidance"],
-    price: "₹199/session",
-  },
-  {
-    icon: HeartPulse,
-    title: "Chronic Disease Management",
-    description:
-      "Specialized monitoring for elderly and long-term health conditions with dedicated care protocols.",
-    features: ["Diabetes Support", "Hypertension Monitoring", "Family Health Tracking"],
-    price: "Custom Plans",
-  },
-  {
-    icon: Activity,
-    title: "Early Risk Diagnostics",
-    description:
-      "Automated screening to detect health risks before they escalate. Prevention is better than cure.",
-    features: ["Quick Risk Diagnosis", "Preventive Screening", "AI Health Insights"],
-    price: "Starting ₹299",
-  },
-];
+import { ArrowRight } from "lucide-react";
+import { useCmsSection } from "@/hooks/useCmsSection";
+import { HOME_CONTENT } from "@/constants/cms-content";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -54,6 +21,18 @@ const cardVariants = {
 };
 
 export function Features() {
+  const defaultServiceIcon = HOME_CONTENT.features.services[0].icon;
+  const { data: featuresContent } = useCmsSection(
+    "home",
+    "features",
+    HOME_CONTENT.features,
+  );
+  const sectionCopy = featuresContent.sectionCopy ?? HOME_CONTENT.features.sectionCopy;
+  const services = featuresContent.services.map((service, index) => ({
+    ...service,
+    icon: service.icon ?? HOME_CONTENT.features.services[index]?.icon ?? defaultServiceIcon,
+  }));
+
   return (
     <section className="py-24 lg:py-32 relative" id="services">
       <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
@@ -65,20 +44,20 @@ export function Features() {
             viewport={{ once: true }}
           >
             <span className="text-primary font-bold tracking-widest text-xs uppercase mb-2 block">
-              Our Services
+              {sectionCopy.badge}
             </span>
             <h2 className="font-serif text-4xl lg:text-5xl font-medium text-text-main">
-              What You Get
+              {sectionCopy.title}
             </h2>
           </motion.div>
           <motion.a
-            href="/about"
+            href={sectionCopy.aboutLinkHref}
             className="group flex items-center gap-2 pb-1 border-b border-text-main text-text-main font-medium hover:text-primary hover:border-primary transition-colors"
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
           >
-            Learn more about us
+            {sectionCopy.aboutLinkLabel}
             <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
           </motion.a>
         </div>
@@ -92,7 +71,7 @@ export function Features() {
           viewport={{ once: true, margin: "-100px" }}
         >
           {services.map((service) => {
-            const Icon = service.icon;
+            const Icon = typeof service.icon === "function" ? service.icon : defaultServiceIcon;
             return (
               <motion.div
                 key={service.title}

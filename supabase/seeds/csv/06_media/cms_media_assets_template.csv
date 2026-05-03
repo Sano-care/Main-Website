@@ -1,0 +1,2 @@
+storage_path,public_url,alt_text,caption,width,height,mime_type,source_license,source_attribution,deleted_at,cleanup_required,last_reviewed_at
+cms/home/hero-default.jpg,https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?q=80&w=2906&auto=format&fit=crop,"Doctor and patient during a homecare visit","Default hero image for home page",2906,1941,image/jpeg,external,Unsplash,,false,2026-04-14T00:00:00Z

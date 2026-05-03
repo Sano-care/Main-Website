@@ -2,112 +2,12 @@
 
 import { motion } from "framer-motion";
 import { 
-  Clock, 
-  Home, 
-  Shield, 
-  IndianRupee,
   Check,
-  Building2,
-  Zap,
   ArrowRight,
-  Users,
-  Heart,
-  Activity,
-  Stethoscope,
 } from "lucide-react";
 import Link from "next/link";
-import { Smartphone } from "lucide-react";
-
-const comparisonData = {
-  providers: [
-    {
-      name: "Traditional Hospitals",
-      icon: Building2,
-      description: "In-person visits with travel and wait times",
-      highlight: false,
-    },
-    {
-      name: "Telemedicine Apps",
-      icon: Smartphone,
-      description: "Virtual consultations only",
-      highlight: false,
-    },
-    {
-      name: "Sanocare NOW",
-      icon: Zap,
-      description: "Doorstep care within 30 minutes",
-      highlight: true,
-    },
-  ],
-  features: [
-    {
-      name: "Response Time",
-      icon: Clock,
-      traditional: "2-4 Hours (Travel+Wait)",
-      telemedicine: "15 Mins (Consult only)",
-      sanocare: "30 Mins (At your door)",
-    },
-    {
-      name: "Physical Care",
-      icon: Home,
-      traditional: "Yes (But requires travel)",
-      telemedicine: "No (Consult only)",
-      sanocare: "Yes (Medics at home)",
-    },
-    {
-      name: "Risk Detection",
-      icon: Shield,
-      traditional: "Reactive",
-      telemedicine: "Basic",
-      sanocare: "Proactive & Structured",
-    },
-    {
-      name: "Pricing",
-      icon: IndianRupee,
-      traditional: "High (Travel + Fees)",
-      telemedicine: "Variable",
-      sanocare: "Transparent & Fixed",
-    },
-  ],
-};
-
-// Our service offerings
-const serviceOfferings = [
-  {
-    id: "sanocare-now",
-    name: "Sanocare NOW",
-    tagline: "Direct to Consumer Healthcare",
-    icon: Zap,
-    color: "primary",
-    description: "Get doctors, nurses, and diagnostics at your doorstep within 30 minutes. Pay-per-visit model starting at ₹499.",
-    features: [
-      { icon: Clock, text: "30 min response" },
-      { icon: Stethoscope, text: "Trained paramedics" },
-      { icon: Home, text: "Homecare & nursing" },
-      { icon: Activity, text: "Diagnostics at home" },
-    ],
-    cta: "Book a Visit",
-    ctaLink: "/#hero-booking-form",
-    learnMore: "/now",
-  },
-  {
-    id: "carehub",
-    name: "CareHub",
-    tagline: "For Gated Communities",
-    icon: Building2,
-    color: "indigo",
-    description: "Transform your society into a health-first community with dedicated healthcare infrastructure and priority response.",
-    features: [
-      { icon: Users, text: "Dedicated care team" },
-      { icon: Shield, text: "<15 min response" },
-      { icon: Heart, text: "Health camps" },
-      { icon: Activity, text: "Resident tracking" },
-    ],
-    cta: "Request for Society",
-    ctaLink: "/carehub",
-    learnMore: "/carehub",
-  },
-];
+import { useCmsSection } from "@/hooks/useCmsSection";
+import { SANOCARE_ADVANTAGE_CONTENT } from "@/constants/cms-content";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -123,6 +23,54 @@ const rowVariants = {
 };
 
 export function SanocareAdvantage() {
+  const { data: pageCopy } = useCmsSection(
+    "home",
+    "sanocare_advantage_page_copy",
+    SANOCARE_ADVANTAGE_CONTENT.pageCopy,
+  );
+  const { data: comparisonDataRaw } = useCmsSection(
+    "home",
+    "sanocare_advantage_comparison",
+    SANOCARE_ADVANTAGE_CONTENT.comparisonData,
+  );
+  const { data: serviceOfferingsRaw } = useCmsSection(
+    "home",
+    "sanocare_advantage_service_offerings",
+    SANOCARE_ADVANTAGE_CONTENT.serviceOfferings,
+  );
+  const { data: valuePropositions } = useCmsSection(
+    "home",
+    "sanocare_advantage_value_propositions",
+    SANOCARE_ADVANTAGE_CONTENT.valuePropositions,
+  );
+
+  const comparisonData = {
+    ...comparisonDataRaw,
+    providers: comparisonDataRaw.providers.map((provider, index) => ({
+      ...provider,
+      icon: provider.icon ?? SANOCARE_ADVANTAGE_CONTENT.comparisonData.providers[index]?.icon ?? Check,
+    })),
+    features: comparisonDataRaw.features.map((feature, index) => ({
+      ...feature,
+      icon: feature.icon ?? SANOCARE_ADVANTAGE_CONTENT.comparisonData.features[index]?.icon ?? Check,
+    })),
+  };
+
+  const serviceOfferings = serviceOfferingsRaw.map((service, index) => ({
+    ...service,
+    icon: service.icon ?? SANOCARE_ADVANTAGE_CONTENT.serviceOfferings[index]?.icon ?? Check,
+    features: service.features.map((feature, featureIndex) => ({
+      ...feature,
+      icon:
+        feature.icon
+        ?? SANOCARE_ADVANTAGE_CONTENT.serviceOfferings[index]?.features[featureIndex]?.icon
+        ?? Check,
+    })),
+  }));
+
+  const TraditionalIcon = typeof (comparisonData.providers[0]?.icon) === "function" ? comparisonData.providers[0].icon : Check;
+  const SanocareIcon = typeof (comparisonData.providers[2]?.icon) === "function" ? comparisonData.providers[2].icon : Check;
+
   return (
     <section className="py-20 lg:py-14 bg-slate-50 relative overflow-hidden" id="advantage">
       {/* Background decoration */}
@@ -137,14 +85,13 @@ export function SanocareAdvantage() {
           className="text-center mb-12"
         >
           <span className="text-primary font-bold tracking-widest text-xs uppercase mb-2 block">
-            Why Choose Us
+            {pageCopy.badge}
           </span>
           <h2 className="font-serif text-4xl lg:text-5xl font-medium text-text-main mb-4">
-            The Sanocare <span className="text-primary italic">Advantage</span>
+            {pageCopy.titlePrefix} <span className="text-primary italic">{pageCopy.titleHighlight}</span>
           </h2>
           <p className="text-text-secondary max-w-2xl mx-auto">
-            See how Sanocare NOW compares to traditional healthcare options. 
-            We combine the best of both worlds—physical care with digital convenience.
+            {pageCopy.description}
           </p>
         </motion.div>
 
@@ -159,10 +106,10 @@ export function SanocareAdvantage() {
           {/* Table Header */}
           <div className="grid grid-cols-4 bg-slate-50 border-b border-slate-100">
             <div className="p-6 font-bold text-text-main">
-              Feature
+              {pageCopy.featureLabel}
             </div>
             {comparisonData.providers.map((provider) => {
-              const ProviderIcon = provider.icon;
+              const ProviderIcon = typeof provider.icon === "function" ? provider.icon : Check;
               return (
                 <div 
                   key={provider.name}
@@ -186,7 +133,7 @@ export function SanocareAdvantage() {
 
           {/* Table Rows */}
           {comparisonData.features.map((feature, index) => {
-            const Icon = feature.icon;
+            const Icon = typeof feature.icon === "function" ? feature.icon : Check;
             return (
               <motion.div
                 key={feature.name}
@@ -230,13 +177,13 @@ export function SanocareAdvantage() {
             </div>
             <div className="p-3 text-center">
               <div className="flex items-center justify-center gap-1 font-bold text-slate-600 text-xs">
-                <Building2 className="w-3.5 h-3.5" />
+                <TraditionalIcon className="w-3.5 h-3.5" />
                 <span>Traditional</span>
               </div>
             </div>
             <div className="p-3 text-center bg-primary text-white">
               <div className="flex items-center justify-center gap-1 font-bold text-xs">
-                <Zap className="w-3.5 h-3.5" />
+                <SanocareIcon className="w-3.5 h-3.5" />
                 <span>Sanocare</span>
               </div>
             </div>
@@ -244,7 +191,7 @@ export function SanocareAdvantage() {
 
           {/* Table Rows */}
           {comparisonData.features.map((feature, index) => {
-            const Icon = feature.icon;
+            const Icon = typeof feature.icon === "function" ? feature.icon : Check;
             return (
               <motion.div
                 key={feature.name}
@@ -278,12 +225,12 @@ export function SanocareAdvantage() {
           className="mt-16"
         >
           <h3 className="text-center font-serif text-2xl lg:text-3xl font-medium text-text-main mb-8">
-            Our Service Models
+            {pageCopy.serviceModelsTitle}
           </h3>
           
           <div className="grid md:grid-cols-2 gap-6">
             {serviceOfferings.map((service) => {
-              const Icon = service.icon;
+              const Icon = typeof service.icon === "function" ? service.icon : Check;
               const isPrimary = service.color === "primary";
               
               return (
@@ -315,7 +262,7 @@ export function SanocareAdvantage() {
                     {/* Features Grid */}
                     <div className="grid grid-cols-2 gap-2 mb-5">
                       {service.features.map((feature, idx) => {
-                        const FeatureIcon = feature.icon;
+                        const FeatureIcon = typeof feature.icon === "function" ? feature.icon : Check;
                         return (
                           <div key={idx} className="flex items-center gap-2 text-sm">
                             <FeatureIcon className={`w-4 h-4 shrink-0 ${isPrimary ? "text-primary" : "text-indigo-600"}`} />
@@ -359,12 +306,7 @@ export function SanocareAdvantage() {
           viewport={{ once: true }}
           className="mt-16 grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4"
         >
-          {[
-            { title: "Speed over appointments", desc: "No waiting, instant dispatch" },
-            { title: "Dedicated doctors", desc: "MBBS professionals, not ad-hoc" },
-            { title: "Medic-led execution", desc: "ANMs/DNMs at your doorstep" },
-            { title: "Intelligence over friction", desc: "Tech that resolves, not just books" },
-          ].map((item, index) => (
+          {valuePropositions.map((item, index) => (
             <motion.div
               key={item.title}
               initial={{ opacity: 0, scale: 0.95 }}
@@ -397,7 +339,7 @@ export function SanocareAdvantage() {
             href="/services"
             className="inline-flex items-center gap-2 text-primary font-semibold hover:underline"
           >
-            Explore all our services
+            {pageCopy.exploreAllLabel}
             <ArrowRight className="w-4 h-4" />
           </Link>
         </motion.div>

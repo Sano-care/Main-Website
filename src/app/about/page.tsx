@@ -1,149 +1,43 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Image from "next/image";
 import { 
-  Heart, 
   Shield, 
-  Clock, 
   Users, 
-  Award, 
-  Target,
   Stethoscope,
-  MapPin,
-  Calendar,
-  CheckCircle,
   ArrowRight,
-  BadgeCheck,
-  Brain,
-  Globe,
-  Phone,
-  Mail,
   Sparkles,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { Navbar, Footer } from "@/components";
+import { useCmsSection } from "@/hooks/useCmsSection";
+import { useCmsMedia } from "@/hooks/useCmsMedia";
+import { ABOUT_PAGE_CONTENT } from "@/constants/cms-content";
 
-// ============================================
-// PLACEHOLDER DATA - Replace with actual data
-// ============================================
-const COMPANY_INFO = {
-  name: "SanoCare",
-  tagline: "Your Health, Our Mission",
-  foundingYear: "2020",
-  city: "[City]",
-  state: "[State]",
-  fullAddress: "[Full Address]",
-  phone: "+91 XXXXX XXXXX",
-  email: "contact@sanocare.in",
-  
-  // Founder details
-  founderName: "[Founder Name]",
-  founderTitle: "Founder & CEO",
-  founderQuote: "We don't just treat patients; we empower people to live their healthiest lives.",
-};
+type AboutPageCopy = typeof ABOUT_PAGE_CONTENT.pageCopy;
+type AboutCompanyInfo = typeof ABOUT_PAGE_CONTENT.companyInfo;
+type AboutPillar = (typeof ABOUT_PAGE_CONTENT.pillars)[number];
+type AboutValue = (typeof ABOUT_PAGE_CONTENT.values)[number];
+type AboutMilestone = (typeof ABOUT_PAGE_CONTENT.milestones)[number];
+type AboutTeamMember = (typeof ABOUT_PAGE_CONTENT.teamMembers)[number];
+type AboutAccreditation = (typeof ABOUT_PAGE_CONTENT.accreditations)[number];
 
-const STATS = [
-  { number: "10,000+", label: "Patients Served" },
-  { number: "500+", label: "Home Visits Monthly" },
-  { number: "50+", label: "Healthcare Professionals" },
-  { number: "98%", label: "Patient Satisfaction" },
-];
-
-const PILLARS = [
-  {
-    number: "01",
-    title: "The Vision",
-    description: "To be the leading homecare provider, making quality medical care accessible to every household.",
-  },
-  {
-    number: "02",
-    title: "The Method",
-    description: "Integrating technology with compassionate care for seamless healthcare delivery at your doorstep.",
-  },
-  {
-    number: "03",
-    title: "The Impact",
-    description: "Positively influencing the lives of thousands of families by bringing healthcare home.",
-  },
-];
-
-const VALUES = [
-  {
-    icon: BadgeCheck,
-    title: "Uncompromising Quality",
-    description: "We adhere to the highest medical standards, ensuring safety and precision in every home visit and consultation.",
-  },
-  {
-    icon: Brain,
-    title: "Empathetic Innovation",
-    description: "Technology serves the human experience. We innovate to make healthcare more accessible and comfortable.",
-  },
-  {
-    icon: Globe,
-    title: "Community First",
-    description: "Health is a universal right. We work to foster a community that supports health awareness and education.",
-  },
-];
-
-const MILESTONES = [
-  {
-    year: "[Year]",
-    title: "The Foundation",
-    description: "Started with a vision to transform homecare, making quality medical care accessible to every family.",
-    position: "right",
-  },
-  {
-    year: "[Year]",
-    title: "First 1,000 Patients",
-    description: "Reached our first major milestone, establishing trust within the community through consistent, quality care.",
-    position: "left",
-  },
-  {
-    year: "[Year]",
-    title: "Team Expansion",
-    description: "Grew our network to include highly qualified doctors, nurses, and lab technicians across the city.",
-    position: "right",
-  },
-  {
-    year: "Today",
-    title: "Leading Homecare",
-    description: "Serving thousands of families with comprehensive homecare services including teleconsultation and lab tests.",
-    position: "left",
-  },
-];
-
-const TEAM_MEMBERS = [
-  {
-    name: "[Team Member 1]",
-    role: "Chief Medical Officer",
-  },
-  {
-    name: "[Team Member 2]",
-    role: "Head of Operations",
-  },
-  {
-    name: "[Team Member 3]",
-    role: "Director of Nursing",
-  },
-  {
-    name: "[Team Member 4]",
-    role: "Patient Experience Lead",
-  },
-];
-
-const ACCREDITATIONS = [
-  { icon: Shield, name: "NABH" },
-  { icon: Award, name: "ISO Certified" },
-  { icon: Heart, name: "HealthTrust" },
-  { icon: CheckCircle, name: "QualityCare" },
-];
+function withCompanyName(value: string, companyName: string): string {
+  return value.replace("{companyName}", companyName);
+}
 
 // ============================================
 // COMPONENTS
 // ============================================
 
-function HeroSection() {
+function HeroSection({
+  aboutPageCopy,
+  companyInfo,
+}: {
+  aboutPageCopy: AboutPageCopy;
+  companyInfo: AboutCompanyInfo;
+}) {
   return (
     <section className="relative pt-20 pb-20 lg:pt-32 lg:pb-32 overflow-hidden">
       {/* Background Elements */}
@@ -163,26 +57,24 @@ function HeroSection() {
           >
             <div className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-white/50 backdrop-blur-sm px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-primary shadow-sm">
               <span className="size-2 rounded-full bg-primary animate-pulse" />
-              Establishing Trust Since {COMPANY_INFO.foundingYear}
+              {aboutPageCopy.hero.trustPrefix} {companyInfo.foundingYear}
             </div>
 
             <h1 className="font-serif text-5xl font-medium leading-[1.1] tracking-tight text-slate-900 sm:text-6xl lg:text-7xl">
-              Our Mission is <br />
-              <span className="text-primary italic">Your Health.</span>
+              {aboutPageCopy.hero.titlePrefix} <br />
+              <span className="text-primary italic">{aboutPageCopy.hero.titleHighlight}</span>
             </h1>
 
             <p className="text-xl leading-relaxed text-slate-600 max-w-xl font-light">
-              {COMPANY_INFO.name} was founded on the principle that premium healthcare 
-              should be as seamless as it is effective. We bridge the gap between 
-              medical excellence and human compassion.
+              {withCompanyName(aboutPageCopy.hero.description, companyInfo.name)}
             </p>
 
             <div className="pt-4">
               <Link
-                href="/#specialists"
+                href={aboutPageCopy.hero.ctaHref}
                 className="inline-flex items-center gap-2 rounded-full bg-primary px-10 py-4 text-sm font-bold text-white shadow-xl shadow-primary/20 hover:bg-primary-dark transition-all transform hover:-translate-y-1"
               >
-                Meet Our Specialists
+                {aboutPageCopy.hero.ctaLabel}
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
@@ -207,10 +99,10 @@ function HeroSection() {
             <div className="absolute -bottom-10 -left-10 bg-white/70 backdrop-blur-xl p-8 rounded-2xl shadow-xl z-20 max-w-xs border border-white/50">
               <Shield className="w-10 h-10 text-primary mb-4" />
               <p className="text-sm font-medium text-slate-900 italic">
-                "{COMPANY_INFO.founderQuote}"
+                &quot;{companyInfo.founderQuote}&quot;
               </p>
               <p className="mt-2 text-xs font-bold uppercase text-slate-500">
-                {COMPANY_INFO.founderName}, Founder
+                {companyInfo.founderName}, {companyInfo.founderTitle}
               </p>
             </div>
           </motion.div>
@@ -220,7 +112,15 @@ function HeroSection() {
   );
 }
 
-function WhoWeAreSection() {
+function WhoWeAreSection({
+  aboutPageCopy,
+  companyInfo,
+  pillars,
+}: {
+  aboutPageCopy: AboutPageCopy;
+  companyInfo: AboutCompanyInfo;
+  pillars: AboutPillar[];
+}) {
   return (
     <section className="py-24 lg:py-36 bg-white">
       <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
@@ -231,28 +131,24 @@ function WhoWeAreSection() {
           className="max-w-3xl"
         >
           <span className="text-primary font-bold tracking-widest text-xs uppercase mb-3 block">
-            Who We Are
+            {aboutPageCopy.whoWeAre.badge}
           </span>
           <h2 className="font-serif text-4xl lg:text-5xl font-medium text-slate-900 mb-8">
-            Redefining the standard of homecare.
+            {aboutPageCopy.whoWeAre.title}
           </h2>
           <div className="space-y-6 text-lg text-slate-600 font-light leading-relaxed">
             <p>
-              {COMPANY_INFO.name} is an integrated healthcare ecosystem designed for the 
-              modern family. We believe that clinical expertise should be complemented 
-              by convenience and compassion.
+              {withCompanyName(aboutPageCopy.whoWeAre.paragraphs[0], companyInfo.name)}
             </p>
             <p>
-              Our multidisciplinary approach ensures that every aspect of your well-being 
-              is considered, from home consultations to advanced diagnostic services. 
-              We are not just a service; we are your lifelong partner in health.
+              {aboutPageCopy.whoWeAre.paragraphs[1]}
             </p>
           </div>
         </motion.div>
 
         {/* Three Pillars */}
         <div className="grid md:grid-cols-3 gap-12 mt-24">
-          {PILLARS.map((pillar, index) => (
+          {pillars.map((pillar, index) => (
             <motion.div
               key={pillar.title}
               initial={{ opacity: 0, y: 20 }}
@@ -272,7 +168,15 @@ function WhoWeAreSection() {
   );
 }
 
-function ValuesSection() {
+function ValuesSection({
+  aboutPageCopy,
+  companyInfo,
+  values,
+}: {
+  aboutPageCopy: AboutPageCopy;
+  companyInfo: AboutCompanyInfo;
+  values: AboutValue[];
+}) {
   return (
     <section className="py-28 lg:py-36 relative bg-slate-50">
       <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
@@ -283,16 +187,16 @@ function ValuesSection() {
           className="text-center mb-20"
         >
           <span className="text-primary font-bold tracking-widest text-xs uppercase mb-3 block">
-            Our Core Values
+            {aboutPageCopy.valuesSection.badge}
           </span>
           <h2 className="font-serif text-4xl lg:text-5xl font-medium text-slate-900">
-            The Pillars of {COMPANY_INFO.name}
+            {aboutPageCopy.valuesSection.titlePrefix} {companyInfo.name}
           </h2>
         </motion.div>
 
         <div className="grid md:grid-cols-3 gap-10">
-          {VALUES.map((value, index) => {
-            const Icon = value.icon;
+          {values.map((value, index) => {
+            const Icon = typeof value.icon === "function" ? value.icon : Shield;
             return (
               <motion.div
                 key={value.title}
@@ -318,7 +222,15 @@ function ValuesSection() {
   );
 }
 
-function TeamSection() {
+function TeamSection({
+  aboutPageCopy,
+  teamMembers,
+}: {
+  aboutPageCopy: AboutPageCopy;
+  teamMembers: AboutTeamMember[];
+}) {
+  const { data: teamMedia } = useCmsMedia("about", "team_members");
+
   return (
     <section className="py-24 bg-slate-900 text-white overflow-hidden">
       <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
@@ -329,20 +241,21 @@ function TeamSection() {
             viewport={{ once: true }}
           >
             <span className="text-primary font-bold tracking-widest text-xs uppercase mb-3 block">
-              Expertise
+              {aboutPageCopy.teamSection.badge}
             </span>
             <h2 className="font-serif text-4xl lg:text-5xl font-medium">
-              Visionary Leadership
+              {aboutPageCopy.teamSection.title}
             </h2>
           </motion.div>
           <p className="max-w-md text-white/60 font-light">
-            Driven by a team of dedicated healthcare professionals committed to 
-            transforming homecare delivery.
+            {aboutPageCopy.teamSection.description}
           </p>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          {TEAM_MEMBERS.map((member, index) => (
+          {teamMembers.map((member, index) => {
+            const asset = teamMedia.find((item) => item.itemKey === member.key);
+            return (
             <motion.div
               key={member.name}
               initial={{ opacity: 0, y: 20 }}
@@ -352,11 +265,18 @@ function TeamSection() {
               className="group"
             >
               <div className="aspect-[3/4] rounded-2xl overflow-hidden mb-6 relative bg-gradient-to-br from-slate-700 to-slate-800">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Users className="w-16 h-16 text-slate-600" />
-                </div>
-                {/* Replace with actual image */}
-                {/* <Image src={member.image} alt={member.name} fill className="object-cover grayscale group-hover:grayscale-0 transition-all duration-500" /> */}
+                {asset?.publicUrl ? (
+                  <Image
+                    src={asset.publicUrl}
+                    alt={asset.altText ?? member.name}
+                    fill
+                    className="object-cover grayscale group-hover:grayscale-0 transition-all duration-500"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Users className="w-16 h-16 text-slate-600" />
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
               <h4 className="text-xl font-serif font-bold">{member.name}</h4>
@@ -364,14 +284,23 @@ function TeamSection() {
                 {member.role}
               </p>
             </motion.div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>
   );
 }
 
-function TimelineSection() {
+function TimelineSection({
+  aboutPageCopy,
+  companyInfo,
+  milestones,
+}: {
+  aboutPageCopy: AboutPageCopy;
+  companyInfo: AboutCompanyInfo;
+  milestones: AboutMilestone[];
+}) {
   return (
     <section className="py-28 lg:py-36 relative bg-white">
       <div className="mx-auto max-w-[1200px] px-6 lg:px-12">
@@ -382,13 +311,13 @@ function TimelineSection() {
           className="text-center mb-24"
         >
           <span className="text-primary font-bold tracking-widest text-xs uppercase mb-3 block">
-            Our Heritage
+            {aboutPageCopy.timelineSection.badge}
           </span>
           <h2 className="font-serif text-4xl lg:text-5xl font-medium text-slate-900">
-            The {COMPANY_INFO.name} Story
+            {aboutPageCopy.timelineSection.titlePrefix} {companyInfo.name} {aboutPageCopy.timelineSection.titleSuffix}
           </h2>
           <p className="mt-4 text-slate-600 max-w-2xl mx-auto text-lg font-light">
-            Milestones that defined our path toward excellence.
+            {aboutPageCopy.timelineSection.description}
           </p>
         </motion.div>
 
@@ -397,7 +326,7 @@ function TimelineSection() {
           <div className="absolute left-4 lg:left-1/2 top-0 bottom-0 w-0.5 bg-slate-200 lg:-translate-x-1/2" />
 
           <div className="space-y-24 lg:space-y-32">
-            {MILESTONES.map((milestone, index) => (
+            {milestones.map((milestone, index) => (
               <motion.div
                 key={milestone.title}
                 initial={{ opacity: 0, y: 30 }}
@@ -450,16 +379,22 @@ function TimelineSection() {
   );
 }
 
-function AccreditationsSection() {
+function AccreditationsSection({
+  aboutPageCopy,
+  accreditations,
+}: {
+  aboutPageCopy: AboutPageCopy;
+  accreditations: AboutAccreditation[];
+}) {
   return (
     <section className="border-t border-slate-200 bg-white/50 py-16">
       <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
         <p className="mb-10 text-center text-xs font-bold uppercase tracking-widest text-slate-500">
-          Accredited by Leading Health Organizations
+          {aboutPageCopy.accreditationsLabel}
         </p>
         <div className="flex flex-wrap items-center justify-center gap-12 opacity-50 grayscale transition-opacity hover:opacity-100 lg:gap-24">
-          {ACCREDITATIONS.map((acc) => {
-            const Icon = acc.icon;
+          {accreditations.map((acc) => {
+            const Icon = typeof acc.icon === "function" ? acc.icon : Shield;
             return (
               <div key={acc.name} className="flex items-center gap-2 group">
                 <Icon className="w-10 h-10 group-hover:text-primary transition-colors" />
@@ -473,7 +408,7 @@ function AccreditationsSection() {
   );
 }
 
-function CTASection() {
+function CTASection({ aboutPageCopy }: { aboutPageCopy: AboutPageCopy }) {
   return (
     <section className="py-20 lg:py-28 bg-gradient-to-br from-primary to-primary-dark">
       <div className="max-w-4xl mx-auto px-6 lg:px-12 text-center">
@@ -483,17 +418,16 @@ function CTASection() {
           viewport={{ once: true }}
         >
           <h2 className="text-3xl lg:text-4xl font-serif font-bold text-white mb-4">
-            Ready to Experience Better Healthcare?
+            {aboutPageCopy.ctaSection.title}
           </h2>
           <p className="text-white/80 max-w-2xl mx-auto mb-8 text-lg">
-            Book your first home visit today and see why thousands of families trust us 
-            with their healthcare needs.
+            {aboutPageCopy.ctaSection.description}
           </p>
           <Link
-            href="/"
+            href={aboutPageCopy.ctaSection.ctaHref}
             className="inline-flex items-center gap-2 px-10 py-4 bg-white text-primary font-bold rounded-full hover:shadow-lg transition-all transform hover:-translate-y-1"
           >
-            Book a Visit
+            {aboutPageCopy.ctaSection.ctaLabel}
             <ArrowRight className="w-5 h-5" />
           </Link>
         </motion.div>
@@ -507,18 +441,63 @@ function CTASection() {
 // ============================================
 
 export default function AboutPage() {
+  const { data: aboutPageCopy } = useCmsSection(
+    "about",
+    "page_copy",
+    ABOUT_PAGE_CONTENT.pageCopy,
+  );
+  const { data: companyInfo } = useCmsSection(
+    "about",
+    "company_info",
+    ABOUT_PAGE_CONTENT.companyInfo,
+  );
+  const { data: pillars } = useCmsSection(
+    "about",
+    "pillars",
+    ABOUT_PAGE_CONTENT.pillars,
+  );
+  const { data: valuesData } = useCmsSection(
+    "about",
+    "values",
+    ABOUT_PAGE_CONTENT.values,
+  );
+  const { data: milestones } = useCmsSection(
+    "about",
+    "milestones",
+    ABOUT_PAGE_CONTENT.milestones,
+  );
+  const { data: teamMembers } = useCmsSection(
+    "about",
+    "team_members",
+    ABOUT_PAGE_CONTENT.teamMembers,
+  );
+  const { data: accreditationsData } = useCmsSection(
+    "about",
+    "accreditations",
+    ABOUT_PAGE_CONTENT.accreditations,
+  );
+
+  const values = valuesData.map((value, index) => ({
+    ...value,
+    icon: value.icon ?? ABOUT_PAGE_CONTENT.values[index]?.icon ?? Shield,
+  }));
+  const accreditations = accreditationsData.map((accreditation, index) => ({
+    ...accreditation,
+    icon: accreditation.icon ?? ABOUT_PAGE_CONTENT.accreditations[index]?.icon ?? Shield,
+  }));
+
   return (
     <div className="min-h-screen bg-slate-50">
       <Navbar />
       
       <main>
-        <HeroSection />
-        <WhoWeAreSection />
-        <ValuesSection />
-        <TeamSection />
-        <TimelineSection />
-        <AccreditationsSection />
-        <CTASection />
+        <HeroSection aboutPageCopy={aboutPageCopy} companyInfo={companyInfo} />
+        <WhoWeAreSection aboutPageCopy={aboutPageCopy} companyInfo={companyInfo} pillars={pillars} />
+        <ValuesSection aboutPageCopy={aboutPageCopy} companyInfo={companyInfo} values={values} />
+        <TeamSection aboutPageCopy={aboutPageCopy} teamMembers={teamMembers} />
+        <TimelineSection aboutPageCopy={aboutPageCopy} companyInfo={companyInfo} milestones={milestones} />
+        <AccreditationsSection aboutPageCopy={aboutPageCopy} accreditations={accreditations} />
+        <CTASection aboutPageCopy={aboutPageCopy} />
       </main>
 
       <Footer />
