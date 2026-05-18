@@ -47,25 +47,19 @@ export function Navbar() {
         )}
       >
         <div className="mx-auto flex h-16 md:h-20 lg:h-24 max-w-[1400px] items-center justify-between px-4 md:px-6 lg:px-12">
-          {/* Logo — single-word "Sanocare" wordmark with coral tagline strip */}
-          <Link href="/" className="flex items-center gap-3 group">
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-2 md:gap-3 group">
             <Image
               src={logoSrc}
               alt={logoAlt}
-              width={44}
-              height={44}
-              className="w-9 h-9 md:w-11 md:h-11"
+              width={40}
+              height={40}
+              className="w-8 h-8 md:w-10 md:h-10"
               priority
             />
-            <div className="flex flex-col leading-tight">
-              <h2 className="text-xl md:text-2xl font-semibold tracking-tight text-primary">
-                {navbarCopy.brandWordmarkPrefix}
-                {navbarCopy.brandWordmarkHighlight}
-              </h2>
-              <span className="hidden sm:inline text-[10px] md:text-[11px] font-mono uppercase tracking-[0.14em] text-[color:var(--color-accent-coral-dark)] mt-0.5">
-                Your Health, Our Priority
-              </span>
-            </div>
+            <h2 className="text-xl md:text-2xl font-serif font-bold tracking-tight text-text-main">
+              {navbarCopy.brandWordmarkPrefix}<span className="text-primary font-normal italic">{navbarCopy.brandWordmarkHighlight}</span>
+            </h2>
           </Link>
 
           {/* Desktop Navigation */}
@@ -83,9 +77,9 @@ export function Navbar() {
               ))}
             </div>
             <div className="flex items-center gap-3">
-              <Button
-                variant="primary"
-                size="md"
+              <Button 
+                variant="primary" 
+                size="md" 
                 className="rounded-full"
                 onClick={openModal}
               >
@@ -133,9 +127,9 @@ export function Navbar() {
                     {link.label}
                   </Link>
                 ))}
-                <Button
-                  variant="primary"
-                  size="md"
+                <Button 
+                  variant="primary" 
+                  size="md" 
                   className="mt-4 rounded-full"
                   onClick={() => {
                     setIsMobileMenuOpen(false);
@@ -155,6 +149,7 @@ export function Navbar() {
         </AnimatePresence>
       </header>
 
+      {/* Booking Modal */}
       <BookingModal isOpen={isModalOpen} onClose={closeModal} />
     </>
   );

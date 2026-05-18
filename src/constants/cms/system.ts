@@ -55,8 +55,8 @@ export const NOT_FOUND_PAGE_CONTENT = {
     { label: "Patient Portal", href: "/portal" },
   ],
   helpLabel: "Need help? Call us at",
-  helpPhone: "+91-9711977782",
-  helpPhoneHref: "tel:+919711977782",
+  helpPhone: "+91-9571608318",
+  helpPhoneHref: "tel:+919571608318",
 };
 
 export const COMING_SOON_PAGE_CONTENT = {
@@ -75,8 +75,8 @@ export const COMING_SOON_PAGE_CONTENT = {
   notifyLabel: "Notify Me",
   notifyToast: "Thanks! We'll notify you when this page is ready.",
   contactHelpLabel: "Need immediate help? Call us at",
-  contactPhone: "+91-9711977782",
-  contactPhoneHref: "tel:+919711977782",
+  contactPhone: "+91-9571608318",
+  contactPhoneHref: "tel:+919571608318",
   entries: {
     about: {
       title: "About Us",
@@ -118,37 +118,25 @@ export const COMING_SOON_PAGE_CONTENT = {
 
 export const PORTAL_PAGE_CONTENT = {
   logoAlt: "Sanocare",
-  // Single-word minimalist wordmark (matches the rest of the site).
-  brandWordmarkPrefix: "Sanocare",
-  brandWordmarkHighlight: "",
+  brandWordmarkPrefix: "Sano",
+  brandWordmarkHighlight: "care",
   backToHomeLabel: "Back to Home",
-  badgeLabel: "Coming with Sanocare Pulse",
-  titlePrefix: "Your patient portal is being",
-  titleHighlight: "built into Sanocare Pulse.",
+  badgeLabel: "SanoPulse is in Beta",
+  titlePrefix: "Patient Portal",
+  titleHighlight: "Coming Soon",
   description:
-    "Every visit, every prescription, every vitals reading — accessible from your phone or any browser. We're building the patient web portal as part of Sanocare Pulse Phase 1, our patient mobile application. Join the Pulse beta waitlist to be among the first to use it.",
-  featureTitle: "What you'll see in your portal:",
+    "We're building something special for you. Soon you'll be able to view your medical history, track appointments, access prescriptions, and manage your health - all in one place.",
+  featureTitle: "What's coming:",
   features: [
-    "View & download medical records — every visit, every prescription, searchable and downloadable.",
-    "Track upcoming appointments — live status from booking through case close.",
-    "Access diagnostic reports & vitals trends — every lab report, every BP / SpO₂ / glucose reading captured during a visit, plotted over time.",
-    "Manage prescriptions & refills — request a refill of any active prescription with one tap.",
-    "Securely share records with any doctor — generate a time-bound, read-only link for second opinions.",
+    "View & download medical records",
+    "Track upcoming appointments",
+    "Access digital prescriptions",
+    "Chat with your care team",
   ],
-  primaryCta: {
-    label: "Join the Pulse beta waitlist",
-    href: "/sanopulse",
-  },
-  secondaryCta: {
-    label: "Book a visit now",
-    href: "/",
-  },
-  helpStrip: {
-    label: "Already a patient and need your records right now?",
-    phoneLabel: "Call us at +91-97119 77782",
-    phoneHref: "tel:+919711977782",
-    emailLabel: "Email contact@sanocare.in",
-    emailHref: "mailto:contact@sanocare.in",
-    note: "Our care team can WhatsApp your records the same day under your DPDP 2023 consent.",
-  },
+  notifyButtonLabel: "Notify Me When Ready",
+  bookingButtonLabel: "Book a Consultation",
+  bookingButtonHref: "/",
+  expectedLaunchLabel: "Expected launch:",
+  expectedLaunchValue: "Q2 2026",
+  footerText: "© 2026 Sanocare Health Services. All rights reserved.",
 };

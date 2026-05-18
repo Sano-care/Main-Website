@@ -2,7 +2,7 @@ export const COMPANY_INFO = {
   name: "Sanocare",
   tagline: "Reimagining Primary Healthcare for Urban India",
   contact: {
-    phone: "+91-9711977782",
+    phone: "+91-9571608318",
     email: "contact@sanocare.in",
     address: "1666/2, Govindpuri Ext., Kalkaji, New Delhi, India",
     // Clean string for Google Maps URL
