@@ -16,6 +16,7 @@ import { Footer } from "@/components/Footer";
 import { Button, GlassCard, Input } from "@/components/ui";
 import { useCmsSection } from "@/hooks/useCmsSection";
 import { SANOPULSE_PAGE_CONTENT } from "@/constants/cms-content";
+import { supabase } from "@/lib/supabase";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -86,8 +87,9 @@ export default function SanopulsePage() {
     icon: item.icon ?? SANOPULSE_PAGE_CONTENT.privacy.items[index]?.icon,
   }));
 
-  // Submit handler — uses Netlify Forms via HTML form-name field.
-  // Falls back to a plain POST so it works even when Netlify dashboard hasn't been configured yet.
+  // Posts the waitlist signup into `contact_messages` with a tagging subject so
+  // ops can filter Pulse signups from regular contact submissions. The honeypot
+  // field is checked client-side: if a bot fills it, we silently succeed.
   const handleWaitlistSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSubmitStatus(null);
@@ -95,14 +97,38 @@ export default function SanopulsePage() {
     try {
       const form = e.currentTarget;
       const formData = new FormData(form);
-      // Netlify expects URL-encoded body when posting from JS.
-      const body = new URLSearchParams(formData as unknown as Record<string, string>);
-      const response = await fetch("/", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
+      const honeypot = String(formData.get(waitlist.spamFieldName) ?? "").trim();
+      if (honeypot.length > 0) {
+        form.reset();
+        setSubmitStatus({ type: "success", message: waitlist.successMessage });
+        return;
+      }
+
+      const name = String(formData.get("name") ?? "").trim();
+      const email = String(formData.get("email") ?? "").trim();
+      const phone = String(formData.get("phone") ?? "").trim();
+      const pincode = String(formData.get("pincode") ?? "").trim();
+      const reason = String(formData.get("reason") ?? "").trim();
+      const dpdpConsent = formData.get("dpdp-consent") === "on";
+
+      const messageBody = [
+        `Pincode: ${pincode}`,
+        reason ? `Reason: ${reason}` : null,
+        `DPDP consent: ${dpdpConsent ? "yes" : "no"}`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const { error } = await supabase.from("contact_messages").insert({
+        name,
+        email,
+        phone,
+        subject: "Sanopulse waitlist",
+        message: messageBody,
+        status: "new",
       });
-      if (!response.ok) throw new Error("Network error");
+      if (error) throw error;
+
       form.reset();
       setSubmitStatus({ type: "success", message: waitlist.successMessage });
     } catch {
@@ -344,20 +370,12 @@ export default function SanopulsePage() {
                 <span>{submitStatus.message}</span>
               </div>
             ) : (
-              <form
-                name={waitlist.formName}
-                method="POST"
-                data-netlify="true"
-                netlify-honeypot={waitlist.spamFieldName}
-                onSubmit={handleWaitlistSubmit}
-                className="space-y-4"
-              >
-                {/* Required for Netlify Forms detection */}
-                <input type="hidden" name="form-name" value={waitlist.formName} />
-                <p className="hidden">
+              <form onSubmit={handleWaitlistSubmit} className="space-y-4">
+                {/* Honeypot — visually hidden, bots that auto-fill text inputs will trip this. */}
+                <p className="hidden" aria-hidden="true">
                   <label>
                     Don&apos;t fill this out if you&apos;re human:{" "}
-                    <input name={waitlist.spamFieldName} />
+                    <input name={waitlist.spamFieldName} tabIndex={-1} autoComplete="off" />
                   </label>
                 </p>
 

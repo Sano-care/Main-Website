@@ -151,9 +151,6 @@ export const SANOPULSE_PAGE_CONTENT = {
     title: "Tell us a bit about you.",
     description:
       "We open cohorts of ~50 patients at a time, prioritising pincodes where Sanocare NOW already operates. Typical wait: 3–4 weeks between cohorts. We'll email and SMS you the moment your area is in the next cohort.",
-    // Netlify Forms target — set form name = "pulse-waitlist" in your Netlify dashboard
-    formName: "pulse-waitlist",
-    actionHref: "/sanopulse/thanks",
     fields: {
       nameLabel: "Full name",
       namePlaceholder: "Your full name",
@@ -175,7 +172,7 @@ export const SANOPULSE_PAGE_CONTENT = {
       "You're on the waitlist. We'll email and SMS you the moment a cohort opens up in your area. No spam, ever.",
     errorMessage:
       "Couldn't submit — please try again or email contact@sanocare.in.",
-    spamFieldName: "bot-field", // Netlify honeypot
+    spamFieldName: "bot-field",
   },
   faq: {
     badge: "Pulse FAQ",
