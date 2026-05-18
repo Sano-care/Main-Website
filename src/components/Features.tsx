@@ -78,7 +78,7 @@ export function Features() {
                 variants={cardVariants}
                 className="group relative p-6 bg-white rounded-2xl shadow-sm border border-slate-100 hover:shadow-xl transition-all duration-300 flex flex-col"
               >
-                <div className="size-12 rounded-xl bg-blue-50 text-primary flex items-center justify-center mb-5 group-hover:bg-primary group-hover:text-white transition-colors duration-300">
+                <div className="size-12 rounded-xl bg-primary-50 text-primary flex items-center justify-center mb-5 group-hover:bg-primary group-hover:text-white transition-colors duration-300">
                   <Icon className="w-6 h-6" />
                 </div>
                 <h3 className="font-serif text-xl font-bold mb-2 text-text-main">

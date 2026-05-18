@@ -244,7 +244,7 @@ export function SanocareAdvantage() {
                   }`}
                 >
                   {/* Header */}
-                  <div className={`p-5 lg:p-6 ${isPrimary ? "bg-gradient-to-r from-primary/5 to-blue-50" : "bg-accent-coral-50"}`}>
+                  <div className={`p-5 lg:p-6 ${isPrimary ? "bg-gradient-to-r from-primary/5 to-primary-50" : "bg-accent-coral-50"}`}>
                     <div className="flex items-center gap-4 mb-4">
                       <div className={`p-3 rounded-xl ${isPrimary ? "bg-primary/10 text-primary" : "bg-accent-coral-50 text-[color:var(--color-accent-coral-dark)]"}`}>
                         <Icon className="w-6 h-6" />

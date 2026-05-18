@@ -148,7 +148,7 @@ export function Hero() {
               className="font-serif text-4xl sm:text-5xl lg:text-7xl font-bold leading-[1.1] tracking-tight text-text-main"
             >
               {heroCopy.headingPrefix} <br />
-              <span className="italic text-transparent bg-clip-text bg-linear-to-r from-primary via-blue-500 to-indigo-500 font-light inline-block pb-2 pr-2.5">
+              <span className="italic text-transparent bg-clip-text bg-linear-to-r from-primary via-primary-dark to-primary-700 font-light inline-block pb-2 pr-2.5">
                 {heroCopy.headingHighlight}
               </span>
             </motion.h1>
@@ -331,7 +331,7 @@ export function Hero() {
                           </div>
                         )}
                         {isBookingForOther && (
-                          <div className="mt-1 text-xs text-blue-600 flex items-center gap-1">
+                          <div className="mt-1 text-xs text-primary flex items-center gap-1">
                             <Users className="w-3 h-3" />
                             {bookingCopy.geolocation.bookingForOtherNote}
                           </div>
