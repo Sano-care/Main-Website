@@ -383,7 +383,7 @@ export const SANOCARE_ADVANTAGE_CONTENT = {
       name: "CareHub",
       tagline: "For Gated Communities",
       icon: Building2,
-      color: "indigo",
+      color: "coral",
       description:
         "Transform your society into a health-first community with dedicated healthcare infrastructure and priority response.",
       features: [

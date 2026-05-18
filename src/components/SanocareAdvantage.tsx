@@ -240,13 +240,13 @@ export function SanocareAdvantage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
-                    isPrimary ? "border-primary/20" : "border-indigo-200"
+                    isPrimary ? "border-primary/20" : "border-accent-coral/30"
                   }`}
                 >
                   {/* Header */}
-                  <div className={`p-5 lg:p-6 ${isPrimary ? "bg-gradient-to-r from-primary/5 to-blue-50" : "bg-gradient-to-r from-indigo-50 to-purple-50"}`}>
+                  <div className={`p-5 lg:p-6 ${isPrimary ? "bg-gradient-to-r from-primary/5 to-blue-50" : "bg-accent-coral-50"}`}>
                     <div className="flex items-center gap-4 mb-4">
-                      <div className={`p-3 rounded-xl ${isPrimary ? "bg-primary/10 text-primary" : "bg-indigo-100 text-indigo-600"}`}>
+                      <div className={`p-3 rounded-xl ${isPrimary ? "bg-primary/10 text-primary" : "bg-accent-coral-50 text-[color:var(--color-accent-coral-dark)]"}`}>
                         <Icon className="w-6 h-6" />
                       </div>
                       <div>
@@ -265,7 +265,7 @@ export function SanocareAdvantage() {
                         const FeatureIcon = typeof feature.icon === "function" ? feature.icon : Check;
                         return (
                           <div key={idx} className="flex items-center gap-2 text-sm">
-                            <FeatureIcon className={`w-4 h-4 shrink-0 ${isPrimary ? "text-primary" : "text-indigo-600"}`} />
+                            <FeatureIcon className={`w-4 h-4 shrink-0 ${isPrimary ? "text-primary" : "text-[color:var(--color-accent-coral-dark)]"}`} />
                             <span className="text-text-main text-xs lg:text-sm">{feature.text}</span>
                           </div>
                         );
@@ -277,7 +277,7 @@ export function SanocareAdvantage() {
                       <Link
                         href={service.ctaLink}
                         className={`flex-1 inline-flex items-center justify-center gap-2 text-white font-semibold py-3 px-4 rounded-xl hover:opacity-90 transition-opacity text-sm ${
-                          isPrimary ? "bg-primary" : "bg-indigo-600"
+                          isPrimary ? "bg-primary" : "bg-accent-coral"
                         }`}
                       >
                         {service.cta}
@@ -286,7 +286,7 @@ export function SanocareAdvantage() {
                       <Link
                         href={service.learnMore}
                         className={`flex-1 inline-flex items-center justify-center gap-2 border font-semibold py-3 px-4 rounded-xl hover:bg-white/50 transition-colors text-sm ${
-                          isPrimary ? "border-primary/20 text-primary" : "border-indigo-200 text-indigo-600"
+                          isPrimary ? "border-primary/20 text-primary" : "border-accent-coral/30 text-[color:var(--color-accent-coral-dark)]"
                         }`}
                       >
                         Learn More
