@@ -18,25 +18,25 @@ import {
 
 export const HOME_CONTENT = {
   hero: {
-    badgeText: "Now Serving Delhi NCR",
-    headingPrefix: "Healthcare at",
-    headingHighlight: "your Doorstep.",
+    badgeText: "Median time-to-medic: under 30 min",
+    headingPrefix: "Trusted Healthcare at Home in",
+    headingHighlight: "30 mins.",
     backgroundImageSrc:
       "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?q=80&w=2906&auto=format&fit=crop",
     description:
-      "We bridge the gap between virtual and physical care. Get doctors, nurses, and diagnostics right at your home or within your gated society.",
+      "GNM / B.Sc Nursing-qualified medics arrive, capture vitals, and execute treatment — supervised in real time by a dedicated MBBS doctor on live video, who diagnoses the case and issues a signed e-prescription under MoHFW 2020. Starting from ₹499 per visit.",
     stats: [
-      { value: "30 Mins", label: "Response Time" },
-      { value: "MBBS", label: "Qualified Doctors" },
-      { value: "₹499", label: "Starting Price" },
+      { value: "<30 min", label: "Median time-to-medic" },
+      { value: "1,000+", label: "Home visits delivered" },
+      { value: "★ 4.7", label: "75 Google reviews" },
     ],
     trust: {
-      badgeLabel: "+2k",
-      text: "Trusted by families",
+      badgeLabel: "1k+",
+      text: "MoHFW 2020 compliant",
     },
     bookingForm: {
-      title: "Book Consultation",
-      subtitle: "First consultation is free*",
+      title: "Book a visit in 60 seconds",
+      subtitle: "₹249 to confirm. Balance auto-charged on case close.",
       fields: {
         patientNameLabel: "Patient Name",
         patientNamePlaceholder: "Enter Full Name",
@@ -59,11 +59,11 @@ export const HOME_CONTENT = {
       secureNote: "Your information is 100% secure",
     },
     serviceOptions: [
-      { value: "", label: "Select Service" },
-      { value: "homecare", label: "Homecare (Doctor Visit, Nursing, Vitals)" },
-      { value: "teleconsult", label: "Teleconsultation (Video Consult)" },
-      { value: "chronic", label: "Chronic Disease Management" },
-      { value: "diagnostics", label: "Early Risk Diagnostics" },
+      { value: "", label: "Select a service" },
+      { value: "homecare", label: "Home visit — medic + doctor on video (from ₹499)" },
+      { value: "nursing", label: "Nursing-only — injection, IV, dressing (from ₹199)" },
+      { value: "teleconsult", label: "Teleconsultation — MBBS doctor on video (from ₹399)" },
+      { value: "diagnostics", label: "Lab sample at home — free collection, pay per test" },
     ],
   },
   bookingModal: {
@@ -398,9 +398,29 @@ export const SANOCARE_ADVANTAGE_CONTENT = {
     },
   ],
   valuePropositions: [
-    { title: "Speed over appointments", desc: "No waiting, instant dispatch" },
-    { title: "Dedicated doctors", desc: "MBBS professionals, not ad-hoc" },
-    { title: "Medic-led execution", desc: "ANMs/DNMs at your doorstep" },
-    { title: "Intelligence over friction", desc: "Tech that resolves, not just books" },
+    {
+      title: "Speed over appointments",
+      description:
+        "A trained medic is at your door in under 30 minutes — faster than scheduling a clinic visit, faster than reaching the nearest hospital OPD.",
+      icon: Clock,
+    },
+    {
+      title: "Hands-on care, not just video",
+      description:
+        "Physical exam, vitals capture, and treatment executed in your home — supervised in real time by a dedicated MBBS doctor on live video.",
+      icon: Stethoscope,
+    },
+    {
+      title: "Honest escalation",
+      description:
+        "Every case is risk-classified Green / Yellow / Red. If your case needs a hospital, we say so — clearly, in writing, before we leave.",
+      icon: Shield,
+    },
+    {
+      title: "Transparent pricing",
+      description:
+        "Starting-from prices on every SKU. ₹249 captured at booking, balance auto-charged on case close. No hidden fees. GST-exempt clinical healthcare.",
+      icon: IndianRupee,
+    },
   ],
 };
