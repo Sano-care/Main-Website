@@ -1,37 +1,22 @@
 @import "tailwindcss";
 
 @theme inline {
-  /* Brand Colors — aligned to logo #2B81FF (single-saturation ramp) */
-  --color-primary: #2b81ff;
-  --color-primary-dark: #1b65db;
-  --color-primary-50: #e8f1ff;
-  --color-primary-100: #cfe0ff;
-  --color-primary-300: #79aaff;
-  --color-primary-700: #134cb0;
-  --color-primary-900: #0a2670;
-
-  /* Coral accent — warmth, family-friendly CTA highlights */
-  --color-accent-coral: #f4845a;
-  --color-accent-coral-dark: #dc6a40;
-  --color-accent-coral-50: #fff1ec;
-
-  /* Surfaces & ink */
-  --color-background-light: #f7fafc;
-  --color-background-dark: #0f172a;
+  /* Brand Colors */
+  --color-primary: #2b8cee;
+  --color-primary-dark: #1a6bb5;
+  --color-background-light: #f8f9fa;
+  --color-background-dark: #101922;
   --color-surface-light: #ffffff;
-  --color-surface-dark: #1e293b;
-  --color-text-main: #0f172a;
-  --color-text-secondary: #475569;
-  --color-line: #e2e8ee;
-  --color-accent: #e8f1ff; /* legacy alias to primary-50 for back-compat */
+  --color-surface-dark: #1e2936;
+  --color-text-main: #0d141b;
+  --color-text-secondary: #4c739a;
+  --color-accent: #e0f2fe;
   --color-glass: rgba(255, 255, 255, 0.7);
   --color-glass-dark: rgba(30, 41, 54, 0.7);
-
-  /* Fonts — single sans-serif system; mono for clinical detail */
-  --font-display: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-serif: var(--font-inter), system-ui, sans-serif; /* legacy alias kept for components that still reference it */
-  --font-sans: var(--font-inter), system-ui, sans-serif;
-  --font-mono: var(--font-mono), "IBM Plex Mono", ui-monospace, monospace;
+  
+  /* Fonts */
+  --font-display: var(--font-manrope), system-ui, sans-serif;
+  --font-serif: var(--font-playfair), Georgia, serif;
 }
 
 /* Custom utilities */
@@ -40,7 +25,7 @@
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 20px 40px -10px rgba(43, 129, 255, 0.12);
+  box-shadow: 0 20px 40px -10px rgba(43, 140, 238, 0.1);
 }
 
 .dark .glass-panel {
@@ -49,9 +34,9 @@
   box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.3);
 }
 
-/* DNA Pattern Background — recoloured to brand blue at low opacity */
+/* DNA Pattern Background */
 .bg-dna-pattern {
-  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%232b81ff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%232b8cee' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
 }
 
 /* Scrollbar */
@@ -63,9 +48,9 @@
   scrollbar-width: none;
 }
 
-/* Selection — brand-blue tint */
+/* Selection */
 ::selection {
-  background: rgba(43, 129, 255, 0.28);
+  background: rgba(43, 140, 238, 0.3);
 }
 
 /* Smooth scroll */
@@ -74,11 +59,11 @@ html {
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: var(--font-display);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: var(--color-background-light);
-  color: var(--color-text-main);
+  background: #f8f9fa;
+  color: #0d141b;
 }
 
 /* Text shadow utility */
@@ -88,38 +73,54 @@ body {
 
 /* Glow effect for primary button */
 .btn-glow {
-  box-shadow: 0 0 20px rgba(43, 129, 255, 0.4);
+  box-shadow: 0 0 20px rgba(43, 140, 238, 0.4);
 }
 
-/* Coral accent CTA — used for primary booking buttons */
-.btn-accent {
-  background-color: var(--color-accent-coral);
-  color: #ffffff;
-  transition: background-color 150ms ease, box-shadow 150ms ease;
-}
-.btn-accent:hover {
-  background-color: var(--color-accent-coral-dark);
-  box-shadow: 0 0 20px rgba(244, 132, 90, 0.35);
+.btn-glow:hover {
+  box-shadow: 0 0 30px rgba(43, 140, 238, 0.6);
 }
 
-/* Live-status eyebrow dot — coral pulse indicating the service is "on" */
-.sano-pulse-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 9999px;
-  background-color: var(--color-accent-coral);
-  box-shadow: 0 0 0 0 rgba(244, 132, 90, 0.6);
-  animation: sano-pulse 1.8s ease-out infinite;
+/* ===== OPS DASHBOARD THEME ===== */
+
+/* Dark theme (default for ops) */
+.ops-dark {
+  --ops-bg: #0f172a;
+  --ops-surface: #1e293b;
+  --ops-surface-hover: #334155;
+  --ops-border: #334155;
+  --ops-text: #f8fafc;
+  --ops-text-secondary: #94a3b8;
+  --ops-text-muted: #64748b;
 }
 
-@keyframes sano-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(244, 132, 90, 0.6);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(244, 132, 90, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(244, 132, 90, 0);
-  }
+/* Light theme for ops */
+.ops-light {
+  --ops-bg: #f1f5f9;
+  --ops-surface: #ffffff;
+  --ops-surface-hover: #f8fafc;
+  --ops-border: #e2e8f0;
+  --ops-text: #0f172a;
+  --ops-text-secondary: #475569;
+  --ops-text-muted: #64748b;
+}
+
+/* Apply theme variables */
+.ops-dark, .ops-light {
+  min-height: 100vh;
+}
+
+.ops-bg {
+  background-color: var(--ops-bg);
+}
+
+.ops-surface {
+  background-color: var(--ops-surface);
+}
+
+.ops-text {
+  color: var(--ops-text);
+}
+
+.ops-text-secondary {
+  color: var(--ops-text-secondary);
 }

@@ -321,7 +321,7 @@ export function SanocareAdvantage() {
                 </div>
                 <div>
                   <h4 className="font-bold text-text-main text-xs lg:text-sm">{item.title}</h4>
-                  <p className="text-xs text-text-secondary mt-0.5 hidden sm:block">{item.description}</p>
+                  <p className="text-xs text-text-secondary mt-0.5 hidden sm:block">{item.desc}</p>
                 </div>
               </div>
             </motion.div>

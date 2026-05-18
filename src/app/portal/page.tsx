@@ -112,38 +112,31 @@ export default function PatientPortalPage() {
             </ul>
           </div>
 
-          {/* CTAs */}
+          {/* Notify Button */}
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link href={portalCopy.primaryCta.href}>
-              <Button variant="primary" size="lg" className="rounded-full w-full sm:w-auto">
-                <Bell className="w-4 h-4" />
-                {portalCopy.primaryCta.label}
-              </Button>
-            </Link>
-            <Link href={portalCopy.secondaryCta.href}>
+            <Button variant="primary" size="lg" className="rounded-full">
+              <Bell className="w-4 h-4" />
+              {portalCopy.notifyButtonLabel}
+            </Button>
+            <Link href={portalCopy.bookingButtonHref}>
               <Button variant="outline" size="lg" className="rounded-full w-full sm:w-auto">
-                {portalCopy.secondaryCta.label}
+                {portalCopy.bookingButtonLabel}
               </Button>
             </Link>
           </div>
+
+          {/* Timeline */}
+          <p className="mt-8 text-xs text-text-secondary">
+            {portalCopy.expectedLaunchLabel} <span className="font-medium text-primary">{portalCopy.expectedLaunchValue}</span>
+          </p>
         </motion.div>
       </main>
 
-      {/* Help strip for existing patients */}
-      <footer className="border-t border-slate-100 py-6 px-6">
-        <div className="max-w-2xl mx-auto text-center text-xs text-text-secondary space-y-2">
-          <p className="font-medium text-text-main">{portalCopy.helpStrip.label}</p>
-          <p>
-            <a href={portalCopy.helpStrip.phoneHref} className="text-primary hover:underline">
-              {portalCopy.helpStrip.phoneLabel}
-            </a>
-            {" · "}
-            <a href={portalCopy.helpStrip.emailHref} className="text-primary hover:underline">
-              {portalCopy.helpStrip.emailLabel}
-            </a>
-          </p>
-          <p>{portalCopy.helpStrip.note}</p>
-        </div>
+      {/* Footer */}
+      <footer className="border-t border-slate-100 py-6">
+        <p className="text-center text-xs text-text-secondary">
+          {portalCopy.footerText}
+        </p>
       </footer>
     </div>
   );
