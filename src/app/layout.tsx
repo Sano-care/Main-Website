@@ -1,54 +1,57 @@
 import type { Metadata } from "next";
-import { Playfair_Display, Manrope } from "next/font/google";
+import { Inter, IBM_Plex_Mono } from "next/font/google";
+import Script from "next/script";
 import { CmsPreloadProvider } from "@/components/providers/CmsPreloadProvider";
 import { getCmsPreloadSnapshot } from "@/services/cms/CmsContentServerService";
 import "./globals.css";
 
-const playfair = Playfair_Display({
-  variable: "--font-playfair",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
   display: "swap",
+  weight: ["400", "500", "600", "700"],
 });
 
-const manrope = Manrope({
-  variable: "--font-manrope",
+const ibmPlexMono = IBM_Plex_Mono({
+  variable: "--font-mono",
   subsets: ["latin"],
   display: "swap",
+  weight: ["500"],
 });
 
 export const metadata: Metadata = {
   title: {
-    default: "Sanocare - Healthcare at Your Doorstep | Doctor Home Visits in Delhi",
+    default: "Sanocare — Trusted Healthcare at Home in 30 mins. South Delhi.",
     template: "%s | Sanocare",
   },
-  description: "Reimagining Primary Homecare for Urban India. Book doctor home visits, teleconsultations, nursing care & lab tests at your doorstep. Highly qualified doctors (MBBS/Specialists), 24/7 support. Call +91-9571608318.",
+  description:
+    "GNM / B.Sc Nursing-qualified medics arrive in under 30 minutes, supervised in real time by an MBBS doctor on live video. Signed e-prescription under MoHFW 2020. Starting from ₹499. Now serving Kalkaji & Govindpuri Extension.",
   keywords: [
+    "nurse home visit Delhi",
     "doctor home visit",
-    "homecare",
-    "doctor at home Delhi",
+    "homecare South Delhi",
+    "GNM nurse home visit",
+    "MBBS teleconsultation",
     "nursing care at home",
-    "teleconsultation India",
-    "lab test at home",
+    "lab test at home Delhi",
     "Sanocare",
+    "Sanocare Pulse",
     "healthcare at doorstep",
-    "medical home service",
+    "telemedicine MoHFW 2020",
     "paramedic service Delhi",
+    "home visit Kalkaji",
+    "home visit Govindpuri",
   ],
-  authors: [{ name: "Sanocare Healthcare Pvt. Ltd." }],
+  authors: [{ name: "Sanocare Tech Innovations Pvt. Ltd." }],
   creator: "Sanocare",
-  publisher: "Sanocare Healthcare Pvt. Ltd.",
-  formatDetection: {
-    email: false,
-    address: false,
-    telephone: false,
-  },
+  publisher: "Sanocare Tech Innovations Pvt. Ltd.",
+  formatDetection: { email: false, address: false, telephone: false },
   metadataBase: new URL("https://sanocare.in"),
-  alternates: {
-    canonical: "/",
-  },
+  alternates: { canonical: "/" },
   openGraph: {
-    title: "Sanocare - Healthcare at Your Doorstep",
-    description: "Book doctor home visits, teleconsultations, nursing care & lab tests. Highly qualified doctors (MBBS/Specialists), 24/7 support in Delhi NCR.",
+    title: "Sanocare — Trusted Healthcare at Home in 30 mins.",
+    description:
+      "GNM / B.Sc Nursing-qualified medics arrive in under 30 minutes, supervised in real time by an MBBS doctor on live video. Starting from ₹499. South Delhi.",
     url: "https://sanocare.in",
     siteName: "Sanocare",
     locale: "en_IN",
@@ -58,14 +61,15 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Sanocare - Healthcare at Your Doorstep",
+        alt: "Sanocare — home healthcare across South Delhi",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Sanocare - Healthcare at Your Doorstep",
-    description: "Book doctor home visits, teleconsultations, nursing care & lab tests. Highly qualified doctors (MBBS/Specialists), 24/7 support.",
+    title: "Sanocare — Trusted Healthcare at Home in 30 mins.",
+    description:
+      "Trusted healthcare at home in 30 minutes — GNM medics supervised by an MBBS doctor on live video. From ₹499.",
     images: ["/og-image.png"],
     creator: "@sanocare",
   },
@@ -81,42 +85,84 @@ export const metadata: Metadata = {
     },
   },
   icons: {
-    icon: [
-      { url: "/logo.svg", type: "image/svg+xml" },
-    ],
+    icon: [{ url: "/logo.svg", type: "image/svg+xml" }],
     shortcut: "/logo.svg",
     apple: "/logo.svg",
   },
   manifest: "/manifest.json",
   verification: {
-    // Add your verification codes here when available
-    // google: "google-site-verification-code",
-    other: {
-      "facebook-domain-verification": "kfszus13qiekuol0cdt8784x8bdgb6",
-    },
+    other: { "facebook-domain-verification": "kfszus13qiekuol0cdt8784x8bdgb6" },
+  },
+};
+
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": ["MedicalBusiness", "LocalBusiness"],
+  name: "Sanocare",
+  legalName: "Sanocare Tech Innovations Private Limited",
+  url: "https://sanocare.in",
+  logo: "https://sanocare.in/logo.svg",
+  image: "https://sanocare.in/og-image.png",
+  telephone: "+91-9711977782",
+  email: "contact@sanocare.in",
+  description:
+    "Home healthcare in South Delhi. A GNM / B.Sc Nursing-qualified medic arrives at your home, supervised in real time by an MBBS doctor on live video, who issues a signed e-prescription per MoHFW Telemedicine Practice Guidelines 2020.",
+  priceRange: "₹₹",
+  address: {
+    "@type": "PostalAddress",
+    streetAddress: "1666/B2, 3rd Floor, Gali 2, Govindpuri Extension, Kalkaji",
+    addressLocality: "New Delhi",
+    addressRegion: "DL",
+    postalCode: "110019",
+    addressCountry: "IN",
+  },
+  areaServed: [
+    { "@type": "Place", name: "Kalkaji, New Delhi" },
+    { "@type": "Place", name: "Govindpuri Extension, New Delhi" },
+  ],
+  openingHours: "Mo-Su 00:00-23:59",
+  medicalSpecialty: ["PrimaryCare", "Geriatric", "Pediatric", "Nursing"],
+  aggregateRating: {
+    "@type": "AggregateRating",
+    ratingValue: "4.7",
+    reviewCount: "75",
+    bestRating: "5",
+    worstRating: "1",
+  },
+  identifier: {
+    "@type": "PropertyValue",
+    propertyID: "CIN",
+    value: "U86904DL2025PTC446725",
   },
 };
 
 export default async function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   const cmsSnapshot = await getCmsPreloadSnapshot();
 
   return (
     <html lang="en">
       <head>
         <link rel="icon" href="/logo.svg" type="image/svg+xml" />
-        <meta name="theme-color" content="#2563eb" />
+        <meta name="theme-color" content="#2B81FF" />
         <meta name="geo.region" content="IN-DL" />
         <meta name="geo.placename" content="New Delhi" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
       </head>
       <body
         suppressHydrationWarning
-        className={`${playfair.variable} ${manrope.variable} font-sans antialiased`}
+        className={`${inter.variable} ${ibmPlexMono.variable} font-sans antialiased`}
       >
         <CmsPreloadProvider snapshot={cmsSnapshot}>{children}</CmsPreloadProvider>
+        {/* Razorpay Checkout — lazy-loaded so it doesn't block initial render */}
+        <Script
+          src="https://checkout.razorpay.com/v1/checkout.js"
+          strategy="lazyOnload"
+        />
       </body>
     </html>
   );
