@@ -52,27 +52,34 @@ export function Footer() {
   const logoSrc = siteGlobals?.logoUrl ?? "/logo.svg";
   const logoAlt = siteGlobals?.logoAlt ?? siteGlobals?.companyName ?? footerCopy.logoAlt;
   const brandDescription = siteGlobals?.brandDescription ?? footerCopy.brandDescription;
+  const legalStrip = footerCopy.legalStrip;
 
   return (
     <footer className="bg-surface-light border-t border-slate-200 pt-20 pb-12 relative z-10">
       <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
         <div className="grid gap-12 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Brand Column */}
+          {/* Brand Column — single-word wordmark + coral tagline strip */}
           <div className="flex flex-col gap-6">
-            <Link href="/" className="flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-3 w-fit">
               <Image
                 src={logoSrc}
                 alt={logoAlt}
-                width={32}
-                height={32}
-                className="w-8 h-8"
+                width={36}
+                height={36}
+                className="w-9 h-9"
               />
-              <span className="text-xl font-serif font-bold text-text-main">
-                {footerCopy.brandWordmarkPrefix}<span className="italic font-normal text-primary">{footerCopy.brandWordmarkHighlight}</span>
-              </span>
+              <div className="flex flex-col leading-tight">
+                <span className="text-xl font-semibold tracking-tight text-primary">
+                  {footerCopy.brandWordmarkPrefix}
+                  {footerCopy.brandWordmarkHighlight}
+                </span>
+                <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-[color:var(--color-accent-coral-dark)] mt-0.5">
+                  Your Health, Our Priority
+                </span>
+              </div>
             </Link>
             <p className="text-sm leading-relaxed text-text-secondary">{brandDescription}</p>
-            
+
             {/* Trust Badges */}
             <div className="flex items-center gap-4 text-xs text-text-secondary">
               {trustBadges.map((badge) => {
@@ -85,7 +92,7 @@ export function Footer() {
                 );
               })}
             </div>
-            
+
             <div className="flex gap-4">
               {socialLinks.map((social) => {
                 const SocialIcon = typeof social.icon === "function" ? social.icon : defaultSocialIcon;
@@ -151,7 +158,7 @@ export function Footer() {
             <ul className="flex flex-col gap-4 text-sm text-text-secondary">
               <li className="flex items-start gap-3">
                 <MapPin className="w-5 h-5 text-primary mt-0.5 shrink-0" />
-                <a 
+                <a
                   href={mapsHref}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -173,16 +180,38 @@ export function Footer() {
           </div>
         </div>
 
+        {/* Emergency boundary strip — voice anchor from the project state doc */}
+        <div className="mt-16 rounded-2xl border border-[color:var(--color-accent-coral)]/30 bg-[color:var(--color-accent-coral-50)] px-5 py-4 text-xs text-text-main leading-relaxed">
+          <strong className="text-[color:var(--color-accent-coral-dark)]">
+            {legalStrip.emergencyDisclaimer.split(".")[0]}.
+          </strong>{" "}
+          {legalStrip.emergencyDisclaimer.split(".").slice(1).join(".").trim()}
+        </div>
+
         {/* Bottom Bar */}
-        <div className="mt-20 flex flex-col items-center justify-between gap-6 border-t border-slate-100 pt-8 text-sm text-text-secondary md:flex-row">
+        <div className="mt-10 flex flex-col items-center justify-between gap-6 border-t border-slate-100 pt-8 text-sm text-text-secondary md:flex-row">
           <p>{footerCopy.copyright}</p>
-          <div className="flex gap-8">
+          <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
             {legalLinks.map((link) => (
-              <Link key={link.href} href={link.href} className="hover:text-primary transition-colors">
-                {link.label}
-              </Link>
+              <li key={link.label}>
+                <Link
+                  href={link.href}
+                  className="hover:text-primary transition-colors"
+                >
+                  {link.label}
+                </Link>
+              </li>
             ))}
-          </div>
+          </ul>
+        </div>
+
+        {/* Legal entity strip — CIN, registered office, grievance officer */}
+        <div className="mt-6 text-[11px] leading-relaxed text-text-secondary text-center md:text-left">
+          <span className="font-medium">{legalStrip.legalEntity}</span>
+          {" · "}CIN {legalStrip.cin}
+          {" · "}Registered office: {legalStrip.registeredOffice}
+          <br />
+          Grievance officer: {legalStrip.grievanceOfficer}
         </div>
       </div>
     </footer>
