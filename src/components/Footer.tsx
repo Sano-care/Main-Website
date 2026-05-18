@@ -52,7 +52,17 @@ export function Footer() {
   const logoSrc = siteGlobals?.logoUrl ?? "/logo.svg";
   const logoAlt = siteGlobals?.logoAlt ?? siteGlobals?.companyName ?? footerCopy.logoAlt;
   const brandDescription = siteGlobals?.brandDescription ?? footerCopy.brandDescription;
-  const legalStrip = footerCopy.legalStrip;
+  const legalStripFallback = SHARED_CONTENT.footer.legalStrip;
+  const legalStrip = {
+    emergencyDisclaimer:
+      footerCopy.legalStrip?.emergencyDisclaimer ?? legalStripFallback.emergencyDisclaimer,
+    legalEntity: footerCopy.legalStrip?.legalEntity ?? legalStripFallback.legalEntity,
+    cin: footerCopy.legalStrip?.cin ?? legalStripFallback.cin,
+    registeredOffice:
+      footerCopy.legalStrip?.registeredOffice ?? legalStripFallback.registeredOffice,
+    grievanceOfficer:
+      footerCopy.legalStrip?.grievanceOfficer ?? legalStripFallback.grievanceOfficer,
+  };
 
   return (
     <footer className="bg-surface-light border-t border-slate-200 pt-20 pb-12 relative z-10">

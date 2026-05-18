@@ -47,6 +47,41 @@ export interface CmsPreloadSnapshot {
   mediaAssets: CmsMediaAssetSnapshot[];
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Deep-merge a CMS-saved value into the constant fallback so any nested key
+ * that the fallback knows about but the CMS row doesn't is filled in from
+ * the constant. CMS values take precedence for keys both sides have.
+ *
+ * Arrays are NOT element-merged — if the CMS row has an array, it replaces
+ * the fallback array entirely (consumers should expect the saved shape).
+ *
+ * This guards against the schema-drift bug where shared.ts/system.ts/etc.
+ * grow new nested fields that existing CMS rows don't yet contain. Without
+ * this, consumers reading `data.foo.bar` crash when `foo` is missing from
+ * the saved row.
+ */
+function mergeCmsValue<T>(fallback: T, override: unknown): T {
+  if (!isPlainObject(fallback) || !isPlainObject(override)) {
+    return (override === undefined ? fallback : (override as T));
+  }
+  const result: Record<string, unknown> = { ...fallback };
+  for (const key of Object.keys(override)) {
+    const overrideVal = override[key];
+    if (overrideVal === undefined) continue;
+    const fallbackVal = (fallback as Record<string, unknown>)[key];
+    if (isPlainObject(fallbackVal) && isPlainObject(overrideVal)) {
+      result[key] = mergeCmsValue(fallbackVal, overrideVal);
+    } else {
+      result[key] = overrideVal;
+    }
+  }
+  return result as T;
+}
+
 export function resolveCmsSection<T>(
   snapshot: CmsSectionSnapshot | undefined,
   pageSlug: string,
@@ -60,7 +95,7 @@ export function resolveCmsSection<T>(
   }
 
   return {
-    data: resolved as T,
+    data: mergeCmsValue(fallback, resolved),
     source: "cms",
   };
 }
