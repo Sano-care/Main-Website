@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { useCmsSection } from "@/hooks/useCmsSection";
 import { SHARED_CONTENT } from "@/constants/cms-content";
+import { isReactComponent } from "@/services/cms/snapshot";
 
 export function FloatingSidebar() {
   const defaultSidebarIcon = SHARED_CONTENT.floatingSidebar.buttons[0].icon;
@@ -11,30 +12,27 @@ export function FloatingSidebar() {
     "floating_sidebar",
     SHARED_CONTENT.floatingSidebar,
   );
-  // Icons in CMS rows come back as non-null non-function values (the icon
-  // component can't survive JSON serialisation), so `?? fallback` doesn't
-  // trigger and the render-time check picks the unconditional default for
-  // every button. Use a typeof guard so non-function values fall through to
-  // the position-aware constant.
+  // lucide-react icons are forwardRef components — `typeof` is "object", not
+  // "function". Use `isReactComponent` (handles forwardRef/memo/lazy) so a
+  // genuine component is kept, but a CMS-serialised `{}` falls through to the
+  // position-aware constant.
   const sidebarButtons = floatingSidebarCopy.buttons.map((item, index) => ({
     ...item,
-    icon:
-      typeof item.icon === "function"
-        ? item.icon
-        : (SHARED_CONTENT.floatingSidebar.buttons[index]?.icon ?? defaultSidebarIcon),
+    icon: isReactComponent(item.icon)
+      ? item.icon
+      : (SHARED_CONTENT.floatingSidebar.buttons[index]?.icon ?? defaultSidebarIcon),
   }));
   const portalButton = {
     ...floatingSidebarCopy.portal,
-    icon:
-      typeof floatingSidebarCopy.portal.icon === "function"
-        ? floatingSidebarCopy.portal.icon
-        : SHARED_CONTENT.floatingSidebar.portal.icon,
+    icon: isReactComponent(floatingSidebarCopy.portal.icon)
+      ? floatingSidebarCopy.portal.icon
+      : SHARED_CONTENT.floatingSidebar.portal.icon,
   };
 
   return (
     <aside className="fixed right-0 top-1/2 z-50 -translate-y-1/2 transform hidden lg:flex flex-col gap-3 p-3 bg-surface-light/80 backdrop-blur-md rounded-l-2xl shadow-xl border-y border-l border-white/50">
       {sidebarButtons.map((item, index) => {
-        const Icon = typeof item.icon === "function" ? item.icon : defaultSidebarIcon;
+        const Icon = item.icon;
         return (
           <motion.a
             key={item.label}
@@ -62,7 +60,7 @@ export function FloatingSidebar() {
         transition={{ delay: 0.8 }}
       >
         {(() => {
-          const PortalIcon = typeof portalButton.icon === "function" ? portalButton.icon : defaultSidebarIcon;
+          const PortalIcon = portalButton.icon;
           return <PortalIcon className="w-6 h-6 text-primary group-hover:scale-110 transition-transform" />;
         })()}
         <span className="absolute right-full mr-4 px-2 py-1 bg-text-main text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">

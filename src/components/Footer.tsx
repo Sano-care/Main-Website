@@ -6,6 +6,7 @@ import { MapPin, Phone, Mail } from "lucide-react";
 import { useCmsSection } from "@/hooks/useCmsSection";
 import { useCmsSiteGlobals } from "@/hooks/useCmsSiteGlobals";
 import { SHARED_CONTENT } from "@/constants/cms-content";
+import { isReactComponent } from "@/services/cms/snapshot";
 
 export function Footer() {
   const defaultSocialIcon = SHARED_CONTENT.footer.socialLinks[0].icon;
@@ -28,12 +29,14 @@ export function Footer() {
     }
   };
   const constantSocialLinks = SHARED_CONTENT.footer.socialLinks;
+  // lucide-react icons are forwardRef components, so `typeof === "function"`
+  // returns false. Use `isReactComponent` so a genuine icon is kept and a
+  // CMS-serialised `{}` falls through to the position-aware constant.
   const fallbackSocialLinks = footerCopy.socialLinks.map((social, index) => ({
     ...social,
-    icon:
-      typeof social.icon === "function"
-        ? social.icon
-        : (constantSocialLinks[index]?.icon ?? defaultSocialIcon),
+    icon: isReactComponent(social.icon)
+      ? social.icon
+      : (constantSocialLinks[index]?.icon ?? defaultSocialIcon),
   }));
   const socialLinks = siteGlobals?.socialLinks?.length
     ? siteGlobals.socialLinks.map((social, index) => {
@@ -55,10 +58,9 @@ export function Footer() {
     : footerLinks.legal;
   const trustBadges = footerCopy.trustBadges.map((badge, index) => ({
     ...badge,
-    icon:
-      typeof badge.icon === "function"
-        ? badge.icon
-        : (SHARED_CONTENT.footer.trustBadges[index]?.icon ?? defaultTrustIcon),
+    icon: isReactComponent(badge.icon)
+      ? badge.icon
+      : (SHARED_CONTENT.footer.trustBadges[index]?.icon ?? defaultTrustIcon),
   }));
   const contactPhone = siteGlobals?.phonePrimary ?? footerCopy.contact.phone;
   const contactPhoneHref = siteGlobals?.phonePrimary
@@ -115,7 +117,7 @@ export function Footer() {
             {/* Trust Badges */}
             <div className="flex items-center gap-4 text-xs text-text-secondary">
               {trustBadges.map((badge) => {
-                const BadgeIcon = typeof badge.icon === "function" ? badge.icon : defaultTrustIcon;
+                const BadgeIcon = badge.icon;
                 return (
                   <span key={badge.label} className="flex items-center gap-1">
                     <BadgeIcon className="w-4 h-4 text-green-600" />
@@ -127,7 +129,7 @@ export function Footer() {
 
             <div className="flex gap-4">
               {socialLinks.map((social) => {
-                const SocialIcon = typeof social.icon === "function" ? social.icon : defaultSocialIcon;
+                const SocialIcon = social.icon;
                 return (
                   <a
                     key={social.label}

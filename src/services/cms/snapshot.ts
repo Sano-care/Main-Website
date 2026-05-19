@@ -52,6 +52,25 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * True for any value React knows how to render as a component:
+ *  - function components / class components (`typeof === "function"`)
+ *  - forwardRef / memo / lazy / etc. (objects carrying React's $$typeof tag)
+ *
+ * Important: lucide-react icons are forwardRef components, so
+ * `typeof Calendar === "object"`, NOT "function". Code that gates icons on
+ * `typeof === "function"` silently rejects every lucide icon — this helper
+ * is the correct predicate to use anywhere we need to ask "is this a
+ * renderable component?".
+ */
+export function isReactComponent(value: unknown): boolean {
+  if (typeof value === "function") return true;
+  if (typeof value === "object" && value !== null) {
+    return "$$typeof" in (value as object);
+  }
+  return false;
+}
+
+/**
  * Deep-merge a CMS-saved value into the constant fallback so any nested key
  * that the fallback knows about but the CMS row doesn't is filled in from
  * the constant. CMS values take precedence for keys both sides have.
@@ -59,12 +78,19 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * Arrays are NOT element-merged — if the CMS row has an array, it replaces
  * the fallback array entirely (consumers should expect the saved shape).
  *
+ * React components in the fallback are NEVER overridden. They can't survive
+ * JSON serialisation (lucide forwardRefs become `{}` once stored in a
+ * jsonb column and read back), so a CMS-side value here is always wrong.
+ *
  * This guards against the schema-drift bug where shared.ts/system.ts/etc.
  * grow new nested fields that existing CMS rows don't yet contain. Without
  * this, consumers reading `data.foo.bar` crash when `foo` is missing from
  * the saved row.
  */
 function mergeCmsValue<T>(fallback: T, override: unknown): T {
+  if (isReactComponent(fallback)) {
+    return fallback;
+  }
   if (!isPlainObject(fallback) || !isPlainObject(override)) {
     return (override === undefined ? fallback : (override as T));
   }
@@ -73,6 +99,10 @@ function mergeCmsValue<T>(fallback: T, override: unknown): T {
     const overrideVal = override[key];
     if (overrideVal === undefined) continue;
     const fallbackVal = (fallback as Record<string, unknown>)[key];
+    if (isReactComponent(fallbackVal)) {
+      // Component in fallback — keep it; CMS can never represent a component.
+      continue;
+    }
     if (isPlainObject(fallbackVal) && isPlainObject(overrideVal)) {
       result[key] = mergeCmsValue(fallbackVal, overrideVal);
     } else {
