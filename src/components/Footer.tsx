@@ -17,26 +17,48 @@ export function Footer() {
   );
   const siteGlobals = useCmsSiteGlobals();
   const footerLinks = footerCopy.links;
+  // Match a CMS-supplied social link to its constant counterpart by host (most
+  // robust — labels and exact hrefs drift, but the social-network host doesn't).
+  // Falls back to position. Used only for icon resolution.
+  const hostOf = (href: string) => {
+    try {
+      return new URL(href).host.replace(/^www\./, "");
+    } catch {
+      return "";
+    }
+  };
+  const constantSocialLinks = SHARED_CONTENT.footer.socialLinks;
   const fallbackSocialLinks = footerCopy.socialLinks.map((social, index) => ({
     ...social,
-    icon: social.icon ?? SHARED_CONTENT.footer.socialLinks[index]?.icon ?? defaultSocialIcon,
+    icon:
+      typeof social.icon === "function"
+        ? social.icon
+        : (constantSocialLinks[index]?.icon ?? defaultSocialIcon),
   }));
   const socialLinks = siteGlobals?.socialLinks?.length
-    ? siteGlobals.socialLinks.map((social, index) => ({
-        ...social,
-        icon:
-          fallbackSocialLinks.find(
-            (fallbackSocial) =>
-              fallbackSocial.label.toLowerCase() === social.label.toLowerCase(),
-          )?.icon ?? fallbackSocialLinks[index]?.icon ?? defaultSocialIcon,
-      }))
+    ? siteGlobals.socialLinks.map((social, index) => {
+        const targetHost = hostOf(social.href);
+        const hostMatch = targetHost
+          ? constantSocialLinks.find((c) => hostOf(c.href) === targetHost)
+          : undefined;
+        return {
+          ...social,
+          icon:
+            hostMatch?.icon ??
+            constantSocialLinks[index]?.icon ??
+            defaultSocialIcon,
+        };
+      })
     : fallbackSocialLinks;
   const legalLinks = siteGlobals?.legalLinks?.length
     ? siteGlobals.legalLinks
     : footerLinks.legal;
   const trustBadges = footerCopy.trustBadges.map((badge, index) => ({
     ...badge,
-    icon: badge.icon ?? SHARED_CONTENT.footer.trustBadges[index]?.icon ?? defaultTrustIcon,
+    icon:
+      typeof badge.icon === "function"
+        ? badge.icon
+        : (SHARED_CONTENT.footer.trustBadges[index]?.icon ?? defaultTrustIcon),
   }));
   const contactPhone = siteGlobals?.phonePrimary ?? footerCopy.contact.phone;
   const contactPhoneHref = siteGlobals?.phonePrimary

@@ -11,13 +11,24 @@ export function FloatingSidebar() {
     "floating_sidebar",
     SHARED_CONTENT.floatingSidebar,
   );
+  // Icons in CMS rows come back as non-null non-function values (the icon
+  // component can't survive JSON serialisation), so `?? fallback` doesn't
+  // trigger and the render-time check picks the unconditional default for
+  // every button. Use a typeof guard so non-function values fall through to
+  // the position-aware constant.
   const sidebarButtons = floatingSidebarCopy.buttons.map((item, index) => ({
     ...item,
-    icon: item.icon ?? SHARED_CONTENT.floatingSidebar.buttons[index]?.icon ?? defaultSidebarIcon,
+    icon:
+      typeof item.icon === "function"
+        ? item.icon
+        : (SHARED_CONTENT.floatingSidebar.buttons[index]?.icon ?? defaultSidebarIcon),
   }));
   const portalButton = {
     ...floatingSidebarCopy.portal,
-    icon: floatingSidebarCopy.portal.icon ?? SHARED_CONTENT.floatingSidebar.portal.icon ?? defaultSidebarIcon,
+    icon:
+      typeof floatingSidebarCopy.portal.icon === "function"
+        ? floatingSidebarCopy.portal.icon
+        : SHARED_CONTENT.floatingSidebar.portal.icon,
   };
 
   return (

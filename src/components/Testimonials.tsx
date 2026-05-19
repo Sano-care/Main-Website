@@ -17,6 +17,11 @@ export function Testimonials() {
     HOME_CONTENT.testimonials,
   );
 
+  // Hide the section entirely until we have real, attributable testimonials.
+  if (!testimonials || testimonials.length === 0) {
+    return null;
+  }
+
   return (
     <section className="py-24 relative bg-background-light">
       <div className="mx-auto max-w-[1400px] px-6 lg:px-12">

@@ -4,7 +4,6 @@ import {
   Building2,
   Clock,
   Heart,
-  HeartPulse,
   Home,
   IndianRupee,
   Shield,
@@ -124,35 +123,35 @@ export const HOME_CONTENT = {
     services: [
       {
         icon: Home,
-        title: "Homecare",
+        title: "Home visit",
         description:
-          "Medic-led doorstep execution for acute needs. Professional healthcare delivered to your home within 30 minutes.",
-        features: ["Vitals Capture", "Injections", "Wound Dressing", "Sample Collection"],
-        price: "₹499/15min",
+          "A GNM / B.Sc Nursing-qualified medic arrives with vitals kit; an MBBS doctor joins on live video to diagnose and issue a signed e-prescription under MoHFW 2020.",
+        features: ["Medic on-site", "MBBS doctor on video", "Signed e-prescription", "15-min consult"],
+        price: "From ₹499 / visit",
+      },
+      {
+        icon: Stethoscope,
+        title: "Nursing-only visit",
+        description:
+          "Trained medic for a single procedure — injection, IV drip, wound dressing, or home sample collection. No doctor consultation included.",
+        features: ["Injections", "IV / drips", "Wound dressing", "Sample collection"],
+        price: "From ₹199 / visit",
       },
       {
         icon: Video,
         title: "Teleconsultation",
         description:
-          "24/7 virtual access to dedicated MBBS doctors. Get expert medical advice without leaving your home.",
-        features: ["Video Consult", "Digital Rx", "Follow-up Guidance"],
-        price: "₹199/session",
-      },
-      {
-        icon: HeartPulse,
-        title: "Chronic Disease Management",
-        description:
-          "Specialized monitoring for elderly and long-term health conditions with dedicated care protocols.",
-        features: ["Diabetes Support", "Hypertension Monitoring", "Family Health Tracking"],
-        price: "Custom Plans",
+          "Direct video consultation with an MBBS doctor. Get a signed digital prescription without anyone visiting your home.",
+        features: ["MBBS doctor on video", "15-min consult", "Digital Rx", "Follow-up support"],
+        price: "From ₹399 / 15 min",
       },
       {
         icon: Activity,
-        title: "Early Risk Diagnostics",
+        title: "Lab sample at home",
         description:
-          "Automated screening to detect health risks before they escalate. Prevention is better than cure.",
-        features: ["Quick Risk Diagnosis", "Preventive Screening", "AI Health Insights"],
-        price: "Starting ₹299",
+          "Free home collection by a trained phlebotomist. Choose from 1,900+ tests via our partner Pathcore Diagnostics. Pay only the test cost when your report is ready.",
+        features: ["Free home collection", "1,900+ tests", "Pay-after-report", "Signed PDF report"],
+        price: "Free collection · pay per test",
       },
     ],
   },
@@ -197,29 +196,14 @@ export const HOME_CONTENT = {
       },
     ],
   },
-  testimonials: [
-    {
-      quote:
-        "Getting a doctor at home within an hour was a lifesaver for my elderly mother. The doctor was professional and took time to explain everything.",
-      name: "Sanyam Modi",
-      treatment: "Home Doctor Visit",
-      initial: "P",
-    },
-    {
-      quote:
-        "The teleconsultation was so convenient. I got my prescription digitally and even had medicines delivered. No more waiting in long queues!",
-      name: "Abhishek Bisht",
-      treatment: "Teleconsultation",
-      initial: "P",
-    },
-    {
-      quote:
-        "Lab sample collection at home saved my entire day. The paramedic was punctual and the reports came quickly. Highly recommend Sanocare!",
-      name: "Aamir Sohai",
-      treatment: "Lab Collection at Home",
-      initial: "P",
-    },
-  ],
+  // Empty until we collect real, attributable testimonials. The Testimonials
+  // component returns null when this is empty so the section is hidden.
+  testimonials: [] as Array<{
+    quote: string;
+    name: string;
+    treatment: string;
+    initial: string;
+  }>,
   testimonialsHeader: {
     badge: "Real Stories",
     title: "Patient Testimonials",
