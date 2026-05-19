@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { User, Phone, MapPin, Loader2, ArrowRight, Shield, Lock, Crosshair, CheckCircle2, AlertCircle, Users } from "lucide-react";
 import { GlassCard, Button, Input, Select } from "@/components/ui";
@@ -45,6 +46,7 @@ export function Hero() {
     resetForNewBooking,
   } = useBookingStore();
   
+  const router = useRouter();
   const { detectLocation } = useGeolocation();
   const { submitBooking } = useBookingSubmit();
   const { data: heroCopy } = useCmsSection("home", "hero", HOME_CONTENT.hero);
@@ -90,12 +92,29 @@ export function Hero() {
     setDetails({ phone: formatted });
   };
 
+  // Diagnostics is a fundamentally different flow (pick tests, build a basket,
+  // pay after report). Whenever the user picks the diagnostics SKU, redirect
+  // to /lab-tests instead of creating a ₹0 prepay booking from the inline form.
+  const handleServiceChange = (value: string) => {
+    if (value === "diagnostics") {
+      router.push("/lab-tests?from=hero");
+      return;
+    }
+    setDetails({ serviceCategory: value });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitStatus(null);
-    
+
+    // Belt-and-suspenders for keyboard users who got past the Select onChange.
+    if (serviceCategory === "diagnostics") {
+      router.push("/lab-tests?from=hero");
+      return;
+    }
+
     const result = await submitBooking();
-    
+
     if (result.success) {
       // Confirmation is now handled by confirmedBooking state
       setSubmitStatus({ type: 'success', message: 'Booking submitted!' });
@@ -343,7 +362,7 @@ export function Hero() {
                         icon={Crosshair}
                         options={serviceOptions}
                         value={serviceCategory}
-                        onChange={(e) => setDetails({ serviceCategory: e.target.value })}
+                        onChange={(e) => handleServiceChange(e.target.value)}
                       />
 
                       {/* Submit Status */}

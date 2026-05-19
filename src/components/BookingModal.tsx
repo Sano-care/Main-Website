@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, User, Phone, MapPin, Crosshair, Loader2, ArrowRight, Check, Clock, UserCheck, Calendar, CheckCircle2, AlertCircle, Users } from "lucide-react";
 import { Button, Input, Select } from "@/components/ui";
@@ -36,6 +37,7 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
   } = useBookingStore();
   
   const modalRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
   const { detectLocation } = useGeolocation();
   const { submitBooking } = useBookingSubmit();
   const { data: modalCopy } = useCmsSection(
@@ -104,12 +106,31 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
     }
   };
 
+  // Diagnostics is a fundamentally different flow (pick tests, build a basket,
+  // pay after report). When the user picks the diagnostics SKU, close the modal
+  // and route to /lab-tests instead of creating a ₹0 prepay booking.
+  const handleServiceChange = (value: string) => {
+    if (value === "diagnostics") {
+      onClose();
+      router.push("/lab-tests?from=hero");
+      return;
+    }
+    setDetails({ serviceCategory: value });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitStatus(null);
-    
+
+    // Belt-and-suspenders for keyboard users who got past the Select onChange.
+    if (serviceCategory === "diagnostics") {
+      onClose();
+      router.push("/lab-tests?from=hero");
+      return;
+    }
+
     const result = await submitBooking();
-    
+
     if (result.success) {
       setSubmitStatus({ type: 'success', message: 'Booking submitted!' });
     } else {
@@ -330,7 +351,7 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
                       icon={Calendar}
                       options={serviceOptions}
                       value={serviceCategory}
-                      onChange={(e) => setDetails({ serviceCategory: e.target.value })}
+                      onChange={(e) => handleServiceChange(e.target.value)}
                     />
 
                     {/* Promo badge */}

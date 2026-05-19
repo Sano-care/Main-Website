@@ -105,12 +105,15 @@ export const HOME_CONTENT = {
       submittingLabel: "Submitting...",
       responseTimeNote: "Average response time: 30 minutes",
     },
+    // Must use the same `value` strings as hero.serviceOptions so the
+    // serviceCategory check in useBookingSubmit (=== "diagnostics") matches
+    // and the lab-tests redirect intercept fires consistently from both forms.
     serviceOptions: [
-      { value: "", label: "Select Service" },
-      { value: "home-visit", label: "Doctor Home Visit" },
-      { value: "teleconsult", label: "Teleconsultation" },
-      { value: "nursing", label: "Nursing & Paramedic" },
-      { value: "lab", label: "Lab Sample Collection" },
+      { value: "", label: "Select a service" },
+      { value: "homecare", label: "Home visit — medic + doctor on video (from ₹499)" },
+      { value: "nursing", label: "Nursing-only — injection, IV, dressing (from ₹199)" },
+      { value: "teleconsult", label: "Teleconsultation — MBBS doctor on video (from ₹399)" },
+      { value: "diagnostics", label: "Lab sample at home — free collection, pay per test" },
     ],
   },
   features: {

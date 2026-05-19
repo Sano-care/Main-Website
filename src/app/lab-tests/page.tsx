@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowLeft, Truck, ShieldCheck, MapPin } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { QuickCategories } from "./QuickCategories";
+import { LabTestsBanner } from "./LabTestsBanner";
 import { LabTestSearch } from "@/components/lab/LabTestSearch";
 import { LabTestBasket } from "@/components/lab/LabTestBasket";
 
@@ -27,6 +29,13 @@ export default function LabTestsPage() {
       <Navbar />
 
       <main className="flex-1">
+        {/* One-time banner shown only when navigated here from the homepage
+            inline form (?from=hero). Wrapped in Suspense per Next.js's
+            useSearchParams requirement so the page stays statically renderable. */}
+        <Suspense fallback={null}>
+          <LabTestsBanner />
+        </Suspense>
+
         {/* Hero with search + basket right-rail (desktop). Basket is a bottom
             drawer on mobile, anchored at the bottom of the page. */}
         <section className="relative overflow-hidden bg-gradient-to-b from-primary-50 to-white border-b border-slate-200">
