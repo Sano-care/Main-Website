@@ -69,18 +69,18 @@ export const HOME_CONTENT = {
   bookingModal: {
     headerTitle: "Book a Home Visit",
     leftPanel: {
-      title: "Healthcare at Your Doorstep",
-      subtitle: "Doctors, nurses & diagnostics - right at your home",
+      title: "A medic at your door in 30 minutes.",
+      subtitle: "GNM / B.Sc Nursing-qualified medic + MBBS doctor on live video, signed e-prescription under MoHFW 2020.",
       nextStepsTitle: "What Happens Next?",
       nextSteps: [
-        "Our care coordinator calls you within 30 minutes",
-        "We understand your needs and assign the right doctor",
-        "Doctor arrives at your preferred time slot",
+        "Your care coordinator calls to confirm details within minutes",
+        "A qualified medic is dispatched to your address",
+        "An MBBS doctor joins live, diagnoses, and issues a signed e-prescription",
       ],
       stats: [
-        { value: "30", label: "Min Response" },
-        { value: "100%", label: "Verified" },
-        { value: "24/7", label: "Support" },
+        { value: "<30", label: "Min to medic" },
+        { value: "1,000+", label: "Visits delivered" },
+        { value: "★ 4.7", label: "75 Google reviews" },
       ],
     },
     form: {
@@ -158,9 +158,9 @@ export const HOME_CONTENT = {
   },
   statsBar: {
     stats: [
-      { value: "30", suffix: "min", label: "Average Response Time", subtext: "Quick care when you need it" },
-      { value: "100", suffix: "%", label: "Highly Qualified Doctors", subtext: "MBBS & specialist qualified" },
-      { value: "24", suffix: "/7", label: "Support Available", subtext: "Healthcare never stops" },
+      { value: "<30", suffix: "min", label: "Median time-to-medic", subtext: "From booking to medic at your door" },
+      { value: "1,000", suffix: "+", label: "Home visits delivered", subtext: "Across Kalkaji & Govindpuri Ext." },
+      { value: "4.7", suffix: "★", label: "From 75 Google reviews", subtext: "Sanocare – Home Healthcare Services" },
     ],
   },
   journey: {
@@ -173,25 +173,25 @@ export const HOME_CONTENT = {
     steps: [
       {
         number: 1,
-        title: "Book Your Visit",
+        title: "Book your visit",
         description:
-          "Share your details and preferred time slot. Our care coordinator contacts you within 30 minutes to understand your needs.",
+          "Pick a service and time. ₹249 confirms the booking; the balance auto-charges on case close. Full refund before the medic is dispatched.",
         image:
           "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=800&auto=format&fit=crop",
       },
       {
         number: 2,
-        title: "Doctor at Your Doorstep",
+        title: "Medic arrives + MBBS doctor on live video",
         description:
-          "A verified paramedic arrives at your home with necessary equipment for consultation, vitals check, and initial diagnosis.",
+          "A GNM / B.Sc Nursing-qualified medic reaches you in under 30 minutes, captures vitals, and your assigned MBBS doctor joins on live video to diagnose.",
         image:
           "https://images.unsplash.com/photo-1579684385127-1ef15d508118?q=80&w=800&auto=format&fit=crop",
       },
       {
         number: 3,
-        title: "Complete Care & Follow-up",
+        title: "Signed e-prescription + follow-up",
         description:
-          "Receive digital prescription, lab sample collection at home if needed, and ongoing support for your recovery journey.",
+          "The doctor issues a signed digital prescription under MoHFW Telemedicine Practice Guidelines 2020. Follow-up support included until your case closes.",
         image:
           "https://images.unsplash.com/photo-1631815588090-d4bfec5b1b89?q=80&w=800&auto=format&fit=crop",
       },
@@ -226,72 +226,50 @@ export const HOME_CONTENT = {
   },
   insights: {
     sectionTitle: "Medical Insights",
-    articles: [
-      {
-        slug: "managing-seasonal-allergies",
-        category: "Wellness",
-        readTime: "5 min read",
-        title: "Managing Seasonal Allergies Effectively",
-        description:
-          "Learn how to handle the changing seasons effectively with our comprehensive guide.",
-        image:
-          "https://images.unsplash.com/photo-1490750967868-88aa4486c946?q=80&w=800&auto=format&fit=crop",
-      },
-      {
-        slug: "future-of-telehealth",
-        category: "Technology",
-        readTime: "3 min read",
-        title: "The Future of Telehealth and Virtual Care",
-        description:
-          "Virtual care is changing the landscape of medicine, making it easier than ever to see a specialist.",
-        image:
-          "https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=800&auto=format&fit=crop",
-      },
-      {
-        slug: "heart-health-basics",
-        category: "Cardiology",
-        readTime: "7 min read",
-        title: "Heart Health Basics for Longevity",
-        description:
-          "Simple steps for a healthier, longer life. Understand the vital signs.",
-        image:
-          "https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?q=80&w=800&auto=format&fit=crop",
-      },
-    ],
+    // Empty until we publish first-party clinical articles. The Insights
+    // component renders the section header but no cards when this is empty.
+    articles: [] as Array<{
+      slug: string;
+      category: string;
+      readTime: string;
+      title: string;
+      description: string;
+      image: string;
+    }>,
   },
   trust: {
-    sectionTitle: "Why Thousands Trust Sanocare",
+    sectionTitle: "Built on real medical practice — not chatbots.",
     badges: [
       {
         icon: UserCheck,
-        name: "Verified Healthcare Staff",
-        description: "100% Background Checked",
-      },
-      {
-        icon: Shield,
-        name: "DISHA Compliant",
-        description: "Data Security Certified",
-      },
-      {
-        icon: Clock,
-        name: "24/7 Support",
-        description: "Always Available",
-      },
-      {
-        icon: BadgeCheck,
-        name: "Licensed & Insured",
-        description: "Fully Accredited",
+        name: "Verified medics",
+        description: "100% background-checked GNM / B.Sc Nursing",
       },
       {
         icon: Stethoscope,
-        name: "Quality Assured",
-        description: "ISO 9001 Standards",
+        name: "MBBS-supervised",
+        description: "Every visit reviewed live by a registered MBBS doctor",
+      },
+      {
+        icon: BadgeCheck,
+        name: "MoHFW 2020 compliant",
+        description: "Telemedicine Practice Guidelines followed end-to-end",
+      },
+      {
+        icon: Shield,
+        name: "DPDP 2023 compliant",
+        description: "Patient data secured under Indian law",
+      },
+      {
+        icon: Clock,
+        name: "Under 30 min response",
+        description: "Median time-to-medic across our service area",
       },
     ],
     metrics: [
-      "5000+ Consultations Completed",
-      "4.9★ Average Rating",
-      "Serving Delhi NCR Since 2024",
+      "1,000+ home visits delivered",
+      "★ 4.7 from 75 verified Google reviews",
+      "Serving Kalkaji & Govindpuri Extension",
     ],
   },
 };

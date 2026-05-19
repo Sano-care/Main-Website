@@ -14,6 +14,11 @@ export function Insights() {
   const sectionTitle = insightsContent.sectionTitle ?? HOME_CONTENT.insights.sectionTitle;
   const articles = insightsContent.articles;
 
+  // Hide the section entirely until we have first-party articles to show.
+  if (!articles || articles.length === 0) {
+    return null;
+  }
+
   return (
     <section className="py-24 relative" id="insights">
       <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
