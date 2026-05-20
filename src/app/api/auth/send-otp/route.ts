@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
 
   const phone = normaliseIndianPhone(String(body.phone ?? ""));
   if (!phone) {
+    console.log("[send-otp] rejected: invalid phone input");
     return NextResponse.json(
       { error: "Please enter a valid 10-digit Indian mobile number." },
       { status: 400 },
@@ -48,8 +49,32 @@ export async function POST(req: NextRequest) {
   }
 
   const requested = String(body.channel ?? "auto").toLowerCase();
-  const channel = resolveChannel(requested);
+  const bypassDispatch = process.env.OTP_DEV_BYPASS === "true";
+
+  // Entry-level diagnostic so every invocation produces a discoverable log
+  // line. Phone is logged in E.164 (we just normalised it); OTP itself is
+  // not logged here (only on the bypass branch).
+  console.log("[send-otp] entered", {
+    phone,
+    requested,
+    OTP_DEV_BYPASS: process.env.OTP_DEV_BYPASS ?? "(unset)",
+    OTP_DEFAULT_CHANNEL: process.env.OTP_DEFAULT_CHANNEL ?? "(unset)",
+    SMS_OTP_ENABLED: process.env.SMS_OTP_ENABLED ?? "(unset)",
+    WHATSAPP_OTP_ENABLED: process.env.WHATSAPP_OTP_ENABLED ?? "(unset)",
+    bypassDispatch,
+  });
+
+  // Resolve which channel string to STORE in otp_verifications.channel
+  // (the column has a CHECK constraint allowing only 'whatsapp' or 'sms').
+  // When bypass is on we skip the enable-flag check because no provider is
+  // about to be called; the channel value is purely for the row.
+  const channel: OtpChannel | null = bypassDispatch
+    ? requested === "whatsapp"
+      ? "whatsapp"
+      : "sms"
+    : resolveChannel(requested);
   if (!channel) {
+    console.log("[send-otp] rejected: no usable channel", { requested });
     return NextResponse.json(
       {
         error:
@@ -62,6 +87,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+  console.log("[send-otp] channel resolved", { channel });
 
   const supabase = createServiceClient();
   if (!supabase) {
@@ -85,6 +111,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (recent && recent.length >= OTP_MAX_SENDS_PER_HOUR) {
+    console.log("[send-otp] rate-limit hit", { phone, sendsInLastHour: recent.length });
     return NextResponse.json(
       {
         error:
@@ -98,6 +125,7 @@ export async function POST(req: NextRequest) {
     const last = new Date(recent[0].created_at).getTime();
     const elapsed = (Date.now() - last) / 1000;
     if (elapsed < OTP_RESEND_COOLDOWN_SECONDS) {
+      console.log("[send-otp] cooldown hit", { phone, elapsedSeconds: Math.round(elapsed) });
       return NextResponse.json(
         {
           error: `Please wait ${Math.ceil(OTP_RESEND_COOLDOWN_SECONDS - elapsed)}s before requesting another code.`,
@@ -118,22 +146,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Server is misconfigured." }, { status: 500 });
   }
 
-  // === Dev bypass ===
-  // OTP_DEV_BYPASS=true skips the provider call and prints the plaintext
-  // code to the server log (Netlify → Functions → /api/auth/send-otp).
-  // Rate-limit, hash, insert, and verify flow all still run, so the gate +
-  // cookie + booking-insert path can be exercised end-to-end while MSG91 DLT
-  // is pending. DO NOT leave this on in production — anyone who can read the
-  // function logs can verify any phone. The flag is intentionally not
-  // exposed to NEXT_PUBLIC_*; the only way to turn it on is the server env.
-  const bypassDispatch = process.env.OTP_DEV_BYPASS === "true";
+  // === Dev bypass vs provider dispatch ===
+  // The bypass flag was resolved at the top of the route. When on, we log
+  // the code and skip the provider call entirely. When off, we hand off to
+  // the configured channel sender.
   if (bypassDispatch) {
     console.warn(
       `[send-otp] ⚠️  OTP_DEV_BYPASS active — code for ${phone} is ${code}. Provider dispatch SKIPPED. Disable this flag before going live.`,
     );
   } else {
+    console.log("[send-otp] dispatching via provider", { channel });
     try {
       await sendOtp({ phone, code, channel });
+      console.log("[send-otp] dispatch ok", { channel });
     } catch (err) {
       const channelLabel = channel === "whatsapp" ? "WhatsApp" : "SMS";
       console.error(`[send-otp] ${channelLabel} delivery failed:`, err);
@@ -172,6 +197,7 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+  console.log("[send-otp] success", { phone, channel, bypass: bypassDispatch });
 
   // Opportunistic cleanup. Cheap on the index, no need for a cron yet.
   // Wrapped in an IIFE so we don't await and so the rpc's specialised
