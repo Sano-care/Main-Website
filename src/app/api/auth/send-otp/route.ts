@@ -118,23 +118,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Server is misconfigured." }, { status: 500 });
   }
 
-  try {
-    await sendOtp({ phone, code, channel });
-  } catch (err) {
-    const channelLabel = channel === "whatsapp" ? "WhatsApp" : "SMS";
-    console.error(`[send-otp] ${channelLabel} delivery failed:`, err);
-    if (err instanceof OtpDeliveryError) {
+  // === Dev bypass ===
+  // OTP_DEV_BYPASS=true skips the provider call and prints the plaintext
+  // code to the server log (Netlify → Functions → /api/auth/send-otp).
+  // Rate-limit, hash, insert, and verify flow all still run, so the gate +
+  // cookie + booking-insert path can be exercised end-to-end while MSG91 DLT
+  // is pending. DO NOT leave this on in production — anyone who can read the
+  // function logs can verify any phone. The flag is intentionally not
+  // exposed to NEXT_PUBLIC_*; the only way to turn it on is the server env.
+  const bypassDispatch = process.env.OTP_DEV_BYPASS === "true";
+  if (bypassDispatch) {
+    console.warn(
+      `[send-otp] ⚠️  OTP_DEV_BYPASS active — code for ${phone} is ${code}. Provider dispatch SKIPPED. Disable this flag before going live.`,
+    );
+  } else {
+    try {
+      await sendOtp({ phone, code, channel });
+    } catch (err) {
+      const channelLabel = channel === "whatsapp" ? "WhatsApp" : "SMS";
+      console.error(`[send-otp] ${channelLabel} delivery failed:`, err);
+      if (err instanceof OtpDeliveryError) {
+        return NextResponse.json(
+          {
+            error: `We couldn't send the code on ${channelLabel}. Please try again${channel === "whatsapp" ? " or use SMS" : ""}.`,
+          },
+          { status: 502 },
+        );
+      }
       return NextResponse.json(
-        {
-          error: `We couldn't send the code on ${channelLabel}. Please try again${channel === "whatsapp" ? " or use SMS" : ""}.`,
-        },
+        { error: "Could not send code. Try again." },
         { status: 502 },
       );
     }
-    return NextResponse.json(
-      { error: "Could not send code. Try again." },
-      { status: 502 },
-    );
   }
 
   // Insert AFTER successful dispatch so failed deliveries don't burn the
