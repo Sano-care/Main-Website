@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui";
 import { BookingModal } from "@/components/BookingModal";
+import { BookingGate } from "@/components/booking/BookingGate";
 import { useBookingStore } from "@/store/bookingStore";
 import { cn } from "@/lib/utils";
 import { useCmsSection } from "@/hooks/useCmsSection";
@@ -16,7 +17,37 @@ import { SHARED_CONTENT } from "@/constants/cms-content";
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { isModalOpen, openModal, closeModal } = useBookingStore();
+  const [pendingOpenModal, setPendingOpenModal] = useState(false);
+  const {
+    isModalOpen,
+    openModal,
+    closeModal,
+    isGateOpen,
+    openGate,
+    closeGate,
+    phoneVerifiedUntil,
+  } = useBookingStore();
+  const isPhoneVerified =
+    phoneVerifiedUntil !== null && phoneVerifiedUntil > Date.now();
+
+  // The "Book a Visit" button gates through OTP first. After successful
+  // verification, the gate fires onVerified → we flip pendingOpenModal,
+  // and this effect runs once the store reflects the verified state.
+  useEffect(() => {
+    if (pendingOpenModal && isPhoneVerified) {
+      setPendingOpenModal(false);
+      openModal();
+    }
+  }, [pendingOpenModal, isPhoneVerified, openModal]);
+
+  function handleBookClick() {
+    if (isPhoneVerified) {
+      openModal();
+    } else {
+      setPendingOpenModal(true);
+      openGate();
+    }
+  }
   const { data: navbarCopy } = useCmsSection(
     "shared",
     "navbar",
@@ -87,7 +118,7 @@ export function Navbar() {
                 variant="primary"
                 size="md"
                 className="rounded-full"
-                onClick={openModal}
+                onClick={handleBookClick}
               >
                 {navbarCopy.primaryCtaLabel}
               </Button>
@@ -139,7 +170,7 @@ export function Navbar() {
                   className="mt-4 rounded-full"
                   onClick={() => {
                     setIsMobileMenuOpen(false);
-                    openModal();
+                    handleBookClick();
                   }}
                 >
                   {navbarCopy.primaryCtaLabel}
@@ -156,6 +187,11 @@ export function Navbar() {
       </header>
 
       <BookingModal isOpen={isModalOpen} onClose={closeModal} />
+      <BookingGate
+        isOpen={isGateOpen}
+        onClose={closeGate}
+        onVerified={() => closeGate()}
+      />
     </>
   );
 }

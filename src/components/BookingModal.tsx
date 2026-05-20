@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { ShieldCheck } from "lucide-react";
 import { X, User, Phone, MapPin, Crosshair, Loader2, ArrowRight, Check, Clock, UserCheck, Calendar, CheckCircle2, AlertCircle, Users } from "lucide-react";
 import { Button, Input, Select } from "@/components/ui";
 import { useBookingStore } from "@/store/bookingStore";
@@ -20,21 +21,27 @@ interface BookingModalProps {
 }
 
 export function BookingModal({ isOpen, onClose }: BookingModalProps) {
-  const { 
-    name, 
-    phone, 
-    location, 
-    serviceCategory, 
+  const {
+    name,
+    phone,
+    location,
+    serviceCategory,
     gpsLocation,
-    isLocating, 
+    isLocating,
     isSubmitting,
     locationError,
     confirmedBooking,
     isBookingForOther,
+    phoneVerifiedUntil,
+    openGate,
+    clearPhoneVerified,
     setDetails,
     setBookingForOther,
     resetForNewBooking,
   } = useBookingStore();
+  const isPhoneVerified =
+    phoneVerifiedUntil !== null && phoneVerifiedUntil > Date.now();
+  const [pendingSubmit, setPendingSubmit] = useState(false);
   
   const modalRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -118,6 +125,18 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
     setDetails({ serviceCategory: value });
   };
 
+  async function runSubmit() {
+    const result = await submitBooking();
+    if (result.success) {
+      setSubmitStatus({ type: 'success', message: 'Booking submitted!' });
+    } else {
+      if (result.error?.toLowerCase().includes("verify")) {
+        clearPhoneVerified();
+      }
+      setSubmitStatus({ type: 'error', message: result.error || 'Something went wrong' });
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitStatus(null);
@@ -129,14 +148,25 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
       return;
     }
 
-    const result = await submitBooking();
-
-    if (result.success) {
-      setSubmitStatus({ type: 'success', message: 'Booking submitted!' });
-    } else {
-      setSubmitStatus({ type: 'error', message: result.error || 'Something went wrong' });
+    // If the OTP cookie expired between gate verification and form submit,
+    // re-open the gate. Standard during long form-filling sessions.
+    if (!isPhoneVerified) {
+      setPendingSubmit(true);
+      openGate();
+      return;
     }
+
+    await runSubmit();
   };
+
+  // Resume submit once the gate verifies + the store reflects it.
+  useEffect(() => {
+    if (pendingSubmit && isPhoneVerified) {
+      setPendingSubmit(false);
+      void runSubmit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSubmit, isPhoneVerified]);
 
   const handleBookAgain = () => {
     resetForNewBooking();
@@ -266,14 +296,24 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
                       onChange={(e) => setDetails({ name: e.target.value })}
                     />
 
-                    <Input
-                      label={modalCopy.form.fields.phoneLabel}
-                      icon={Phone}
-                      type="tel"
-                      placeholder={modalCopy.form.fields.phonePlaceholder}
-                      value={phone}
-                      onChange={handlePhoneChange}
-                    />
+                    <div>
+                      <Input
+                        label={modalCopy.form.fields.phoneLabel}
+                        icon={Phone}
+                        type="tel"
+                        placeholder={modalCopy.form.fields.phonePlaceholder}
+                        value={phone}
+                        onChange={handlePhoneChange}
+                        readOnly={isPhoneVerified}
+                        className={isPhoneVerified ? "bg-slate-50 cursor-not-allowed" : undefined}
+                      />
+                      {isPhoneVerified && (
+                        <div className="mt-1 flex items-center gap-1 text-xs text-primary">
+                          <ShieldCheck className="h-3.5 w-3.5" />
+                          Verified via OTP
+                        </div>
+                      )}
+                    </div>
 
                     {/* Booking for someone else checkbox */}
                     <label className="flex items-center gap-2 cursor-pointer group">

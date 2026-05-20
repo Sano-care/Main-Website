@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { User, Phone, MapPin, Loader2, ArrowRight, Shield, Lock, Crosshair, CheckCircle2, AlertCircle, Users } from "lucide-react";
@@ -41,10 +41,16 @@ export function Hero() {
     locationError,
     confirmedBooking,
     isBookingForOther,
+    phoneVerifiedUntil,
+    openGate,
+    clearPhoneVerified,
     setDetails,
     setBookingForOther,
     resetForNewBooking,
   } = useBookingStore();
+  const isPhoneVerified =
+    phoneVerifiedUntil !== null && phoneVerifiedUntil > Date.now();
+  const [pendingSubmit, setPendingSubmit] = useState(false);
   
   const router = useRouter();
   const { detectLocation } = useGeolocation();
@@ -103,6 +109,20 @@ export function Hero() {
     setDetails({ serviceCategory: value });
   };
 
+  async function runSubmit() {
+    const result = await submitBooking();
+    if (result.success) {
+      setSubmitStatus({ type: 'success', message: 'Booking submitted!' });
+    } else {
+      // If the server rejected because the OTP cookie expired, clear the
+      // local hint so the gate opens on the next attempt.
+      if (result.error?.toLowerCase().includes("verify")) {
+        clearPhoneVerified();
+      }
+      setSubmitStatus({ type: 'error', message: result.error || 'Something went wrong' });
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitStatus(null);
@@ -113,15 +133,23 @@ export function Hero() {
       return;
     }
 
-    const result = await submitBooking();
-
-    if (result.success) {
-      // Confirmation is now handled by confirmedBooking state
-      setSubmitStatus({ type: 'success', message: 'Booking submitted!' });
-    } else {
-      setSubmitStatus({ type: 'error', message: result.error || 'Something went wrong' });
+    if (!isPhoneVerified) {
+      setPendingSubmit(true);
+      openGate();
+      return;
     }
+
+    await runSubmit();
   };
+
+  // Resume submit once the gate verifies + the store reflects it.
+  useEffect(() => {
+    if (pendingSubmit && isPhoneVerified) {
+      setPendingSubmit(false);
+      void runSubmit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSubmit, isPhoneVerified]);
 
   const handleBookAgain = () => {
     resetForNewBooking();
@@ -276,15 +304,25 @@ export function Hero() {
                         required
                       />
 
-                      <Input
-                        label={bookingCopy.fields.phoneLabel}
-                        icon={Phone}
-                        type="tel"
-                        placeholder={bookingCopy.fields.phonePlaceholder}
-                        value={phone}
-                        onChange={handlePhoneChange}
-                        required
-                      />
+                      <div>
+                        <Input
+                          label={bookingCopy.fields.phoneLabel}
+                          icon={Phone}
+                          type="tel"
+                          placeholder={bookingCopy.fields.phonePlaceholder}
+                          value={phone}
+                          onChange={handlePhoneChange}
+                          readOnly={isPhoneVerified}
+                          className={isPhoneVerified ? "bg-slate-50 cursor-not-allowed" : undefined}
+                          required
+                        />
+                        {isPhoneVerified && (
+                          <div className="mt-1 flex items-center gap-1 text-xs text-primary">
+                            <Shield className="w-3 h-3" />
+                            Verified via OTP
+                          </div>
+                        )}
+                      </div>
 
                       {/* Booking for someone else checkbox */}
                       <label className="flex items-center gap-2 cursor-pointer group">

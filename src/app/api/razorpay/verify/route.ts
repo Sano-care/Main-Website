@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifyPaymentSignature } from "@/lib/razorpay";
+import {
+  VERIFY_COOKIE_NAME,
+  normaliseIndianPhone,
+  verifyToken,
+} from "@/lib/otp/token";
 
 export const runtime = "nodejs";
 
@@ -41,6 +46,30 @@ export async function POST(req: NextRequest) {
     }
     if (!booking || typeof booking !== "object") {
       return NextResponse.json({ error: "Missing booking" }, { status: 400 });
+    }
+
+    // === OTP verification gate ===
+    // The booking-insert path is gated by the signed cookie minted at
+    // /api/auth/verify-otp. The cookie's payload must match the phone the
+    // patient is booking with. This blocks server-side bypasses where a
+    // client could fabricate a booking insert without going through the gate.
+    const verifyCookie = req.cookies.get(VERIFY_COOKIE_NAME)?.value;
+    const verified = verifyToken(verifyCookie);
+    if (!verified) {
+      return NextResponse.json(
+        { error: "Phone verification required. Please request a code first." },
+        { status: 401 },
+      );
+    }
+    const submittedPhone = normaliseIndianPhone(String(booking.phone ?? ""));
+    if (!submittedPhone || submittedPhone !== verified.phone) {
+      return NextResponse.json(
+        {
+          error:
+            "Booking phone does not match the verified number. Please re-verify.",
+        },
+        { status: 401 },
+      );
     }
 
     // === Signature verification ===
@@ -92,6 +121,9 @@ export async function POST(req: NextRequest) {
       payment_status: "CAPTURED",
       booking_fee_paid_paise: 24_900,
       payment_captured_at: new Date().toISOString(),
+      // From migration 011 — stamps the OTP-verified moment so ops can
+      // audit which bookings went through the phone gate.
+      otp_verified_at: new Date(verified.verifiedAt * 1000).toISOString(),
     };
 
     const { data, error } = await supabase

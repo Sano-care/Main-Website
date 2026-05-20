@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ShoppingBag,
   X,
@@ -32,11 +32,24 @@ export function LabTestBasket({ variant = "rail" }: Props) {
     removeSelectedTest,
     clearSelectedTests,
     openModal,
+    openGate,
+    phoneVerifiedUntil,
     setDetails,
     appliedCoupon,
     setAppliedCoupon,
     clearAppliedCoupon,
   } = useBookingStore();
+  const isPhoneVerified =
+    phoneVerifiedUntil !== null && phoneVerifiedUntil > Date.now();
+  const [pendingOpenModal, setPendingOpenModal] = useState(false);
+
+  // Resume opening the booking modal once the gate has verified.
+  useEffect(() => {
+    if (pendingOpenModal && isPhoneVerified) {
+      setPendingOpenModal(false);
+      openModal();
+    }
+  }, [pendingOpenModal, isPhoneVerified, openModal]);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{
@@ -97,7 +110,12 @@ export function LabTestBasket({ variant = "rail" }: Props) {
 
   function handleProceed() {
     setDetails({ serviceCategory: "diagnostics" });
-    openModal();
+    if (isPhoneVerified) {
+      openModal();
+    } else {
+      setPendingOpenModal(true);
+      openGate();
+    }
   }
 
   const isEmpty = selectedTests.length === 0;

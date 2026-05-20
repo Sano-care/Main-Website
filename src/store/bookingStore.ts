@@ -37,9 +37,21 @@ export type BookingState = {
   appliedCoupon: AppliedCoupon | null;
   confirmedBooking: ConfirmedBooking | null;
   isModalOpen: boolean;
+  /** OTP-gate modal visibility (BookingGate). Independent of the booking modal. */
+  isGateOpen: boolean;
   isLocating: boolean;
   isSubmitting: boolean;
   locationError: string | null;
+  /**
+   * Client-side hint that the phone is OTP-verified up to this unix ms.
+   * The server's HttpOnly cookie is the real source of truth; this is purely
+   * to drive UI ("skip the gate, just open the form") without re-asking
+   * every time the patient navigates within the site. Cleared on any 401
+   * from a booking-insert response.
+   */
+  phoneVerifiedUntil: number | null;
+  /** The E.164 phone the cookie was issued for, for prefilling forms. */
+  verifiedPhone: string | null;
 
   setDetails: (details: Partial<BookingState>) => void;
   setGPSLocation: (gps: GPSLocation | null) => void;
@@ -51,11 +63,15 @@ export type BookingState = {
   clearAppliedCoupon: () => void;
   openModal: () => void;
   closeModal: () => void;
+  openGate: () => void;
+  closeGate: () => void;
   setLocating: (isLocating: boolean) => void;
   setSubmitting: (isSubmitting: boolean) => void;
   setLocationError: (error: string | null) => void;
   setConfirmedBooking: (booking: ConfirmedBooking | null) => void;
   clearConfirmedBooking: () => void;
+  setPhoneVerified: (phone: string, untilMs: number) => void;
+  clearPhoneVerified: () => void;
   reset: () => void;
   resetForNewBooking: () => void;
 };
@@ -71,9 +87,12 @@ const initialState = {
   appliedCoupon: null as AppliedCoupon | null,
   confirmedBooking: null as ConfirmedBooking | null,
   isModalOpen: false,
+  isGateOpen: false,
   isLocating: false,
   isSubmitting: false,
   locationError: null as string | null,
+  phoneVerifiedUntil: null as number | null,
+  verifiedPhone: null as string | null,
 };
 
 const BOOKING_EXPIRY_TIME = 30 * 60 * 1000;
@@ -108,11 +127,17 @@ export const useBookingStore = create<BookingState>()(
       clearAppliedCoupon: () => set({ appliedCoupon: null }),
       openModal: () => set({ isModalOpen: true }),
       closeModal: () => set({ isModalOpen: false }),
+      openGate: () => set({ isGateOpen: true }),
+      closeGate: () => set({ isGateOpen: false }),
       setLocating: (isLocating) => set({ isLocating }),
       setSubmitting: (isSubmitting) => set({ isSubmitting }),
       setLocationError: (locationError) => set({ locationError }),
       setConfirmedBooking: (confirmedBooking) => set({ confirmedBooking }),
       clearConfirmedBooking: () => set({ confirmedBooking: null }),
+      setPhoneVerified: (phone, untilMs) =>
+        set({ verifiedPhone: phone, phoneVerifiedUntil: untilMs }),
+      clearPhoneVerified: () =>
+        set({ verifiedPhone: null, phoneVerifiedUntil: null }),
       reset: () => set(initialState),
       resetForNewBooking: () =>
         set({
@@ -140,6 +165,8 @@ export const useBookingStore = create<BookingState>()(
         selectedTests: state.selectedTests,
         appliedCoupon: state.appliedCoupon,
         confirmedBooking: state.confirmedBooking,
+        phoneVerifiedUntil: state.phoneVerifiedUntil,
+        verifiedPhone: state.verifiedPhone,
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.confirmedBooking) {

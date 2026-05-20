@@ -4,7 +4,6 @@ import { useCallback } from "react";
 import { useBookingStore } from "@/store/bookingStore";
 import { getServicePrice } from "@/constants/pricing";
 import { useRazorpayCheckout } from "@/hooks/useRazorpayCheckout";
-import { supabase } from "@/lib/supabase";
 
 const ERROR_MESSAGES = {
   NETWORK:
@@ -80,29 +79,18 @@ export function useBookingSubmit() {
     setSubmitting(true);
 
     // === LAB BOOKING FLOW — free collection, pay-after-report ===
+    // Goes through /api/lab/create-booking so the server can enforce the
+    // OTP verification cookie before inserting. Previously this was a
+    // client-side supabase.insert, which couldn't read the HttpOnly cookie.
     if (serviceCategory === "diagnostics") {
       try {
-        const testTotalRupees = selectedTests.reduce(
-          (sum, t) => sum + (t.price || 0),
-          0
-        );
-        const testTotalPaise = testTotalRupees * 100;
-
-        // Apply coupon (if validated client-side via /api/lab/validate-coupon).
-        // The server will re-verify on /api/lab/send-report-payment-link before
-        // creating the Razorpay order, so we trust the coupon at booking time
-        // only for display + finalAmount snapshot.
-        const couponDiscountPaise = appliedCoupon
-          ? appliedCoupon.discount_inr * 100
-          : 0;
-        const finalAmountPaise = Math.max(0, testTotalPaise - couponDiscountPaise);
-
-        const { data, error } = await supabase
-          .from("bookings")
-          .insert({
+        const res = await fetch("/api/lab/create-booking", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
             patient_name: name.trim(),
             phone: phone.trim(),
-            service_category: serviceCategory,
             manual_address: location.trim(),
             gps_location: gpsLocation
               ? {
@@ -111,29 +99,34 @@ export function useBookingSubmit() {
                   accuracy: gpsLocation.accuracy,
                 }
               : null,
-            status: "PENDING_COLLECTION",
-            // No Razorpay at booking; test_total + discount locked for ops reference
-            amount: 0,
             selected_tests: selectedTests,
-            test_total_paise: testTotalPaise,
-            applied_coupon_code: appliedCoupon?.code ?? null,
-            coupon_discount_percent: appliedCoupon?.discount_percent ?? null,
-            coupon_discount_paise: couponDiscountPaise || null,
-            final_amount_paise: finalAmountPaise,
-            lab_partner: "pathcore",
-            // Test-cost payment is NOT_DUE until report is finalised
-            report_payment_status: "NOT_DUE",
-          })
-          .select("id")
-          .single();
+            applied_coupon: appliedCoupon
+              ? {
+                  code: appliedCoupon.code,
+                  discount_percent: appliedCoupon.discount_percent,
+                  discount_inr: appliedCoupon.discount_inr,
+                }
+              : null,
+          }),
+        });
 
-        if (error) {
-          console.error("[lab booking] supabase insert failed:", error);
-          return { success: false, error: ERROR_MESSAGES.SERVER };
+        if (!res.ok) {
+          const err = (await res.json().catch(() => ({}))) as { error?: string };
+          console.error("[lab booking] create-booking failed:", res.status, err);
+          return {
+            success: false,
+            error:
+              err.error ||
+              (res.status === 401
+                ? "Please verify your phone before booking."
+                : ERROR_MESSAGES.SERVER),
+          };
         }
 
+        const { bookingId } = (await res.json()) as { bookingId: string };
+
         setConfirmedBooking({
-          id: data?.id,
+          id: bookingId,
           name: name.trim(),
           phone: phone.trim(),
           location: location.trim(),
@@ -144,7 +137,7 @@ export function useBookingSubmit() {
           confirmedAt: Date.now(),
         });
 
-        return { success: true, id: data?.id, isLabBooking: true };
+        return { success: true, id: bookingId, isLabBooking: true };
       } catch (err) {
         console.error("[lab booking] error:", err);
         return { success: false, error: ERROR_MESSAGES.UNKNOWN };
@@ -158,6 +151,7 @@ export function useBookingSubmit() {
       const orderRes = await fetch("/api/razorpay/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ serviceCategory, payFull: false }),
       });
 
@@ -199,6 +193,7 @@ export function useBookingSubmit() {
       const verifyRes = await fetch("/api/razorpay/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           ...payment,
           booking: {

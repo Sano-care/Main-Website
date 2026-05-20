@@ -96,6 +96,7 @@ We retain personal data only for as long as necessary for the purposes for which
 | Clinical records (visits, vitals, prescriptions, lab reports) | Minimum 7 years from date of last consultation |
 | Transactional data (payments, refunds, invoices) | 8 years, per Companies Act 2013 and Income Tax Act |
 | Communication logs | 12 months |
+| One-time passwords (OTPs) | Stored only as a salted hash, never in plaintext, and deleted within 24 hours of verification or expiry. We use OTPs delivered via WhatsApp or SMS to verify your phone number before you create a booking. |
 | Technical data (logs, IP addresses, crash reports) | 90 days |
 
 Where you exercise your right to erasure (Section 6), we will delete data not required for legal retention. Clinical records may be irreversibly anonymised but not deleted, where deletion would breach our legal obligations.
