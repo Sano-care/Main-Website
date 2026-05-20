@@ -1,9 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { useRouter, usePathname } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { createOpsBrowserClient } from "@/lib/supabase-browser";
 
 // Master admin email - this user can create other admins
 const MASTER_ADMIN_EMAIL = "master@sanocare.in";
@@ -27,6 +27,7 @@ const AuthContext = createContext<AuthContextType>({
 export function OpsAuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const supabase = useMemo(() => createOpsBrowserClient(), []);
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -39,7 +40,7 @@ export function OpsAuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setSession(null);
     router.replace("/ops/login");
-  }, [router]);
+  }, [router, supabase]);
 
   useEffect(() => {
     // Get initial session
@@ -73,7 +74,7 @@ export function OpsAuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, [router, pathname]);
+  }, [router, pathname, supabase]);
 
   // Handle visibility change - refresh session when tab becomes visible
   useEffect(() => {
@@ -92,7 +93,7 @@ export function OpsAuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [session, router]);
+  }, [session, router, supabase]);
 
   return (
     <AuthContext.Provider value={{ user, session, isLoading, isMasterAdmin, signOut }}>

@@ -1,14 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Lock, Mail, Eye, EyeOff, Loader2, AlertCircle, Shield } from "lucide-react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { useRouter, useSearchParams } from "next/navigation";
+import { createOpsBrowserClient } from "@/lib/supabase-browser";
 
 export default function OpsLoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next") || "/ops";
+  const supabase = useMemo(() => createOpsBrowserClient(), []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -21,13 +24,13 @@ export default function OpsLoginPage() {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        router.replace("/ops/dashboard");
+        router.replace(next);
       } else {
         setIsCheckingSession(false);
       }
     };
     checkSession();
-  }, [router]);
+  }, [router, supabase, next]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +49,7 @@ export default function OpsLoginPage() {
       }
 
       if (data.session) {
-        router.replace("/ops/dashboard");
+        router.replace(next);
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
