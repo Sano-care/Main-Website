@@ -11,6 +11,50 @@ import { useBookingStore } from "@/store/bookingStore";
 const TOKEN_TTL_MS = 30 * 60 * 1000;
 const RESEND_COOLDOWN_SECONDS = 30;
 
+type Channel = "whatsapp" | "sms";
+
+// Channel availability is driven entirely by env flags so we can flip
+// primary/secondary without code changes:
+//   NEXT_PUBLIC_OTP_DEFAULT_CHANNEL    — "sms" (current) or "whatsapp"
+//   NEXT_PUBLIC_SMS_OTP_ENABLED        — "true" to allow SMS
+//   NEXT_PUBLIC_WHATSAPP_OTP_ENABLED   — "true" to allow WhatsApp
+// While the WABA template restriction is in force, the deploy is configured
+// with default="sms", sms enabled, whatsapp disabled. When WABA clears, the
+// admin flips WHATSAPP_OTP_ENABLED to true (server) and NEXT_PUBLIC_WHATSAPP_OTP_ENABLED
+// to true (client) and the fallback link appears on the OTP step.
+const SMS_ENABLED = process.env.NEXT_PUBLIC_SMS_OTP_ENABLED === "true";
+const WHATSAPP_ENABLED =
+  process.env.NEXT_PUBLIC_WHATSAPP_OTP_ENABLED === "true";
+
+function pickPrimaryChannel(): Channel {
+  const configured = process.env.NEXT_PUBLIC_OTP_DEFAULT_CHANNEL as
+    | Channel
+    | undefined;
+  if (configured === "sms" && SMS_ENABLED) return "sms";
+  if (configured === "whatsapp" && WHATSAPP_ENABLED) return "whatsapp";
+  if (SMS_ENABLED) return "sms";
+  if (WHATSAPP_ENABLED) return "whatsapp";
+  // Neither flag is set in env — fall back to "sms" so the UI still
+  // renders sensibly; the server send-otp route will return an explanatory
+  // error if neither channel is actually configured.
+  return "sms";
+}
+
+const PRIMARY_CHANNEL: Channel = pickPrimaryChannel();
+const FALLBACK_CHANNEL: Channel | null =
+  PRIMARY_CHANNEL === "sms"
+    ? WHATSAPP_ENABLED
+      ? "whatsapp"
+      : null
+    : SMS_ENABLED
+      ? "sms"
+      : null;
+
+const CHANNEL_LABEL: Record<Channel, string> = {
+  whatsapp: "WhatsApp",
+  sms: "SMS",
+};
+
 interface BookingGateProps {
   isOpen: boolean;
   onClose: () => void;
@@ -25,9 +69,6 @@ interface BookingGateProps {
 
 type Step = "phone" | "otp";
 
-const SMS_FALLBACK_ENABLED =
-  process.env.NEXT_PUBLIC_SMS_OTP_ENABLED === "true";
-
 export function BookingGate({ isOpen, onClose, onVerified }: BookingGateProps) {
   const setPhoneVerified = useBookingStore((s) => s.setPhoneVerified);
   const setDetails = useBookingStore((s) => s.setDetails);
@@ -36,7 +77,7 @@ export function BookingGate({ isOpen, onClose, onVerified }: BookingGateProps) {
   const [phoneDigits, setPhoneDigits] = useState(""); // 10 local digits only
   const [consent, setConsent] = useState(false);
   const [otp, setOtp] = useState<string[]>(["", "", "", "", "", ""]);
-  const [channelUsed, setChannelUsed] = useState<"whatsapp" | "sms">("whatsapp");
+  const [channelUsed, setChannelUsed] = useState<Channel>(PRIMARY_CHANNEL);
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +106,7 @@ export function BookingGate({ isOpen, onClose, onVerified }: BookingGateProps) {
   const e164 = `+91${phoneDigits}`;
 
   // ===== Step 1: send OTP =====
-  async function handleSendCode(channel: "whatsapp" | "sms" = "whatsapp") {
+  async function handleSendCode(channel: Channel = PRIMARY_CHANNEL) {
     if (!canSendCode && step === "phone") return;
     setSending(true);
     setError(null);
@@ -78,7 +119,7 @@ export function BookingGate({ isOpen, onClose, onVerified }: BookingGateProps) {
       });
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
-        channel?: "whatsapp" | "sms";
+        channel?: Channel;
         retryAfterSeconds?: number;
         error?: string;
       };
@@ -216,7 +257,7 @@ export function BookingGate({ isOpen, onClose, onVerified }: BookingGateProps) {
                   canSend={canSendCode}
                   sending={sending}
                   error={error}
-                  onSend={() => handleSendCode("whatsapp")}
+                  onSend={() => handleSendCode(PRIMARY_CHANNEL)}
                 />
               ) : (
                 <OtpStep
@@ -232,9 +273,11 @@ export function BookingGate({ isOpen, onClose, onVerified }: BookingGateProps) {
                   onKeyDown={handleOtpKeyDown}
                   onPaste={handleOtpPaste}
                   onVerify={handleVerify}
-                  onResendWhatsApp={() => handleSendCode("whatsapp")}
-                  onResendSms={
-                    SMS_FALLBACK_ENABLED ? () => handleSendCode("sms") : null
+                  onResendPrimary={() => handleSendCode(PRIMARY_CHANNEL)}
+                  onResendFallback={
+                    FALLBACK_CHANNEL
+                      ? () => handleSendCode(FALLBACK_CHANNEL)
+                      : null
                   }
                   onEditPhone={() => setStep("phone")}
                 />
@@ -287,8 +330,9 @@ function PhoneStep({
         Confirm your number
       </h2>
       <p className="mt-2 text-sm text-text-secondary">
-        We&apos;ll send a 6-digit code to your WhatsApp so we can reach you
-        about this visit. Your number is the only thing we need to get started.
+        We&apos;ll send a 6-digit code by {CHANNEL_LABEL[PRIMARY_CHANNEL]} so
+        we can reach you about this visit. Your number is the only thing we
+        need to get started.
       </p>
 
       <label className="mt-6 block text-xs font-bold uppercase tracking-wider text-text-secondary">
@@ -351,17 +395,19 @@ function PhoneStep({
           </>
         ) : (
           <>
-            Send code on WhatsApp
+            Send code on {CHANNEL_LABEL[PRIMARY_CHANNEL]}
             <ArrowRight className="h-4 w-4" />
           </>
         )}
       </Button>
       <p className="mt-3 text-center text-xs text-text-secondary">
-        Don&apos;t use WhatsApp?{" "}
-        {SMS_FALLBACK_ENABLED ? (
-          <>You can switch to SMS on the next step.</>
+        {FALLBACK_CHANNEL ? (
+          <>
+            Don&apos;t use {CHANNEL_LABEL[PRIMARY_CHANNEL]}? You can switch to{" "}
+            {CHANNEL_LABEL[FALLBACK_CHANNEL]} on the next step.
+          </>
         ) : (
-          <>Please call us at +91-97119 77782 to book.</>
+          <>Need help? Call us at +91-97119 77782 to book.</>
         )}
       </p>
     </>
@@ -371,7 +417,7 @@ function PhoneStep({
 interface OtpStepProps {
   phoneE164: string;
   otp: string[];
-  channelUsed: "whatsapp" | "sms";
+  channelUsed: Channel;
   resendCountdown: number;
   sending: boolean;
   verifying: boolean;
@@ -381,8 +427,8 @@ interface OtpStepProps {
   onKeyDown: (i: number, e: React.KeyboardEvent<HTMLInputElement>) => void;
   onPaste: (e: React.ClipboardEvent<HTMLInputElement>) => void;
   onVerify: () => void;
-  onResendWhatsApp: () => void;
-  onResendSms: (() => void) | null;
+  onResendPrimary: () => void;
+  onResendFallback: (() => void) | null;
   onEditPhone: () => void;
 }
 
@@ -399,12 +445,12 @@ function OtpStep({
   onKeyDown,
   onPaste,
   onVerify,
-  onResendWhatsApp,
-  onResendSms,
+  onResendPrimary,
+  onResendFallback,
   onEditPhone,
 }: OtpStepProps) {
   const filled = otp.every((d) => d.length === 1);
-  const channelLabel = channelUsed === "whatsapp" ? "WhatsApp" : "SMS";
+  const channelLabel = CHANNEL_LABEL[channelUsed];
 
   return (
     <>
@@ -481,25 +527,25 @@ function OtpStep({
         ) : (
           <button
             type="button"
-            onClick={onResendWhatsApp}
+            onClick={onResendPrimary}
             disabled={sending}
             className="text-primary hover:underline disabled:opacity-50"
           >
-            Resend code on WhatsApp
+            Resend code on {CHANNEL_LABEL[PRIMARY_CHANNEL]}
           </button>
         )}
       </div>
 
-      {onResendSms && (
+      {onResendFallback && FALLBACK_CHANNEL && (
         <div className="mt-2 text-center text-xs text-text-secondary">
-          Didn&apos;t get it on WhatsApp?{" "}
+          Didn&apos;t get it on {channelLabel}?{" "}
           <button
             type="button"
-            onClick={onResendSms}
+            onClick={onResendFallback}
             disabled={sending || resendCountdown > 0}
             className="text-primary hover:underline disabled:opacity-50"
           >
-            Send via SMS instead
+            Send via {CHANNEL_LABEL[FALLBACK_CHANNEL]} instead
           </button>
         </div>
       )}

@@ -51,7 +51,14 @@ export async function POST(req: NextRequest) {
   const channel = resolveChannel(requested);
   if (!channel) {
     return NextResponse.json(
-      { error: "SMS is not available yet. Please use WhatsApp." },
+      {
+        error:
+          requested === "sms"
+            ? "SMS is not available right now. Please try WhatsApp or call +91-9711977782."
+            : requested === "whatsapp"
+              ? "WhatsApp OTP is temporarily unavailable. Please try SMS or call +91-9711977782."
+              : "OTP delivery is temporarily unavailable. Please call +91-9711977782 to book.",
+      },
       { status: 400 },
     );
   }
@@ -170,16 +177,28 @@ export async function POST(req: NextRequest) {
 }
 
 function resolveChannel(requested: string): OtpChannel | null {
-  const defaultChannel = (process.env.OTP_DEFAULT_CHANNEL ?? "whatsapp") as OtpChannel;
+  // Each channel is independently flagged so we can flip primary/secondary
+  // without touching code. While the WhatsApp WABA is restricted, set
+  // WHATSAPP_OTP_ENABLED=false so the channel is rejected even if a stale
+  // client asks for it. SMS is currently primary until the WABA clears.
+  const defaultChannel = (process.env.OTP_DEFAULT_CHANNEL ?? "sms") as OtpChannel;
   const smsEnabled = process.env.SMS_OTP_ENABLED === "true";
+  const whatsappEnabled = process.env.WHATSAPP_OTP_ENABLED !== "false";
+
   if (requested === "sms") {
     return smsEnabled ? "sms" : null;
   }
   if (requested === "whatsapp") {
-    return "whatsapp";
+    return whatsappEnabled ? "whatsapp" : null;
   }
-  // 'auto' or anything else
-  return defaultChannel === "sms" && smsEnabled ? "sms" : "whatsapp";
+  // 'auto' — prefer the configured default if it's enabled, else fall back
+  // to whichever channel is enabled. Returns null if neither is enabled
+  // (caller surfaces a 400 with a useful message).
+  if (defaultChannel === "sms" && smsEnabled) return "sms";
+  if (defaultChannel === "whatsapp" && whatsappEnabled) return "whatsapp";
+  if (smsEnabled) return "sms";
+  if (whatsappEnabled) return "whatsapp";
+  return null;
 }
 
 function createServiceClient() {
