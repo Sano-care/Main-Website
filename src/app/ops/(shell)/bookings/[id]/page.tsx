@@ -27,6 +27,7 @@ export const dynamic = "force-dynamic";
 
 type BookingDetail = {
   id: string;
+  booking_code: string | null;
   created_at: string;
   patient_name: string;
   phone: string | null;
@@ -94,11 +95,11 @@ export default async function BookingDetailPage({
   const { data } = await supabase
     .from("bookings")
     .select(
-      `id, created_at, patient_name, phone, service_category, specific_ailment,
-       manual_address, status, amount, final_amount_paise, test_total_paise,
-       payment_status, report_payment_status, scheduled_for, assigned_at,
-       dispatched_at, completed_at, cancelled_at, cancellation_reason,
-       notes, ops_notes, customer_id, partner_id,
+      `id, booking_code, created_at, patient_name, phone, service_category,
+       specific_ailment, manual_address, status, amount, final_amount_paise,
+       test_total_paise, payment_status, report_payment_status, scheduled_for,
+       assigned_at, dispatched_at, completed_at, cancelled_at,
+       cancellation_reason, notes, ops_notes, customer_id, partner_id,
        customer:customers ( id, customer_code, full_name, phone, email ),
        partner:partners ( id, partner_code, name, partner_type )`,
     )
@@ -126,11 +127,10 @@ export default async function BookingDetailPage({
 
       <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
         <div>
-          <div className="font-mono text-xs text-slate-500 mb-1">#{booking.id}</div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-slate-900">
-              {booking.customer?.full_name ?? booking.patient_name}
-            </h1>
+          <div className="flex items-baseline gap-3 flex-wrap mb-2">
+            <span className="font-mono text-lg font-semibold text-slate-900">
+              {booking.booking_code ?? "—"}
+            </span>
             <span
               className={
                 "inline-block text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full " +
@@ -140,6 +140,9 @@ export default async function BookingDetailPage({
               {booking.status.replace(/_/g, " ")}
             </span>
           </div>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {booking.customer?.full_name ?? booking.patient_name}
+          </h1>
           <div className="text-sm text-slate-600 mt-1">
             Created {new Date(booking.created_at).toLocaleString("en-IN")}
             {booking.scheduled_for && (
@@ -148,6 +151,9 @@ export default async function BookingDetailPage({
                 {new Date(booking.scheduled_for).toLocaleString("en-IN")}
               </>
             )}
+          </div>
+          <div className="font-mono text-[10px] text-slate-400 mt-2">
+            uuid {booking.id}
           </div>
         </div>
       </div>

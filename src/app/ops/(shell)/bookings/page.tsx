@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Search } from "lucide-react";
+import { Search, Plus } from "lucide-react";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
 import {
   BOOKING_STATUSES,
@@ -19,6 +19,7 @@ export const dynamic = "force-dynamic";
 
 type BookingRow = {
   id: string;
+  booking_code: string | null;
   created_at: string;
   patient_name: string;
   phone: string | null;
@@ -84,9 +85,9 @@ export default async function BookingsListPage({
   let query = supabase
     .from("bookings")
     .select(
-      `id, created_at, patient_name, phone, service_category, status, amount,
-       final_amount_paise, test_total_paise, payment_status, scheduled_for,
-       customer_id, partner_id,
+      `id, booking_code, created_at, patient_name, phone, service_category,
+       status, amount, final_amount_paise, test_total_paise, payment_status,
+       scheduled_for, customer_id, partner_id,
        customer:customers ( id, customer_code, full_name )`,
     );
 
@@ -99,6 +100,7 @@ export default async function BookingsListPage({
     const parts: string[] = [
       `patient_name.ilike.%${q}%`,
       `phone.ilike.%${q}%`,
+      `booking_code.ilike.%${q}%`,
     ];
     if (UUID_RE.test(q)) parts.push(`id.eq.${q}`);
     if (matchingCustomerIds.length) {
@@ -115,15 +117,24 @@ export default async function BookingsListPage({
 
   return (
     <div className="px-8 py-8">
-      <div className="mb-6">
-        <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1">
-          Operations
+      <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
+        <div>
+          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1">
+            Operations
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900">Bookings</h1>
+          <p className="text-sm text-slate-600 mt-1">
+            {bookings.length} record{bookings.length === 1 ? "" : "s"}
+            {bookings.length === 200 && " · showing latest 200"}
+          </p>
         </div>
-        <h1 className="text-2xl font-bold text-slate-900">Bookings</h1>
-        <p className="text-sm text-slate-600 mt-1">
-          {bookings.length} record{bookings.length === 1 ? "" : "s"}
-          {bookings.length === 200 && " · showing latest 200"}
-        </p>
+        <Link
+          href="/ops/bookings/new"
+          className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          New booking
+        </Link>
       </div>
 
       <form className="bg-white border border-slate-200 rounded-2xl p-4 mb-6" method="GET">
@@ -138,7 +149,7 @@ export default async function BookingsListPage({
                 type="search"
                 name="q"
                 defaultValue={q}
-                placeholder="Name, phone, SAN-C, or full booking id…"
+                placeholder="Name, phone, SAN-C, SAN-B, or full booking id…"
                 className="w-full bg-white border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
               />
             </div>
@@ -269,9 +280,9 @@ export default async function BookingsListPage({
                     <td className="px-4 py-3">
                       <Link
                         href={`/ops/bookings/${b.id}`}
-                        className="font-mono text-xs text-slate-900 hover:text-primary underline"
+                        className="font-mono text-sm font-semibold text-slate-900 hover:text-primary underline whitespace-nowrap"
                       >
-                        #{b.id.slice(0, 8)}
+                        {b.booking_code ?? `#${b.id.slice(0, 8)}`}
                       </Link>
                     </td>
                     <td className="px-4 py-3">
