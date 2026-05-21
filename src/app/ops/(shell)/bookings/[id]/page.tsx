@@ -23,7 +23,21 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+// Per-request, RLS-gated, never statically cached. Belt-and-suspenders
+// across every Next.js cache layer:
+//   - dynamic: 'force-dynamic'      — opt out of static rendering
+//   - revalidate: 0                  — disable any ISR window
+//   - fetchCache: 'force-no-store'   — Supabase reads inside this segment
+//                                      go straight to the database every
+//                                      time. Without this, a fresh booking
+//                                      created via /ops/bookings/new can
+//                                      404 because the in-segment fetch
+//                                      gets served from cache.
+// Also: no generateStaticParams and no dynamicParams = false — both would
+// reintroduce build-time pre-rendering.
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 type BookingDetail = {
   id: string;

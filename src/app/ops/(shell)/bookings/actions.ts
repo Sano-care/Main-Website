@@ -798,6 +798,11 @@ export async function createBooking(formData: FormData) {
   }
 
   revalidatePath("/ops/bookings");
+  // Explicitly invalidate the new booking's detail URL too. The page is
+  // force-dynamic + no-store, so it shouldn't be cached anywhere — but
+  // calling revalidatePath here defends against any router-cache entry
+  // that might otherwise short-circuit the redirect target.
+  revalidatePath(`/ops/bookings/${inserted.id}`);
   if (mode === "new") {
     revalidatePath("/ops/patients");
     revalidatePath(`/ops/patients/${customerId}`);

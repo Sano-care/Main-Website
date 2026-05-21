@@ -9,7 +9,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+// See bookings/[id]/page.tsx for the full rationale. Same belt-and-
+// suspenders: page is fully dynamic + no ISR + no fetch cache.
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 type Partner = {
   id: string;
