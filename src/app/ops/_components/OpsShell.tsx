@@ -49,7 +49,10 @@ export function OpsShell({ fullName, email, role, children }: OpsShellProps) {
     <div className="min-h-screen bg-slate-50 flex">
       {/* Left nav */}
       <aside className="w-64 shrink-0 bg-white border-r border-slate-200 flex flex-col">
-        <div className="px-5 py-5 border-b border-slate-200 flex items-center gap-3">
+        <Link
+          href="/ops"
+          className="px-5 py-5 border-b border-slate-200 flex items-center gap-3 cursor-pointer hover:bg-slate-50 transition-colors"
+        >
           <Image src="/logo.svg" alt="Sanocare" width={32} height={32} className="w-8 h-8" />
           <div>
             <div className="text-sm font-bold text-slate-900">Sanocare Ops</div>
@@ -57,7 +60,7 @@ export function OpsShell({ fullName, email, role, children }: OpsShellProps) {
               Internal · {role}
             </div>
           </div>
-        </div>
+        </Link>
 
         <nav className="flex-1 px-3 py-4">
           <ul className="space-y-1">
