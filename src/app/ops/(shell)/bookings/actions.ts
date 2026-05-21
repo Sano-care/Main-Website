@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
+import { normaliseIndianPhone } from "@/lib/phone";
 import { getCurrentOpsUser } from "../../_lib/getCurrentOpsUser";
 import {
   isBookingStatus,
@@ -11,6 +12,231 @@ import {
 } from "../../_lib/bookingStatus";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SAN_C_RE = /^SAN-C-\d+$/i;
+
+export type CustomerLookupResult =
+  | {
+      ok: true;
+      customer: {
+        id: string;
+        customer_code: string;
+        full_name: string;
+        phone: string;
+      };
+    }
+  | { ok: false; error: string };
+
+/**
+ * Resolve a SAN-C code OR a phone number to a customer row. Used by the
+ * /ops/bookings/new "existing patient" lookup. Returns a serialisable
+ * result the client uses to render either a confirm panel or an error.
+ *
+ * Lookup semantics:
+ *   - SAN-C-NNNNN (case-insensitive) → exact match on customer_code.
+ *   - Otherwise treat as a phone, normalise via normaliseIndianPhone() and
+ *     exact-match on customers.phone (M016 enforces uniqueness).
+ *
+ * Always re-fetched server-side at booking creation, so the client cannot
+ * spoof the customer id of a row it didn't actually look up.
+ */
+export async function lookupCustomer(input: string): Promise<CustomerLookupResult> {
+  await getCurrentOpsUser();
+  const supabase = await createOpsRSCClient();
+
+  const q = (input ?? "").trim();
+  if (!q) return { ok: false, error: "Enter a SAN-C code or phone number." };
+
+  type Row = { id: string; customer_code: string; full_name: string; phone: string | null };
+  let row: Row | null = null;
+
+  if (SAN_C_RE.test(q)) {
+    const { data } = await supabase
+      .from("customers")
+      .select("id, customer_code, full_name, phone")
+      .eq("customer_code", q.toUpperCase())
+      .maybeSingle();
+    row = (data as Row | null) ?? null;
+    if (!row) {
+      return { ok: false, error: `No patient with code ${q.toUpperCase()}.` };
+    }
+  } else {
+    const normalised = normaliseIndianPhone(q);
+    if (!normalised) {
+      return {
+        ok: false,
+        error:
+          "That doesn't look like a SAN-C code or an Indian mobile. Use a 10-digit number, or paste the SAN-C-NNNNN code.",
+      };
+    }
+    const { data } = await supabase
+      .from("customers")
+      .select("id, customer_code, full_name, phone")
+      .eq("phone", normalised)
+      .maybeSingle();
+    row = (data as Row | null) ?? null;
+    if (!row) {
+      return {
+        ok: false,
+        error: `No patient on file for ${normalised}. Switch to "Create new patient".`,
+      };
+    }
+  }
+
+  if (!row.phone) {
+    return {
+      ok: false,
+      error: `${row.full_name} has no phone on file — add one via /ops/patients first.`,
+    };
+  }
+  return {
+    ok: true,
+    customer: {
+      id: row.id,
+      customer_code: row.customer_code,
+      full_name: row.full_name,
+      phone: row.phone,
+    },
+  };
+}
+
+// =====================================================================
+// resolveShortMapsLink — server-side redirect follower for short Maps URLs
+// =====================================================================
+//
+// Google Maps' "Share" button produces short links like
+// https://maps.app.goo.gl/abc123 or https://goo.gl/maps/xyz. These are
+// HTTP 301/302 redirects to a long maps URL that contains the actual
+// coordinates (@lat,lng,zoom and/or !3dLAT!4dLNG). The client can't
+// follow them cross-origin, so the NewBookingForm calls this action on
+// blur when the pasted value looks like a short URL.
+//
+// SSRF guardrails: we only hit a small allow-list of Google short-URL
+// hosts, never read the response body, and abort after 5s. We return
+// only the parsed coordinates — the resolved URL itself is discarded.
+
+const SHORT_MAPS_HOSTS = new Set([
+  "maps.app.goo.gl",
+  "goo.gl",
+  "g.co",
+  "www.google.com", // sometimes Share emits the long form directly
+  "maps.google.com",
+]);
+
+export type ShortLinkResolveResult =
+  | { ok: true; lat: number; lng: number }
+  | { ok: false; error: string };
+
+function parseLatLngFromUrl(url: string): { lat: number; lng: number } | null {
+  const tryPair = (latStr: string, lngStr: string) => {
+    const lat = parseFloat(latStr);
+    const lng = parseFloat(lngStr);
+    if (
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      lat >= -90 &&
+      lat <= 90 &&
+      lng >= -180 &&
+      lng <= 180
+    ) {
+      return { lat, lng };
+    }
+    return null;
+  };
+
+  // Try the same patterns the client uses, in priority order. !3d!4d wins
+  // when both are present because it represents the placemark coordinate;
+  // @lat,lng is the camera centre which can drift from the marker.
+  const place = url.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
+  if (place) {
+    const p = tryPair(place[1], place[2]);
+    if (p) return p;
+  }
+  const at = url.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  if (at) {
+    const p = tryPair(at[1], at[2]);
+    if (p) return p;
+  }
+  const q = url.match(/[?&]q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  if (q) {
+    const p = tryPair(q[1], q[2]);
+    if (p) return p;
+  }
+  const ll = url.match(/[?&]ll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  if (ll) {
+    const p = tryPair(ll[1], ll[2]);
+    if (p) return p;
+  }
+  return null;
+}
+
+export async function resolveShortMapsLink(
+  input: string,
+): Promise<ShortLinkResolveResult> {
+  // Auth gate: same as every other ops action — non-ops users get 0 IO
+  // out of this endpoint.
+  await getCurrentOpsUser();
+
+  const trimmed = (input ?? "").trim();
+  if (!trimmed) return { ok: false, error: "Empty link." };
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(trimmed);
+  } catch {
+    return { ok: false, error: "Not a valid URL." };
+  }
+
+  if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+    return { ok: false, error: "Only http(s) URLs are followed." };
+  }
+  if (!SHORT_MAPS_HOSTS.has(parsedUrl.host)) {
+    return {
+      ok: false,
+      error: `Refusing to follow ${parsedUrl.host} — only Google Maps hosts are allowed.`,
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const res = await fetch(parsedUrl.toString(), {
+      method: "GET",
+      redirect: "follow",
+      cache: "no-store",
+      headers: {
+        // Plain UA — Google's URL shortener serves the redirect to almost
+        // anything, but pretending to be a real browser avoids the
+        // occasional bot-flavoured response.
+        "User-Agent":
+          "Mozilla/5.0 (compatible; Sanocare/1.0; +https://sanocare.in)",
+        Accept: "text/html,*/*;q=0.8",
+      },
+      signal: controller.signal,
+    });
+    // Resolved URL after all redirects (undici sets this on `response.url`).
+    const finalUrl = res.url;
+    const coords = parseLatLngFromUrl(finalUrl);
+    if (!coords) {
+      return {
+        ok: false,
+        error:
+          "Followed the short link but didn't find coordinates in the resolved URL. Try opening the link in Maps and pasting the expanded URL instead.",
+      };
+    }
+    return { ok: true, lat: coords.lat, lng: coords.lng };
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      return { ok: false, error: "Timed out following the short link." };
+    }
+    return {
+      ok: false,
+      error: "Couldn't reach the short link. Check your connection and try again.",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function getString(formData: FormData, key: string): string | null {
   const v = formData.get(key);
@@ -236,23 +462,88 @@ export async function linkPartner(formData: FormData) {
   revalidateBooking(bookingId);
 }
 
+type SelectedTest = {
+  code: string;
+  name: string;
+  price: number;
+  sample?: string;
+  tat?: string;
+  category?: string;
+};
+
+type AppliedCouponPayload = {
+  code: string;
+  discount_percent: number;
+  discount_inr: number;
+};
+
+/** Best-effort parse of a JSON form field. Returns null on empty/invalid. */
+function getJSON<T>(formData: FormData, key: string): T | null {
+  const raw = getString(formData, key);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Validate gps_location coming from the form: object with finite lat in
+ * [-90, 90], lng in [-180, 180], accuracy >= 0. Anything else throws.
+ */
+function parseGpsLocation(formData: FormData): { lat: number; lng: number; accuracy: number } {
+  const raw = getJSON<{ lat?: unknown; lng?: unknown; accuracy?: unknown }>(formData, "gps_location");
+  if (!raw) {
+    throw new Error("Location is required — paste a Google Maps link or lat,long.");
+  }
+  const lat = Number(raw.lat);
+  const lng = Number(raw.lng);
+  const accuracy = raw.accuracy == null ? 0 : Number(raw.accuracy);
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+    throw new Error("Latitude is out of range.");
+  }
+  if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+    throw new Error("Longitude is out of range.");
+  }
+  if (!Number.isFinite(accuracy) || accuracy < 0) {
+    throw new Error("Accuracy must be a non-negative number.");
+  }
+  return { lat, lng, accuracy };
+}
+
 /**
  * Create a booking on behalf of a patient (the "ops logs a WhatsApp
- * booking" flow). Two customer modes:
+ * booking" flow).
  *
- *   - "existing": look the customer up by SAN-C code, phone, or full UUID
- *   - "new":      create the customer inline (next_code('customer') + insert)
+ * Customer:
+ *   - "existing" mode: the client has already called lookupCustomer() and
+ *     passes the resolved `customer_id`. We re-fetch the row server-side
+ *     to avoid trusting client-provided ids.
+ *   - "new" mode: create the customer inline using next_code('customer'),
+ *     normalising the phone to E.164 via normaliseIndianPhone.
  *
- * Always populates the legacy `patient_name` and `phone` columns on the
- * booking row from the resolved customer, so the existing /ops/lab view +
- * any other downstream code that reads those columns keeps working.
- * `booking_code` is left NULL — the trg_bookings_assign_code trigger from
- * migration 015 stamps it via next_code('booking') on INSERT.
+ * Location:
+ *   - gps_location is required (the form parses Google Maps URL / lat,lng).
+ *   - manual_address stays optional — supplementary "flat / floor /
+ *     landmark" detail.
+ *
+ * Diagnostics:
+ *   - When service_category = 'diagnostics', selected_tests + the optional
+ *     applied_coupon shape the row exactly like /api/lab/create-booking
+ *     does for the public flow, with status PENDING_COLLECTION,
+ *     lab_partner 'pathcore', report_payment_status 'NOT_DUE'.
+ *   - All other services get status PENDING.
+ *
+ * The legacy inline `patient_name` + `phone` columns are populated from
+ * the resolved customer so /ops/lab and any other reader of those columns
+ * keeps working. `booking_code` is left NULL — the trg_bookings_assign_code
+ * trigger from migration 015 stamps it on INSERT.
  */
 export async function createBooking(formData: FormData) {
   const opsUser = await getCurrentOpsUser();
 
-  // ---- Validate booking-level fields first, before any writes ----
+  // ---- Validate booking-level fields first ----
   const mode = formData.get("customer_mode");
   if (mode !== "existing" && mode !== "new") {
     throw new Error("Invalid customer mode");
@@ -262,7 +553,10 @@ export async function createBooking(formData: FormData) {
   if (!(SERVICE_CATEGORIES as readonly string[]).includes(service_category)) {
     throw new Error(`Invalid service: ${service_category}`);
   }
-  const manual_address = getRequired(formData, "manual_address");
+
+  // Location is mandatory; manual_address (flat / floor / landmark) is not.
+  const gps_location = parseGpsLocation(formData);
+  const manual_address = getString(formData, "manual_address") ?? "";
 
   const scheduled_for_raw = getString(formData, "scheduled_for");
   let scheduled_for: string | null = null;
@@ -284,6 +578,44 @@ export async function createBooking(formData: FormData) {
     amount = Math.round(n);
   }
 
+  // ---- Diagnostics-only fields ----
+  let selectedTests: SelectedTest[] = [];
+  let appliedCoupon: AppliedCouponPayload | null = null;
+  if (service_category === "diagnostics") {
+    const parsedTests = getJSON<SelectedTest[]>(formData, "selected_tests");
+    if (!parsedTests || !Array.isArray(parsedTests) || parsedTests.length === 0) {
+      throw new Error("Pick at least one lab test for a diagnostics booking.");
+    }
+    // Defensive shape check + normalize numbers.
+    selectedTests = parsedTests.map((t) => {
+      if (!t || typeof t.code !== "string" || typeof t.name !== "string") {
+        throw new Error("Invalid lab test in basket.");
+      }
+      const price = Number(t.price);
+      if (!Number.isFinite(price) || price < 0) {
+        throw new Error(`Test ${t.code} has an invalid price.`);
+      }
+      return {
+        code: t.code,
+        name: t.name,
+        price,
+        sample: typeof t.sample === "string" ? t.sample : undefined,
+        tat: typeof t.tat === "string" ? t.tat : undefined,
+        category: typeof t.category === "string" ? t.category : undefined,
+      };
+    });
+
+    appliedCoupon = getJSON<AppliedCouponPayload>(formData, "applied_coupon");
+    if (appliedCoupon) {
+      const pct = Number(appliedCoupon.discount_percent);
+      const inr = Number(appliedCoupon.discount_inr);
+      if (!appliedCoupon.code || !Number.isFinite(pct) || !Number.isFinite(inr)) {
+        throw new Error("Invalid coupon payload.");
+      }
+      appliedCoupon = { code: appliedCoupon.code, discount_percent: pct, discount_inr: inr };
+    }
+  }
+
   const supabase = await createOpsRSCClient();
 
   // ---- Resolve customer (existing) or create (new) ----
@@ -292,50 +624,37 @@ export async function createBooking(formData: FormData) {
   let customerPhone: string;
 
   if (mode === "existing") {
-    const lookup = getRequired(formData, "customer_lookup");
-    type LookupRow = { id: string; full_name: string; phone: string | null };
-    let row: LookupRow | null = null;
-
-    if (UUID_RE.test(lookup)) {
-      const { data } = await supabase
-        .from("customers")
-        .select("id, full_name, phone")
-        .eq("id", lookup)
-        .maybeSingle();
-      row = (data as LookupRow | null) ?? null;
-    } else if (lookup.toUpperCase().startsWith("SAN-C-")) {
-      const { data } = await supabase
-        .from("customers")
-        .select("id, full_name, phone")
-        .eq("customer_code", lookup.toUpperCase())
-        .maybeSingle();
-      row = (data as LookupRow | null) ?? null;
-    } else {
-      // Treat as phone — exact match (avoid partial/ilike to keep it predictable)
-      const { data } = await supabase
-        .from("customers")
-        .select("id, full_name, phone")
-        .eq("phone", lookup)
-        .limit(1)
-        .maybeSingle();
-      row = (data as LookupRow | null) ?? null;
+    const id = getRequired(formData, "customer_id");
+    if (!UUID_RE.test(id)) {
+      throw new Error("Invalid customer id — re-run the patient lookup.");
     }
-
+    type Row = { id: string; full_name: string; phone: string | null };
+    const { data } = await supabase
+      .from("customers")
+      .select("id, full_name, phone")
+      .eq("id", id)
+      .maybeSingle();
+    const row = (data as Row | null) ?? null;
     if (!row) {
-      throw new Error(`No customer found for "${lookup}"`);
+      throw new Error("That patient no longer exists — re-run the lookup.");
     }
     if (!row.phone) {
       throw new Error(
-        `Customer ${row.full_name} has no phone on file — add one via /ops/patients first.`,
+        `${row.full_name} has no phone on file — add one via /ops/patients first.`,
       );
     }
     customerId = row.id;
     customerName = row.full_name;
     customerPhone = row.phone;
   } else {
-    // mode === "new": create the customer inline using the same path as M1
     const full_name = getRequired(formData, "customer_full_name");
-    const phone = getRequired(formData, "customer_phone");
+    const phoneRaw = getRequired(formData, "customer_phone");
+    const phone = normaliseIndianPhone(phoneRaw);
+    if (!phone) {
+      throw new Error(
+        `"${phoneRaw}" is not a valid Indian mobile. Use a 10-digit number starting 6-9.`,
+      );
+    }
 
     const { data: code, error: codeErr } = await supabase.rpc("next_code", {
       p_type: "customer",
@@ -365,6 +684,12 @@ export async function createBooking(formData: FormData) {
       .single();
 
     if (insertErr || !created) {
+      // 23505 = unique_violation — the new M016 UNIQUE on customers.phone caught a dupe.
+      if (insertErr && (insertErr.code === "23505" || /duplicate key/i.test(insertErr.message))) {
+        throw new Error(
+          `A patient with phone ${phone} already exists. Switch to "Existing patient" and look them up.`,
+        );
+      }
       throw new Error(`Could not create customer: ${insertErr?.message ?? "unknown"}`);
     }
     const newCustomer = created as NewCustomerRow;
@@ -400,28 +725,71 @@ export async function createBooking(formData: FormData) {
     partnerId = row.id;
   }
 
-  // ---- Insert the booking ----
-  const initialStatus: BookingStatus = "PENDING";
+  // ---- Build the row to insert ----
+  // For diagnostics we mirror /api/lab/create-booking: status starts at
+  // PENDING_COLLECTION, lab_partner / report_payment_status seeded.
+  const isDiagnostics = service_category === "diagnostics";
+  const initialStatus: BookingStatus = isDiagnostics ? "PENDING_COLLECTION" : "PENDING";
+
+  type BookingInsert = {
+    customer_id: string;
+    partner_id: string | null;
+    patient_name: string;
+    phone: string;
+    service_category: string;
+    manual_address: string;
+    gps_location: { lat: number; lng: number; accuracy: number };
+    amount: number | null;
+    ops_notes: string | null;
+    scheduled_for: string | null;
+    status: BookingStatus;
+    selected_tests?: SelectedTest[];
+    test_total_paise?: number;
+    applied_coupon_code?: string | null;
+    coupon_discount_percent?: number | null;
+    coupon_discount_paise?: number | null;
+    final_amount_paise?: number;
+    lab_partner?: string;
+    report_payment_status?: string;
+  };
+
+  const bookingRow: BookingInsert = {
+    customer_id: customerId,
+    partner_id: partnerId,
+    patient_name: customerName,
+    phone: customerPhone,
+    service_category,
+    manual_address,
+    gps_location,
+    amount,
+    ops_notes: getString(formData, "ops_notes"),
+    scheduled_for,
+    status: initialStatus,
+  };
+
+  if (isDiagnostics) {
+    const testTotalRupees = selectedTests.reduce((s, t) => s + t.price, 0);
+    const testTotalPaise = Math.round(testTotalRupees * 100);
+    const couponDiscountPaise = appliedCoupon
+      ? Math.round(appliedCoupon.discount_inr * 100)
+      : 0;
+    const finalAmountPaise = Math.max(0, testTotalPaise - couponDiscountPaise);
+    bookingRow.selected_tests = selectedTests;
+    bookingRow.test_total_paise = testTotalPaise;
+    bookingRow.applied_coupon_code = appliedCoupon?.code ?? null;
+    bookingRow.coupon_discount_percent = appliedCoupon?.discount_percent ?? null;
+    bookingRow.coupon_discount_paise = couponDiscountPaise || null;
+    bookingRow.final_amount_paise = finalAmountPaise;
+    bookingRow.lab_partner = "pathcore";
+    bookingRow.report_payment_status = "NOT_DUE";
+    // For diagnostics, leave the legacy `amount` at 0 — the real number
+    // is in final_amount_paise, mirroring /api/lab/create-booking.
+    if (bookingRow.amount == null) bookingRow.amount = 0;
+  }
 
   const { data: inserted, error: bookingErr } = await supabase
     .from("bookings")
-    .insert({
-      customer_id: customerId,
-      partner_id: partnerId,
-      // Legacy inline columns — populated from customer so /ops/lab etc.
-      // continue to render the booking correctly.
-      patient_name: customerName,
-      phone: customerPhone,
-      // Booking-level fields
-      service_category,
-      manual_address,
-      amount,
-      ops_notes: getString(formData, "ops_notes"),
-      scheduled_for,
-      status: initialStatus,
-      // booking_code: NULL — trg_bookings_assign_code (migration 015)
-      // stamps SAN-B-NNNNN via next_code('booking').
-    })
+    .insert(bookingRow)
     .select("id")
     .single();
 

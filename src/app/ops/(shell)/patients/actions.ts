@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
+import { normaliseIndianPhone } from "@/lib/phone";
 import { getCurrentOpsUser } from "../../_lib/getCurrentOpsUser";
 
 function str(formData: FormData, key: string): string | null {
@@ -10,6 +11,24 @@ function str(formData: FormData, key: string): string | null {
   if (typeof v !== "string") return null;
   const trimmed = v.trim();
   return trimmed === "" ? null : trimmed;
+}
+
+/**
+ * Returns the canonical E.164 phone for a form field, or null if blank.
+ * Throws if the input is present but doesn't look like a valid Indian
+ * mobile — better to reject loud than silently store garbage that will
+ * later collide with the M016 UNIQUE constraint.
+ */
+function canonicalPhone(formData: FormData, key: string): string | null {
+  const raw = str(formData, key);
+  if (!raw) return null;
+  const e164 = normaliseIndianPhone(raw);
+  if (!e164) {
+    throw new Error(
+      `Phone number "${raw}" is not a valid Indian mobile. Use a 10-digit number starting 6-9, optionally with +91 / 91 / 0 prefix.`,
+    );
+  }
+  return e164;
 }
 
 export async function createCustomer(formData: FormData) {
@@ -33,7 +52,7 @@ export async function createCustomer(formData: FormData) {
     .insert({
       customer_code: code,
       full_name,
-      phone: str(formData, "phone"),
+      phone: canonicalPhone(formData, "phone"),
       email: str(formData, "email"),
       date_of_birth: str(formData, "date_of_birth"),
       gender: str(formData, "gender"),
@@ -81,7 +100,7 @@ export async function updateCustomer(formData: FormData) {
     .from("customers")
     .update({
       full_name,
-      phone: str(formData, "phone"),
+      phone: canonicalPhone(formData, "phone"),
       email: str(formData, "email"),
       date_of_birth: str(formData, "date_of_birth"),
       gender: str(formData, "gender"),

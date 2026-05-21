@@ -106,12 +106,20 @@ export async function POST(req: NextRequest) {
       auth: { persistSession: false },
     });
 
+    // If the patient's browser couldn't (or wouldn't) share their location,
+    // mark the booking so ops knows to collect address from them before
+    // dispatch. Never block the booking on a declined permission.
+    const opsNotesMarker = booking.gps_location
+      ? null
+      : "📍 Location auto-capture declined or unavailable — confirm address with patient before dispatch.";
+
     const insertPayload = {
       patient_name: String(booking.patient_name || "").trim(),
       phone: String(booking.phone || "").trim(),
       service_category: String(booking.service_category || "").trim(),
       manual_address: String(booking.manual_address || "").trim(),
       gps_location: booking.gps_location ?? null,
+      ops_notes: opsNotesMarker,
       amount: typeof booking.amount === "number" ? booking.amount : null,
       status: "CONFIRMED",
       // Payment fields — see migration 007_razorpay_payments.sql for schema.

@@ -62,6 +62,27 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
     }
   };
 
+  // Auto-trigger geolocation when the modal opens. If the patient grants
+  // permission we get a clean { lat, lng, accuracy } in the store; if they
+  // decline or it times out, we silently swallow the rejection so the
+  // booking is never blocked. The server-side insert path (verify /
+  // lab/create-booking) stamps an ops_notes marker when gps_location is
+  // null, so ops knows to collect the address manually.
+  useEffect(() => {
+    if (!isOpen) return;
+    if (isBookingForOther) return;       // GPS doesn't make sense for proxy bookings
+    if (gpsLocation) return;             // already captured this session
+    if (isLocating) return;              // a capture is already in flight
+    detectLocation().catch(() => {
+      // Permission denied / unavailable / timeout — non-fatal. The booking
+      // proceeds with whatever address the patient typed, and ops_notes
+      // gets a "📍 confirm address" marker on insert.
+    });
+    // detectLocation is stable from the hook; we only want this to fire on
+    // open transitions, not every store change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isBookingForOther]);
+
   // Phone number handler - keeps +91 prefix and allows only 10 digits after
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value;

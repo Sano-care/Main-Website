@@ -101,6 +101,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // If the patient's browser couldn't (or wouldn't) share their location,
+  // mark the booking so ops knows to collect address from them before the
+  // phlebo is dispatched. Never block the booking on a declined permission.
+  const opsNotesMarker = body.gps_location
+    ? null
+    : "📍 Location auto-capture declined or unavailable — confirm address with patient before dispatch.";
+
   const { data, error } = await supabase
     .from("bookings")
     .insert({
@@ -109,6 +116,7 @@ export async function POST(req: NextRequest) {
       service_category: "diagnostics",
       manual_address: address,
       gps_location: body.gps_location ?? null,
+      ops_notes: opsNotesMarker,
       status: "PENDING_COLLECTION",
       amount: 0,
       selected_tests: tests,
