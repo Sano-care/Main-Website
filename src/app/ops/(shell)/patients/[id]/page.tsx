@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
+import { ProfileCard } from "./ProfileCard";
 
 export const metadata: Metadata = {
   title: "Ops · Patient detail",
@@ -101,34 +102,7 @@ export default async function PatientDetailPage({
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
-        <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-3">
-          Profile
-        </div>
-        <div className="grid sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          <DetailRow label="Phone" value={customer.phone} mono />
-          <DetailRow label="Email" value={customer.email} />
-          <DetailRow
-            label="Date of birth"
-            value={
-              customer.date_of_birth
-                ? new Date(customer.date_of_birth).toLocaleDateString("en-IN")
-                : null
-            }
-          />
-          <DetailRow label="Gender" value={customer.gender} />
-          <DetailRow label="Address" value={customer.address_line} />
-          <DetailRow label="Area" value={customer.area} />
-          <DetailRow label="City" value={customer.city} />
-          <DetailRow label="Pincode" value={customer.pincode} mono />
-        </div>
-        {customer.notes && (
-          <div className="mt-5 pt-5 border-t border-slate-100">
-            <div className="text-xs text-slate-500 mb-1">Notes</div>
-            <div className="text-sm text-slate-800 whitespace-pre-wrap">{customer.notes}</div>
-          </div>
-        )}
-      </div>
+      <ProfileCard customer={customer} />
 
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-baseline justify-between">
@@ -172,8 +146,13 @@ export default async function PatientDetailPage({
                     : b.amount;
                 return (
                   <tr key={b.id} className="hover:bg-slate-50">
-                    <td className="px-5 py-3 font-mono text-xs text-slate-600">
-                      #{b.id.slice(0, 8)}
+                    <td className="px-5 py-3">
+                      <Link
+                        href={`/ops/bookings/${b.id}`}
+                        className="font-mono text-xs text-slate-900 hover:text-primary underline"
+                      >
+                        #{b.id.slice(0, 8)}
+                      </Link>
                     </td>
                     <td className="px-5 py-3 text-slate-600">
                       {new Date(b.created_at).toLocaleString("en-IN")}
@@ -200,25 +179,6 @@ export default async function PatientDetailPage({
             </tbody>
           </table>
         )}
-      </div>
-    </div>
-  );
-}
-
-function DetailRow({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string | null;
-  mono?: boolean;
-}) {
-  return (
-    <div>
-      <div className="text-xs text-slate-500">{label}</div>
-      <div className={"text-slate-900 " + (mono ? "font-mono text-sm" : "")}>
-        {value ?? "—"}
       </div>
     </div>
   );

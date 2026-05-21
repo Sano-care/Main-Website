@@ -2,6 +2,11 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Search, Plus } from "lucide-react";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
+import {
+  bookingAmountRupees,
+  classifyBookingPayment,
+  type BookingFinanceInput,
+} from "../../_lib/bookingFinance";
 
 export const metadata: Metadata = {
   title: "Ops · Patients",
@@ -20,9 +25,50 @@ type CustomerRow = {
   created_at: string;
 };
 
+type BookingForAgg = BookingFinanceInput & {
+  customer_id: string | null;
+  created_at: string;
+  service_category: string | null;
+};
+
+type CustomerAgg = {
+  bookingCount: number;
+  // The most recent booking's service_category. null if none / null on booking.
+  mostRecentService: string | null;
+  collectedRupees: number;
+  outstandingRupees: number;
+};
+
 // Strip characters that confuse the PostgREST `.or()` filter parser.
 function sanitizeSearch(q: string): string {
   return q.replace(/[%,()]/g, "").trim().slice(0, 100);
+}
+
+function aggregate(bookings: BookingForAgg[]): Map<string, CustomerAgg> {
+  // Assumes bookings is sorted by created_at DESC.
+  const agg = new Map<string, CustomerAgg>();
+  for (const b of bookings) {
+    if (!b.customer_id) continue;
+    let row = agg.get(b.customer_id);
+    if (!row) {
+      row = {
+        bookingCount: 0,
+        mostRecentService: null,
+        collectedRupees: 0,
+        outstandingRupees: 0,
+      };
+      agg.set(b.customer_id, row);
+    }
+    if (row.bookingCount === 0) {
+      row.mostRecentService = b.service_category;
+    }
+    row.bookingCount++;
+    const amount = bookingAmountRupees(b);
+    const cls = classifyBookingPayment(b);
+    if (cls === "collected") row.collectedRupees += amount;
+    else if (cls === "outstanding") row.outstandingRupees += amount;
+  }
+  return agg;
 }
 
 export default async function PatientsListPage({
@@ -44,11 +90,27 @@ export default async function PatientsListPage({
     );
   }
 
-  const { data, error } = await query
+  const { data: customerData, error } = await query
     .order("created_at", { ascending: false })
     .limit(200);
 
-  const customers = (data as CustomerRow[] | null) ?? [];
+  const customers = (customerData as CustomerRow[] | null) ?? [];
+
+  // Aggregate bookings per customer in one batched query.
+  let aggregates = new Map<string, CustomerAgg>();
+  if (customers.length > 0) {
+    const ids = customers.map((c) => c.id);
+    const { data: bookings } = await supabase
+      .from("bookings")
+      .select(
+        `customer_id, created_at, service_category, status, amount,
+         final_amount_paise, test_total_paise, booking_fee_paid_paise,
+         balance_paid_paise, payment_status, report_payment_status`,
+      )
+      .in("customer_id", ids)
+      .order("created_at", { ascending: false });
+    aggregates = aggregate((bookings as BookingForAgg[] | null) ?? []);
+  }
 
   return (
     <div className="px-8 py-8">
@@ -103,53 +165,104 @@ export default async function PatientsListPage({
               : "No patients yet. Run migration 013 to backfill from bookings, or click “New patient”."}
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr className="text-left">
-                <th className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-slate-500">
-                  Code
-                </th>
-                <th className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-slate-500">
-                  Name
-                </th>
-                <th className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-slate-500">
-                  Phone
-                </th>
-                <th className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-slate-500">
-                  Email
-                </th>
-                <th className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-slate-500">
-                  City
-                </th>
-                <th className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-slate-500">
-                  Created
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {customers.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-50">
-                  <td className="px-5 py-3">
-                    <Link
-                      href={`/ops/patients/${c.id}`}
-                      className="font-mono text-xs text-slate-900 hover:text-primary underline"
-                    >
-                      {c.customer_code}
-                    </Link>
-                  </td>
-                  <td className="px-5 py-3 font-medium text-slate-900">
-                    {c.full_name}
-                  </td>
-                  <td className="px-5 py-3 text-slate-600">{c.phone ?? "—"}</td>
-                  <td className="px-5 py-3 text-slate-600">{c.email ?? "—"}</td>
-                  <td className="px-5 py-3 text-slate-600">{c.city ?? "—"}</td>
-                  <td className="px-5 py-3 text-slate-500 text-xs">
-                    {new Date(c.created_at).toLocaleDateString("en-IN")}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr className="text-left">
+                  <th className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                    Code
+                  </th>
+                  <th className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                    Name
+                  </th>
+                  <th className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                    Service availed
+                  </th>
+                  <th className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-slate-500 text-right">
+                    Amount
+                  </th>
+                  <th className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                    Phone
+                  </th>
+                  <th className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                    Email
+                  </th>
+                  <th className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                    City
+                  </th>
+                  <th className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                    Created
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {customers.map((c) => {
+                  const a = aggregates.get(c.id);
+                  return (
+                    <tr key={c.id} className="hover:bg-slate-50">
+                      <td className="px-5 py-3">
+                        <Link
+                          href={`/ops/patients/${c.id}`}
+                          className="font-mono text-xs text-slate-900 hover:text-primary underline"
+                        >
+                          {c.customer_code}
+                        </Link>
+                      </td>
+                      <td className="px-5 py-3 font-medium text-slate-900 whitespace-nowrap">
+                        {c.full_name}
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        {a && a.bookingCount > 0 ? (
+                          <>
+                            <span className="text-slate-700">
+                              {a.mostRecentService ?? "—"}
+                            </span>
+                            {a.bookingCount > 1 && (
+                              <span className="ml-1.5 text-[10px] font-mono uppercase tracking-wider text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                +{a.bookingCount - 1}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-right whitespace-nowrap">
+                        {a && (a.collectedRupees > 0 || a.outstandingRupees > 0) ? (
+                          <div className="leading-tight">
+                            <div className="text-emerald-700 font-medium">
+                              ₹{a.collectedRupees.toLocaleString("en-IN")}
+                              <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-600/70 ml-1">
+                                collected
+                              </span>
+                            </div>
+                            {a.outstandingRupees > 0 && (
+                              <div className="text-rose-700 text-xs mt-0.5">
+                                ₹{a.outstandingRupees.toLocaleString("en-IN")}
+                                <span className="text-[10px] font-mono uppercase tracking-wider text-rose-600/70 ml-1">
+                                  due
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-slate-600 whitespace-nowrap">
+                        {c.phone ?? "—"}
+                      </td>
+                      <td className="px-5 py-3 text-slate-600">{c.email ?? "—"}</td>
+                      <td className="px-5 py-3 text-slate-600">{c.city ?? "—"}</td>
+                      <td className="px-5 py-3 text-slate-500 text-xs whitespace-nowrap">
+                        {new Date(c.created_at).toLocaleDateString("en-IN")}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
