@@ -61,17 +61,20 @@ export async function POST(req: NextRequest) {
     OTP_DEFAULT_CHANNEL: process.env.OTP_DEFAULT_CHANNEL ?? "(unset)",
     SMS_OTP_ENABLED: process.env.SMS_OTP_ENABLED ?? "(unset)",
     WHATSAPP_OTP_ENABLED: process.env.WHATSAPP_OTP_ENABLED ?? "(unset)",
+    RAMPWIN_OTP_ENABLED: process.env.RAMPWIN_OTP_ENABLED ?? "(unset)",
     bypassDispatch,
   });
 
-  // Resolve which channel string to STORE in otp_verifications.channel
-  // (the column has a CHECK constraint allowing only 'whatsapp' or 'sms').
+  // Resolve which channel string to STORE in otp_verifications.channel.
+  // The column's CHECK now allows 'whatsapp' | 'sms' | 'rampwin' (M017).
   // When bypass is on we skip the enable-flag check because no provider is
   // about to be called; the channel value is purely for the row.
   const channel: OtpChannel | null = bypassDispatch
-    ? requested === "whatsapp"
-      ? "whatsapp"
-      : "sms"
+    ? requested === "rampwin"
+      ? "rampwin"
+      : requested === "whatsapp"
+        ? "whatsapp"
+        : "sms"
     : resolveChannel(requested);
   if (!channel) {
     console.log("[send-otp] rejected: no usable channel", { requested });
@@ -219,13 +222,17 @@ export async function POST(req: NextRequest) {
 
 function resolveChannel(requested: string): OtpChannel | null {
   // Each channel is independently flagged so we can flip primary/secondary
-  // without touching code. While the WhatsApp WABA is restricted, set
-  // WHATSAPP_OTP_ENABLED=false so the channel is rejected even if a stale
-  // client asks for it. SMS is currently primary until the WABA clears.
-  const defaultChannel = (process.env.OTP_DEFAULT_CHANNEL ?? "sms") as OtpChannel;
+  // without touching code. M017 added 'rampwin' (WhatsApp via the Rampwin
+  // BSP) as a third option — confirmed working in live testing, configured
+  // as the new default while WABA-direct stays available as a fallback.
+  const defaultChannel = (process.env.OTP_DEFAULT_CHANNEL ?? "rampwin") as OtpChannel;
   const smsEnabled = process.env.SMS_OTP_ENABLED === "true";
-  const whatsappEnabled = process.env.WHATSAPP_OTP_ENABLED !== "false";
+  const whatsappEnabled = process.env.WHATSAPP_OTP_ENABLED === "true";
+  const rampwinEnabled = process.env.RAMPWIN_OTP_ENABLED === "true";
 
+  if (requested === "rampwin") {
+    return rampwinEnabled ? "rampwin" : null;
+  }
   if (requested === "sms") {
     return smsEnabled ? "sms" : null;
   }
@@ -233,12 +240,17 @@ function resolveChannel(requested: string): OtpChannel | null {
     return whatsappEnabled ? "whatsapp" : null;
   }
   // 'auto' — prefer the configured default if it's enabled, else fall back
-  // to whichever channel is enabled. Returns null if neither is enabled
-  // (caller surfaces a 400 with a useful message).
-  if (defaultChannel === "sms" && smsEnabled) return "sms";
+  // to whichever channel is enabled. Order of preference when nothing
+  // matches the default: rampwin > whatsapp > sms (WhatsApp providers
+  // first because the patient is in a WhatsApp-heavy market and the
+  // template message renders richer than SMS). Returns null if no channel
+  // is enabled (caller surfaces a 400 with a useful message).
+  if (defaultChannel === "rampwin" && rampwinEnabled) return "rampwin";
   if (defaultChannel === "whatsapp" && whatsappEnabled) return "whatsapp";
-  if (smsEnabled) return "sms";
+  if (defaultChannel === "sms" && smsEnabled) return "sms";
+  if (rampwinEnabled) return "rampwin";
   if (whatsappEnabled) return "whatsapp";
+  if (smsEnabled) return "sms";
   return null;
 }
 
