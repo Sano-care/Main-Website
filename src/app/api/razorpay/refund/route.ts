@@ -1,31 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getRazorpayClient } from "@/lib/razorpay";
+import { issueRefund, RefundError, type PaymentKind } from "@/lib/razorpay-refund";
 
 export const runtime = "nodejs";
 
 /**
- * POST /api/razorpay/refund
+ * POST /api/razorpay/refund — legacy token-protected refund endpoint.
  *
- * Ops endpoint to refund a Razorpay payment tied to a booking.
+ * Kept alive for existing Postman / curl scripts and any infra automation
+ * that integrated with it pre-M3. The new in-app refund flow lives at
+ * /ops/payments and uses the same underlying issueRefund() helper, so
+ * there is exactly one refund implementation across the codebase.
  *
- * Two refund flows:
+ * This route's contract has NOT changed for callers — same body, same
+ * response shape, same auth header. The legacy "homecare must be in
+ * PENDING/CONFIRMED" pre-check is preserved for backward compat. The
+ * lab-cancellation-without-payment branch (returns kind:'no_payment')
+ * is also preserved.
  *
- *   A. Booking-fee refund (home/nursing/teleconsult, before medic dispatch)
- *      — refunds the ₹249 partial-prepay captured at booking time.
- *      Allowed only while status is PENDING or CONFIRMED. Per CP3 policy.
- *
- *   B. Report-fee refund (lab tests, after report payment captured)
- *      — full refund of the test cost. Use when a sample was rejected by
- *      Pathcore or the patient disputes a charge.
+ * Flag for M7 hardening: this route uses a shared bearer token (no
+ * per-user attribution, no rate limit). The new ops admin path is the
+ * preferred channel.
  *
  * Body:
  *   { bookingId: string, reason?: string, partialAmountPaise?: number }
- *
  * Auth: `x-ops-token` header must match OPS_API_TOKEN env var.
  *
  * Returns:
- *   200 { ok: true, refundId, refundedAmountPaise, kind: "booking_fee" | "report_fee" }
+ *   200 { ok: true, refundId, refundedAmountPaise, kind }
+ *   200 { ok: true, kind: 'no_payment', message }  — lab cancel-before-pay
  *   400 / 401 / 404 / 500 with { error }
  */
 export async function POST(req: NextRequest) {
@@ -42,52 +45,51 @@ export async function POST(req: NextRequest) {
     if (!bookingId || typeof bookingId !== "string") {
       return NextResponse.json(
         { error: "bookingId is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !serviceRoleKey) {
       return NextResponse.json(
         { error: "Supabase server credentials missing" },
-        { status: 500 }
+        { status: 500 },
       );
     }
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false },
     });
 
+    // ---- Legacy pre-checks (preserved) ----
+    // The original endpoint enforced these business rules before calling
+    // Razorpay. Keeping them intact so existing automation behaves the
+    // same way; the ops admin UI path skips them deliberately (admin
+    // override).
     const { data: booking, error: fetchError } = await supabase
       .from("bookings")
       .select(
-        "id, status, service_category, razorpay_payment_id, payment_status, booking_fee_paid_paise, report_razorpay_payment_id, report_payment_status, final_amount_paise, test_total_paise"
+        "id, status, service_category, razorpay_payment_id, payment_status, report_razorpay_payment_id, report_payment_status",
       )
       .eq("id", bookingId)
       .single();
-
     if (fetchError || !booking) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
 
-    // === Determine which refund flow applies ===
-    let kind: "booking_fee" | "report_fee" | null = null;
-    let paymentId: string | null = null;
-    let refundablePaise = 0;
-
+    let paymentKind: PaymentKind;
     if (booking.service_category === "diagnostics") {
-      // Lab booking — refund the report payment (only if captured)
-      if (booking.report_payment_status === "CAPTURED" && booking.report_razorpay_payment_id) {
-        kind = "report_fee";
-        paymentId = booking.report_razorpay_payment_id;
-        refundablePaise =
-          booking.final_amount_paise || booking.test_total_paise || 0;
+      if (
+        booking.report_payment_status === "CAPTURED" &&
+        booking.report_razorpay_payment_id
+      ) {
+        paymentKind = "report_fee";
       } else if (
         booking.status === "PENDING_COLLECTION" ||
         booking.status === "COLLECTED" ||
         booking.status === "AT_LAB"
       ) {
-        // Lab booking with no payment captured yet — just cancel, nothing to refund
+        // No payment captured yet — original behaviour: just cancel.
         const { error: cancelError } = await supabase
           .from("bookings")
           .update({ status: "CANCELLED", report_payment_status: null })
@@ -95,7 +97,7 @@ export async function POST(req: NextRequest) {
         if (cancelError) {
           return NextResponse.json(
             { error: "Failed to cancel booking" },
-            { status: 500 }
+            { status: 500 },
           );
         }
         return NextResponse.json({
@@ -106,27 +108,19 @@ export async function POST(req: NextRequest) {
         });
       } else {
         return NextResponse.json(
-          {
-            error:
-              "Lab booking is not in a refundable state. Status: " +
-              booking.status,
-          },
-          { status: 400 }
+          { error: "Lab booking is not in a refundable state. Status: " + booking.status },
+          { status: 400 },
         );
       }
     } else {
-      // Home/nursing/teleconsult booking — refund the ₹249 booking fee
-      if (
-        booking.status !== "PENDING" &&
-        booking.status !== "CONFIRMED"
-      ) {
+      if (booking.status !== "PENDING" && booking.status !== "CONFIRMED") {
         return NextResponse.json(
           {
             error:
               "Refund not allowed once a medic has been dispatched. Status: " +
               booking.status,
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
       if (
@@ -135,101 +129,51 @@ export async function POST(req: NextRequest) {
       ) {
         return NextResponse.json(
           { error: "Booking fee was not captured — nothing to refund" },
-          { status: 400 }
+          { status: 400 },
         );
       }
-      kind = "booking_fee";
-      paymentId = booking.razorpay_payment_id;
-      refundablePaise = booking.booking_fee_paid_paise || 24_900;
+      paymentKind = "booking_fee";
     }
 
-    if (!kind || !paymentId) {
-      return NextResponse.json(
-        { error: "Could not determine refund kind" },
-        { status: 400 }
-      );
-    }
+    // ---- Delegate to the shared implementation ----
+    try {
+      const result = await issueRefund(supabase, {
+        bookingId,
+        paymentKind,
+        reason: reason || null,
+        partialAmountPaise:
+          typeof partialAmountPaise === "number" ? partialAmountPaise : null,
+        opsUserId: null, // legacy token route has no session attribution
+      });
 
-    // === Compute refund amount (full unless partial requested + valid) ===
-    let refundPaise = refundablePaise;
-    if (typeof partialAmountPaise === "number" && partialAmountPaise > 0) {
-      if (partialAmountPaise > refundablePaise) {
-        return NextResponse.json(
-          {
-            error:
-              "partialAmountPaise exceeds the captured payment amount",
-          },
-          { status: 400 }
-        );
+      // For homecare booking-fee refunds the legacy contract also moved
+      // the booking to CANCELLED — preserve that side-effect here, since
+      // issueRefund() itself doesn't touch booking lifecycle.
+      if (paymentKind === "booking_fee") {
+        await supabase
+          .from("bookings")
+          .update({ status: "CANCELLED" })
+          .eq("id", bookingId);
       }
-      refundPaise = partialAmountPaise;
+
+      return NextResponse.json({
+        ok: true,
+        refundId: result.refundId,
+        refundedAmountPaise: result.refundedAmountPaise,
+        kind: paymentKind,
+      });
+    } catch (e) {
+      if (e instanceof RefundError) {
+        const status = e.code === "db_write_failed" ? 500 : 400;
+        return NextResponse.json({ error: e.message }, { status });
+      }
+      throw e;
     }
-
-    // === Call Razorpay refund API ===
-    const razorpay = getRazorpayClient();
-    const refund = await razorpay.payments.refund(paymentId, {
-      amount: refundPaise,
-      speed: "normal", // 'optimum' is instant for eligible methods + a small fee
-      notes: {
-        booking_id: bookingId,
-        reason: reason || "Cancellation per Sanocare refund policy",
-        kind,
-      },
-    });
-
-    // === Persist refund state on the booking ===
-    const isPartial = refundPaise < refundablePaise;
-    const newPaymentStatus = isPartial ? "PARTIAL_REFUND" : "REFUNDED";
-
-    const updates: Record<string, unknown> = {
-      refund_id: refund.id,
-      refunded_at: new Date().toISOString(),
-      refund_amount_paise: refundPaise,
-    };
-    if (kind === "booking_fee") {
-      updates.payment_status = newPaymentStatus;
-      updates.status = "CANCELLED";
-    } else {
-      updates.report_payment_status = newPaymentStatus;
-      // Don't move status off REPORT_DELIVERED — patient may have already
-      // downloaded the report; refund is a financial-only event.
-    }
-
-    const { error: updateError } = await supabase
-      .from("bookings")
-      .update(updates)
-      .eq("id", bookingId);
-
-    if (updateError) {
-      // Refund was created at Razorpay; persistence failed. Important to log
-      // loudly because we now have an out-of-sync state requiring manual fix.
-      console.error(
-        "[razorpay/refund] CRITICAL: refund created at Razorpay but DB update failed",
-        { bookingId, refundId: refund.id, error: updateError }
-      );
-      return NextResponse.json(
-        {
-          error:
-            "Refund initiated at Razorpay but booking state failed to update. Check Razorpay dashboard for refund " +
-            refund.id +
-            " and reconcile manually.",
-          refundId: refund.id,
-        },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      ok: true,
-      refundId: refund.id,
-      refundedAmountPaise: refundPaise,
-      kind,
-    });
   } catch (err) {
     console.error("[razorpay/refund] error:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Refund failed" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

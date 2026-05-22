@@ -126,49 +126,119 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    if (eventType === "refund.processed" || eventType === "refund.created") {
+    if (
+      eventType === "refund.processed" ||
+      eventType === "refund.created" ||
+      eventType === "refund.failed"
+    ) {
       const refund = event?.payload?.refund?.entity;
       const refundId = refund?.id as string | undefined;
       const paymentId = refund?.payment_id as string | undefined;
       const amount = (refund?.amount as number) || 0;
+      const failed = eventType === "refund.failed";
+      // Razorpay sends 'pending' for refund.created on slower banks,
+      // 'processed' on refund.processed, and we map refund.failed to
+      // our 'failed' state.
+      const refundsStatus: "pending" | "processed" | "failed" = failed
+        ? "failed"
+        : eventType === "refund.processed"
+          ? "processed"
+          : "pending";
 
-      if (!paymentId) {
+      if (failed) {
+        console.error(
+          "[webhook refund.failed] needs ops attention",
+          refund?.id,
+          refund?.error_code,
+          refund?.error_description,
+        );
+      }
+
+      if (!refundId || !paymentId) {
         return NextResponse.json({ ok: true });
       }
 
-      // The refund could relate to either a booking-fee payment or a lab
-      // report payment. Try both update paths; harmless if neither matches.
-      await supabase
+      // ---- Find which booking + lane this refund belongs to ----
+      // Single round-trip with PostgREST's `or()`. The UNIQUE constraint
+      // added in M018 guarantees at most one match per lane.
+      const { data: bookingMatch } = await supabase
         .from("bookings")
-        .update({
-          refund_id: refundId,
-          refunded_at: new Date().toISOString(),
-          refund_amount_paise: amount,
-          payment_status: "REFUNDED",
-        })
-        .eq("razorpay_payment_id", paymentId);
+        .select("id, razorpay_payment_id, report_razorpay_payment_id")
+        .or(
+          `razorpay_payment_id.eq.${paymentId},report_razorpay_payment_id.eq.${paymentId}`,
+        )
+        .maybeSingle();
 
-      await supabase
-        .from("bookings")
-        .update({
-          refund_id: refundId,
-          refunded_at: new Date().toISOString(),
-          refund_amount_paise: amount,
-          report_payment_status: "REFUNDED",
-        })
-        .eq("report_razorpay_payment_id", paymentId);
+      if (bookingMatch) {
+        const kind: "booking_fee" | "report_fee" =
+          bookingMatch.razorpay_payment_id === paymentId
+            ? "booking_fee"
+            : "report_fee";
 
-      return NextResponse.json({ ok: true });
-    }
+        // Upsert the refunds row by razorpay_refund_id. Covers all four
+        // origins symmetrically:
+        //   - dashboard-issued refund -> webhook is the only writer (INSERT)
+        //   - ops UI -> refunds row already exists, webhook updates status
+        //   - legacy token route -> same as ops UI
+        //   - race / replay -> ON CONFLICT collapses to a single row
+        const { error: upsertErr } = await supabase
+          .from("refunds")
+          .upsert(
+            {
+              razorpay_refund_id: refundId,
+              booking_id: bookingMatch.id,
+              payment_kind: kind,
+              amount_paise: amount,
+              status: refundsStatus,
+              reason: refund?.notes?.reason ?? null,
+              // created_by intentionally NOT set here. Either the
+              // earlier INSERT (ops action) already set it, or it stays
+              // NULL because this refund originated outside the app.
+            },
+            { onConflict: "razorpay_refund_id" },
+          );
+        if (upsertErr) {
+          console.error(
+            "[webhook refund] refunds upsert failed",
+            refundId,
+            upsertErr,
+          );
+        }
+      } else {
+        console.warn(
+          "[webhook refund] no booking matches paymentId",
+          paymentId,
+          "refundId",
+          refundId,
+        );
+      }
 
-    if (eventType === "refund.failed") {
-      const refund = event?.payload?.refund?.entity;
-      console.error(
-        "[webhook refund.failed] needs ops attention",
-        refund?.id,
-        refund?.error_code,
-        refund?.error_description
-      );
+      // ---- Legacy bookings mirror — unchanged behaviour ----
+      // Even on refund.failed we DON'T flip bookings.payment_status, since
+      // a failed refund means the original capture is still good. Only
+      // processed/created refunds update the bookings inline mirror.
+      if (!failed) {
+        await supabase
+          .from("bookings")
+          .update({
+            refund_id: refundId,
+            refunded_at: new Date().toISOString(),
+            refund_amount_paise: amount,
+            payment_status: "REFUNDED",
+          })
+          .eq("razorpay_payment_id", paymentId);
+
+        await supabase
+          .from("bookings")
+          .update({
+            refund_id: refundId,
+            refunded_at: new Date().toISOString(),
+            refund_amount_paise: amount,
+            report_payment_status: "REFUNDED",
+          })
+          .eq("report_razorpay_payment_id", paymentId);
+      }
+
       return NextResponse.json({ ok: true });
     }
 
