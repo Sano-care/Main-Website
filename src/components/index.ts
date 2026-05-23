@@ -11,3 +11,4 @@ export { MobileStickyBar } from "./MobileStickyBar";
 export { FloatingSidebar } from "./FloatingSidebar";
 export { TopBanner } from "./TopBanner";
 export { SanocareAdvantage } from "./SanocareAdvantage";
+export { HomeGalleryBanner } from "./HomeGalleryBanner";
