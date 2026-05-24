@@ -40,10 +40,17 @@ export type DoctorLedgerEntryWithBalance = DoctorLedgerEntry & {
 /**
  * Fetch the current doctor's ledger entries, oldest-first. The caller
  * typically walks this to compute running balances; for a newest-first
- * UI render, see getDoctorLedgerForDisplay() below.
+ * UI render, see getDoctorLedger() below.
  *
  * Limit 500 matches /ops/doctors/[id] — keeps the page bounded; if a
  * doctor ever exceeds this we'll paginate (not in C1's scope).
+ *
+ * Errors THROW (no silent empty-array fallback). A transient Supabase
+ * failure surfacing as an apparent "₹0 ledger" would be misleading and
+ * dangerous — the doctor might think they've been wiped. Throwing lets
+ * Next.js render the route's error boundary so the doctor sees an
+ * unambiguous "something went wrong, refresh / contact ops" surface
+ * instead of false zero figures.
  */
 export const getDoctorLedgerOldestFirst = cache(async (): Promise<DoctorLedgerEntry[]> => {
   const doctor = await getCurrentDoctor();
@@ -58,7 +65,9 @@ export const getDoctorLedgerOldestFirst = cache(async (): Promise<DoctorLedgerEn
     .limit(500);
   if (error) {
     console.error("[getDoctorLedgerOldestFirst] supabase error:", error);
-    return [];
+    throw new Error(
+      `Could not load ledger for doctor ${doctor.doctor_code}: ${error.message}`,
+    );
   }
   return (data as DoctorLedgerEntry[] | null) ?? [];
 });
