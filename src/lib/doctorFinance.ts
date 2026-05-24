@@ -1,6 +1,8 @@
 // Helpers for computing doctor financial figures from the append-only
-// ledger. The same shapes are used by /ops/doctors (list summary) and
-// the detail page header.
+// ledger. Shared across surfaces: /ops/doctors (list + detail), /doctor
+// (the doctor's own home). Originally lived under src/app/ops/_lib/;
+// promoted to src/lib/ in C1 once /doctor became a second caller so the
+// shared module isn't reaching into an /ops private folder.
 //
 // Definitions:
 //   - total_earned   = gross of revenue_share | commission | daily_wage |

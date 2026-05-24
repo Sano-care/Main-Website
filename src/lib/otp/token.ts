@@ -23,6 +23,19 @@ export const OTP_RESEND_COOLDOWN_SECONDS = 30;
 
 export const VERIFY_COOKIE_NAME = "sanocare_otp_verify";
 
+// ===== Doctor session (C1) =====
+// Distinct cookie name so a single browser can carry a patient verify
+// cookie and a doctor session cookie without collision, and so the
+// doctor-side verify path cannot be satisfied by a stolen patient cookie
+// (different cookie name + kind discriminator in the payload, see below).
+export const DOCTOR_SESSION_COOKIE_NAME = "sanocare_doctor_session";
+
+// 8 hours — a typical working shift. Longer than the patient verify
+// token (30 min) because /doctor is a working surface, not a one-shot
+// booking submission. Shorter than a week so a stolen device times out
+// without admin intervention.
+export const DOCTOR_TOKEN_TTL_SECONDS = 8 * 60 * 60;
+
 /** Normalise any phone input to E.164 with +91 prefix. Returns null if invalid. */
 export function normaliseIndianPhone(input: string): string | null {
   const digits = input.replace(/\D/g, "");
@@ -126,4 +139,79 @@ function requireEnv(name: string): string {
     throw new Error(`Missing required env var: ${name}.`);
   }
   return value;
+}
+
+// ===== Doctor session token (C1) =====
+// Same HMAC-SHA256 mechanism + same OTP_TOKEN_SECRET as the patient
+// verify token, distinguished by:
+//   1. A `kind: "doctor"` discriminator in the payload — verifyDoctorToken
+//      rejects any token without it, so a patient verify token replayed
+//      under DOCTOR_SESSION_COOKIE_NAME cannot satisfy the doctor verifier.
+//   2. The doctor_id field — verifyDoctorToken requires a uuid-shaped value.
+// The shared secret keeps env-var management simple; the kind discriminator
+// is the actual cross-replay defence.
+
+interface DoctorTokenPayload {
+  kind: "doctor";
+  doctor_id: string;
+  phone: string;
+  verifiedAt: number; // unix seconds
+  exp: number; // unix seconds
+}
+
+export function mintDoctorToken(input: { doctor_id: string; phone: string }): string {
+  const now = Math.floor(Date.now() / 1000);
+  const payload: DoctorTokenPayload = {
+    kind: "doctor",
+    doctor_id: input.doctor_id,
+    phone: input.phone,
+    verifiedAt: now,
+    exp: now + DOCTOR_TOKEN_TTL_SECONDS,
+  };
+  const encodedPayload = b64url(JSON.stringify(payload));
+  const sig = sign(encodedPayload);
+  return `${encodedPayload}.${sig}`;
+}
+
+export interface VerifiedDoctorToken {
+  doctor_id: string;
+  phone: string;
+  verifiedAt: number;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Returns the verified doctor session payload if the token is well-formed,
+ * signed, still within TTL, AND carries the `kind: "doctor"` discriminator.
+ * Returns null on any failure — never throws so callers can keep a uniform
+ * "reject with 401 / redirect to /doctor/login" path.
+ */
+export function verifyDoctorToken(token: string | undefined | null): VerifiedDoctorToken | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [encodedPayload, providedSig] = parts;
+  const expectedSig = sign(encodedPayload);
+  if (providedSig.length !== expectedSig.length) return null;
+  if (!timingSafeEqual(Buffer.from(providedSig), Buffer.from(expectedSig))) {
+    return null;
+  }
+  let payload: Partial<DoctorTokenPayload>;
+  try {
+    payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+  if (!payload || payload.kind !== "doctor") return null;
+  if (typeof payload.doctor_id !== "string" || !UUID_RE.test(payload.doctor_id)) return null;
+  if (typeof payload.phone !== "string") return null;
+  if (typeof payload.exp !== "number") return null;
+  if (typeof payload.verifiedAt !== "number") return null;
+  if (Math.floor(Date.now() / 1000) >= payload.exp) return null;
+  return {
+    doctor_id: payload.doctor_id,
+    phone: payload.phone,
+    verifiedAt: payload.verifiedAt,
+  };
 }

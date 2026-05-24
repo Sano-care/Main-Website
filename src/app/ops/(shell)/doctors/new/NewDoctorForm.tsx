@@ -48,9 +48,32 @@ export function NewDoctorForm() {
             name="registration_no"
             placeholder="State council reg #"
           />
-          <Field label="Phone" name="phone" type="tel" placeholder="10-digit Indian mobile" />
+          <Field
+            label="Phone *"
+            name="phone"
+            type="tel"
+            required
+            placeholder="10-digit Indian mobile"
+          />
         </Row>
         <Field label="Email" name="email" type="email" />
+      </fieldset>
+
+      {/* ============================== Duty Room ============================== */}
+      <fieldset className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+        <legend className="px-2 text-[11px] font-mono uppercase tracking-wider text-slate-500">
+          Duty Room
+        </legend>
+        <Field
+          label="Zoom Duty Room link"
+          name="duty_room_join_url"
+          type="url"
+          placeholder="https://zoom.us/j/… (paste the doctor's Personal Meeting Room URL)"
+        />
+        <p className="text-xs text-slate-500">
+          Optional for now — leave blank if Zoom isn&apos;t set up yet. The doctor&apos;s
+          /doctor home will show a graceful fallback until you paste this in.
+        </p>
       </fieldset>
 
       {/* ============================== Pay model ============================== */}

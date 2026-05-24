@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { Search, Plus } from "lucide-react";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
 import { getCurrentOpsUser } from "../../_lib/getCurrentOpsUser";
-import { computeDoctorFigures, rupees } from "../../_lib/doctorFinance";
+import { computeDoctorFigures, rupees } from "@/lib/doctorFinance";
 
 export const metadata: Metadata = {
   title: "Ops · Doctors",
