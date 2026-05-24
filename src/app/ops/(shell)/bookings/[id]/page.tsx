@@ -16,6 +16,7 @@ import {
   saveOpsNotes,
   linkCustomer,
   linkPartner,
+  assignDoctor,
 } from "../actions";
 
 export const metadata: Metadata = {
@@ -64,6 +65,7 @@ type BookingDetail = {
   ops_notes: string | null;
   customer_id: string | null;
   partner_id: string | null;
+  doctor_id: string | null;
   customer: {
     id: string;
     customer_code: string;
@@ -77,6 +79,19 @@ type BookingDetail = {
     name: string;
     partner_type: string;
   } | null;
+  doctor: {
+    id: string;
+    doctor_code: string;
+    full_name: string;
+    doctor_type: "freelancer" | "salaried";
+  } | null;
+};
+
+type ActiveDoctor = {
+  id: string;
+  doctor_code: string;
+  full_name: string;
+  doctor_type: "freelancer" | "salaried";
 };
 
 function rupeesFor(b: BookingDetail): number | null {
@@ -106,22 +121,31 @@ export default async function BookingDetailPage({
   const { id } = await params;
   const supabase = await createOpsRSCClient();
 
-  const { data } = await supabase
-    .from("bookings")
-    .select(
-      `id, booking_code, created_at, patient_name, phone, service_category,
-       specific_ailment, manual_address, status, amount, final_amount_paise,
-       test_total_paise, payment_status, report_payment_status, scheduled_for,
-       assigned_at, dispatched_at, completed_at, cancelled_at,
-       cancellation_reason, notes, ops_notes, customer_id, partner_id,
-       customer:customers ( id, customer_code, full_name, phone, email ),
-       partner:partners ( id, partner_code, name, partner_type )`,
-    )
-    .eq("id", id)
-    .maybeSingle();
+  const [{ data }, { data: doctorsData }] = await Promise.all([
+    supabase
+      .from("bookings")
+      .select(
+        `id, booking_code, created_at, patient_name, phone, service_category,
+         specific_ailment, manual_address, status, amount, final_amount_paise,
+         test_total_paise, payment_status, report_payment_status, scheduled_for,
+         assigned_at, dispatched_at, completed_at, cancelled_at,
+         cancellation_reason, notes, ops_notes, customer_id, partner_id, doctor_id,
+         customer:customers ( id, customer_code, full_name, phone, email ),
+         partner:partners ( id, partner_code, name, partner_type ),
+         doctor:doctors ( id, doctor_code, full_name, doctor_type )`,
+      )
+      .eq("id", id)
+      .maybeSingle(),
+    supabase
+      .from("doctors")
+      .select("id, doctor_code, full_name, doctor_type")
+      .eq("is_active", true)
+      .order("full_name", { ascending: true }),
+  ]);
 
   const booking = data as BookingDetail | null;
   if (!booking) notFound();
+  const activeDoctors = (doctorsData as ActiveDoctor[] | null) ?? [];
 
   const rupees = rupeesFor(booking);
   const isCancelled = booking.status === "CANCELLED";
@@ -333,6 +357,75 @@ export default async function BookingDetailPage({
             Save
           </button>
         </form>
+      </div>
+
+      {/* Assigned doctor — added in M4. Any ops user can assign; the
+          revenue_share / commission auto-post happens later when status
+          flips to COMPLETED via the M019 trigger. */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
+        <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-3">
+          Assigned doctor
+        </div>
+        {booking.doctor ? (
+          <div>
+            <Link
+              href={`/ops/doctors/${booking.doctor.id}`}
+              className="text-base font-semibold text-slate-900 hover:text-primary underline"
+            >
+              {booking.doctor.full_name}
+            </Link>
+            <div className="text-sm text-slate-500 mt-0.5">
+              <span className="font-mono">{booking.doctor.doctor_code}</span>
+              {" · "}
+              {booking.doctor.doctor_type}
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm text-slate-500">
+            No doctor assigned yet.
+          </div>
+        )}
+        <form action={assignDoctor} className="flex flex-wrap items-end gap-2 mt-4 pt-4 border-t border-slate-100">
+          <input type="hidden" name="booking_id" value={booking.id} />
+          <div className="grow min-w-[260px]">
+            <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-1">
+              {booking.doctor ? "Reassign" : "Assign doctor"}
+            </label>
+            <select
+              name="doctor_id"
+              defaultValue={booking.doctor_id ?? ""}
+              className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+            >
+              <option value="">— Unassigned —</option>
+              {activeDoctors.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.doctor_code} · {d.full_name} ({d.doctor_type})
+                </option>
+              ))}
+            </select>
+            {activeDoctors.length === 0 && (
+              <p className="text-[11px] text-slate-500 mt-1">
+                No active doctors. Add one from{" "}
+                <Link href="/ops/doctors" className="underline">
+                  /ops/doctors
+                </Link>
+                .
+              </p>
+            )}
+          </div>
+          <button
+            type="submit"
+            className="bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+          >
+            Save
+          </button>
+        </form>
+        {booking.status !== "COMPLETED" && booking.doctor && (
+          <p className="text-[11px] text-slate-500 mt-3">
+            Earning will post to the doctor&apos;s ledger when this booking
+            is marked <span className="font-mono">COMPLETED</span>.
+          </p>
+        )}
       </div>
 
       {/* Actions: status, schedule, cancel */}

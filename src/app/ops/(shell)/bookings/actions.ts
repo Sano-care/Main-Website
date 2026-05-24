@@ -462,6 +462,53 @@ export async function linkPartner(formData: FormData) {
   revalidateBooking(bookingId);
 }
 
+/**
+ * Assign a doctor to a booking (M4). Any ops user — admin or agent —
+ * can call this; it's an UPDATE on bookings under the existing M2 booking
+ * RLS (which allows authenticated ops UPDATE). The earning posts to the
+ * doctor ledger only later, when the booking is marked COMPLETED — that
+ * transition is handled by the trg_bookings_doctor_earnings trigger
+ * installed in M019, not by this action.
+ *
+ * Accepts the doctor's UUID. An empty/missing value unassigns
+ * (doctor_id → null).
+ */
+export async function assignDoctor(formData: FormData) {
+  await getCurrentOpsUser(); // any ops user
+  const bookingId = getRequired(formData, "booking_id");
+
+  const target = getString(formData, "doctor_id");
+  let doctor_id: string | null = null;
+  if (target) {
+    if (!UUID_RE.test(target)) {
+      throw new Error("Invalid doctor id.");
+    }
+    // Re-fetch to confirm the doctor exists + is active. RLS-readable to
+    // any ops user. Re-fetching prevents a stale client from assigning a
+    // doctor that was deactivated since the page was rendered.
+    const supabase = await createOpsRSCClient();
+    const { data: doc } = await supabase
+      .from("doctors")
+      .select("id, is_active")
+      .eq("id", target)
+      .maybeSingle();
+    if (!doc) throw new Error("Doctor not found.");
+    if (!doc.is_active) {
+      throw new Error("That doctor is inactive — pick an active one.");
+    }
+    doctor_id = doc.id;
+  }
+
+  const supabase = await createOpsRSCClient();
+  const { error } = await supabase
+    .from("bookings")
+    .update({ doctor_id })
+    .eq("id", bookingId);
+  if (error) throw new Error(`Could not assign doctor: ${error.message}`);
+
+  revalidateBooking(bookingId);
+}
+
 type SelectedTest = {
   code: string;
   name: string;
