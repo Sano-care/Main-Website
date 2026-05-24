@@ -81,6 +81,42 @@ function canonicalPhoneOrNull(formData: FormData, key: string): string | null {
   return e164;
 }
 
+/**
+ * C1: phone is now REQUIRED on doctor create / update because it's the
+ * doctor's /doctor login key (one row per phone, doctors_phone_unique
+ * from migration 020). Existing rows that pre-date C1 may have NULL
+ * phones in the DB — the form preloads them empty and the admin must
+ * fill one in before saving.
+ */
+function reqCanonicalPhone(formData: FormData, key: string): string {
+  const v = canonicalPhoneOrNull(formData, key);
+  if (!v) {
+    throw new Error(
+      "Phone is required — doctors sign in to /doctor with their phone, so we need a valid one on file.",
+    );
+  }
+  return v;
+}
+
+/**
+ * C1: the doctor's Zoom Duty Room join URL. Optional (NULL = "not set up
+ * yet"; the /doctor home shows a graceful fallback). When provided, must
+ * start with http:// or https:// — anything else is almost certainly a
+ * typo (Zoom links are always https). No deeper Zoom-shape check in C1;
+ * C2 will validate against the actual Zoom REST API when the meeting
+ * integration lands.
+ */
+function dutyRoomUrlOrNull(formData: FormData, key: string): string | null {
+  const raw = str(formData, key);
+  if (!raw) return null;
+  if (!/^https?:\/\//i.test(raw)) {
+    throw new Error(
+      "Duty Room link should start with https:// (paste the full Zoom Personal Meeting Room URL).",
+    );
+  }
+  return raw;
+}
+
 // =====================================================================
 // createDoctor — admin only
 // =====================================================================
@@ -134,7 +170,7 @@ export async function createDoctor(formData: FormData) {
       full_name,
       qualification: str(formData, "qualification"),
       registration_no: str(formData, "registration_no"),
-      phone: canonicalPhoneOrNull(formData, "phone"),
+      phone: reqCanonicalPhone(formData, "phone"),
       email: str(formData, "email"),
       doctor_type,
       revenue_share_pct,
@@ -142,6 +178,7 @@ export async function createDoctor(formData: FormData) {
       commission_per_visit_paise,
       overtime_hourly_paise,
       pay_notes: str(formData, "pay_notes"),
+      duty_room_join_url: dutyRoomUrlOrNull(formData, "duty_room_join_url"),
       created_by: opsUserId,
     })
     .select("id")
@@ -205,7 +242,7 @@ export async function updateDoctor(formData: FormData) {
       full_name,
       qualification: str(formData, "qualification"),
       registration_no: str(formData, "registration_no"),
-      phone: canonicalPhoneOrNull(formData, "phone"),
+      phone: reqCanonicalPhone(formData, "phone"),
       email: str(formData, "email"),
       doctor_type,
       revenue_share_pct,
@@ -213,6 +250,7 @@ export async function updateDoctor(formData: FormData) {
       commission_per_visit_paise,
       overtime_hourly_paise,
       pay_notes: str(formData, "pay_notes"),
+      duty_room_join_url: dutyRoomUrlOrNull(formData, "duty_room_join_url"),
       is_active,
     })
     .eq("id", id);

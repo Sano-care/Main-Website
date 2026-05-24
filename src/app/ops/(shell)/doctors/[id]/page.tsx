@@ -32,6 +32,7 @@ type Doctor = {
   commission_per_visit_paise: number | null;
   overtime_hourly_paise: number | null;
   pay_notes: string | null;
+  duty_room_join_url: string | null;
   is_active: boolean;
   created_at: string;
 };
@@ -89,7 +90,7 @@ export default async function DoctorDetailPage({
     supabase
       .from("doctors")
       .select(
-        "id, doctor_code, full_name, qualification, registration_no, phone, email, doctor_type, revenue_share_pct, daily_wage_paise, commission_per_visit_paise, overtime_hourly_paise, pay_notes, is_active, created_at",
+        "id, doctor_code, full_name, qualification, registration_no, phone, email, doctor_type, revenue_share_pct, daily_wage_paise, commission_per_visit_paise, overtime_hourly_paise, pay_notes, duty_room_join_url, is_active, created_at",
       )
       .eq("id", id)
       .maybeSingle(),

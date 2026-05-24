@@ -18,6 +18,7 @@ type Doctor = {
   commission_per_visit_paise: number | null;
   overtime_hourly_paise: number | null;
   pay_notes: string | null;
+  duty_room_join_url: string | null;
   is_active: boolean;
 };
 
@@ -89,9 +90,31 @@ export function EditDoctorCard({
           </Row>
           <Row>
             <Field label="Registration no." name="registration_no" defaultValue={doctor.registration_no ?? ""} />
-            <Field label="Phone" name="phone" type="tel" defaultValue={doctor.phone ?? ""} />
+            <Field
+              label="Phone *"
+              name="phone"
+              type="tel"
+              required
+              defaultValue={doctor.phone ?? ""}
+            />
           </Row>
           <Field label="Email" name="email" type="email" defaultValue={doctor.email ?? ""} />
+
+          <div className="pt-3 border-t border-slate-100 space-y-2">
+            <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
+              Duty Room
+            </div>
+            <Field
+              label="Zoom Duty Room link"
+              name="duty_room_join_url"
+              type="url"
+              defaultValue={doctor.duty_room_join_url ?? ""}
+            />
+            <p className="text-xs text-slate-500">
+              Paste the doctor&apos;s Zoom Personal Meeting Room URL. Leave blank
+              until Zoom is provisioned — their /doctor home will show a fallback.
+            </p>
+          </div>
 
           <div className="pt-3 border-t border-slate-100 space-y-3">
             <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
@@ -221,6 +244,22 @@ export function EditDoctorCard({
         <DetailRow label="Registration no." value={doctor.registration_no} mono />
         <DetailRow label="Phone" value={doctor.phone} mono />
         <DetailRow label="Email" value={doctor.email} />
+      </div>
+
+      <div className="mt-5 pt-5 border-t border-slate-100">
+        <div className="text-xs text-slate-500 mb-1">Zoom Duty Room link</div>
+        {doctor.duty_room_join_url ? (
+          <a
+            href={doctor.duty_room_join_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-slate-900 underline decoration-slate-300 hover:decoration-slate-900 break-all"
+          >
+            {doctor.duty_room_join_url}
+          </a>
+        ) : (
+          <div className="text-sm text-slate-400">— (not set up yet)</div>
+        )}
       </div>
 
       {doctor.pay_notes && (
