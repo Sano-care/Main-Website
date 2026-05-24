@@ -1,4 +1,4 @@
-import { rupees } from "@/app/ops/_lib/doctorFinance";
+import { rupees } from "@/lib/doctorFinance";
 
 /**
  * The three headline figures shown above the ledger. Mirrors the cards on

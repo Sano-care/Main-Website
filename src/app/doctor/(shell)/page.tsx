@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { getCurrentDoctor } from "../_lib/getCurrentDoctor";
 import { getDoctorLedger } from "../_lib/doctorData";
-import { computeDoctorFigures, rupees } from "@/app/ops/_lib/doctorFinance";
+import { computeDoctorFigures, rupees } from "@/lib/doctorFinance";
 import { DoctorFiguresGrid } from "../_components/DoctorFiguresGrid";
 import { DoctorLedgerTable } from "../_components/DoctorLedgerTable";
 import { EnterDutyRoomButton } from "../_components/EnterDutyRoomButton";

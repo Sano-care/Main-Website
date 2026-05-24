@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
 import { getCurrentOpsUser } from "../../../_lib/getCurrentOpsUser";
-import { computeDoctorFigures, rupees } from "../../../_lib/doctorFinance";
+import { computeDoctorFigures, rupees } from "@/lib/doctorFinance";
 import { EditDoctorCard } from "./EditDoctorCard";
 import { AttendanceSection } from "./AttendanceSection";
 import { AdminActions } from "./AdminActions";

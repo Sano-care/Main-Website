@@ -1,4 +1,4 @@
-import { rupees } from "@/app/ops/_lib/doctorFinance";
+import { rupees } from "@/lib/doctorFinance";
 import type { DoctorLedgerEntryWithBalance } from "../_lib/doctorData";
 
 /**
