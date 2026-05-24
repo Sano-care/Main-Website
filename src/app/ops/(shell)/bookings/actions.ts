@@ -10,6 +10,11 @@ import {
   SERVICE_CATEGORIES,
   type BookingStatus,
 } from "../../_lib/bookingStatus";
+import {
+  generateConsultJoinToken,
+  defaultJoinTokenExpiry,
+} from "@/lib/consult/tokens";
+import { sendConsultJoinLink } from "@/lib/consult/rampwin";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SAN_C_RE = /^SAN-C-\d+$/i;
@@ -303,7 +308,44 @@ export async function changeStatus(formData: FormData) {
     throw new Error(`Could not update status: ${error.message}`);
   }
 
+  // C2: keep the linked consultation_session.status in sync with the
+  // terminal booking states. The doctor queue on /doctor filters by
+  // session status, so a teleconsult that was completed in Zoom but
+  // whose session row is still 'scheduled' would otherwise haunt the
+  // queue forever. C3's meeting.ended webhook will update this directly
+  // and this side-effect can be removed then.
+  if (newStatus === "COMPLETED") {
+    await mirrorSessionStatus(supabase, bookingId, "completed");
+  }
+
   revalidateBooking(bookingId);
+}
+
+/**
+ * Mirror a booking's terminal status onto its linked
+ * consultation_session, if any. No-op for non-teleconsult bookings
+ * (no session row exists). Failures log but don't throw — the booking
+ * update is the load-bearing operation; the session UI cleanliness is
+ * cosmetic.
+ */
+async function mirrorSessionStatus(
+  supabase: Awaited<ReturnType<typeof createOpsRSCClient>>,
+  bookingId: string,
+  status: "completed" | "cancelled",
+): Promise<void> {
+  const { error } = await supabase
+    .from("consultation_sessions")
+    .update({
+      status,
+      ...(status === "completed" ? { ended_at: new Date().toISOString() } : {}),
+    })
+    .eq("booking_id", bookingId);
+  if (error) {
+    console.warn(
+      `[mirrorSessionStatus] could not update session for booking ${bookingId} -> ${status} (non-fatal):`,
+      error,
+    );
+  }
 }
 
 /**
@@ -353,6 +395,9 @@ export async function cancelBooking(formData: FormData) {
     })
     .eq("id", bookingId);
   if (error) throw new Error(`Could not cancel: ${error.message}`);
+
+  // C2: mirror onto the linked consultation_session, if any.
+  await mirrorSessionStatus(supabase, bookingId, "cancelled");
 
   revalidateBooking(bookingId);
 }
@@ -601,6 +646,52 @@ export async function createBooking(formData: FormData) {
     throw new Error(`Invalid service: ${service_category}`);
   }
 
+  // C2: teleconsult requires a doctor at create time. The
+  // consultation_sessions FK is NOT NULL, so we can't defer this to
+  // assignDoctor() the way the other modalities do. Read + validate
+  // here so the booking insert below can carry the doctor_id atomically.
+  let teleconsultDoctor: {
+    id: string;
+    full_name: string;
+    duty_room_join_url: string | null;
+  } | null = null;
+  if (service_category === "teleconsult") {
+    const doctor_id = getString(formData, "doctor_id");
+    if (!doctor_id || !UUID_RE.test(doctor_id)) {
+      throw new Error(
+        "Pick a doctor for the teleconsultation — the patient's join link routes to their Duty Room.",
+      );
+    }
+    const supabasePre = await createOpsRSCClient();
+    type DocRow = {
+      id: string;
+      full_name: string;
+      duty_room_join_url: string | null;
+      is_active: boolean;
+    };
+    const { data: docRow } = await supabasePre
+      .from("doctors")
+      .select("id, full_name, duty_room_join_url, is_active")
+      .eq("id", doctor_id)
+      .maybeSingle();
+    const doc = (docRow as DocRow | null) ?? null;
+    if (!doc) {
+      throw new Error("Doctor not found.");
+    }
+    if (!doc.is_active) {
+      throw new Error("That doctor is inactive — pick an active one.");
+    }
+    // doc.duty_room_join_url may be NULL — we still create the session,
+    // and the /c/[token] page surfaces a graceful "not set up yet"
+    // fallback. Ops gets the booking created (so the customer isn't
+    // dropped) plus a clear next step.
+    teleconsultDoctor = {
+      id: doc.id,
+      full_name: doc.full_name,
+      duty_room_join_url: doc.duty_room_join_url,
+    };
+  }
+
   // Location is mandatory; manual_address (flat / floor / landmark) is not.
   const gps_location = parseGpsLocation(formData);
   const manual_address = getString(formData, "manual_address") ?? "";
@@ -790,6 +881,7 @@ export async function createBooking(formData: FormData) {
     ops_notes: string | null;
     scheduled_for: string | null;
     status: BookingStatus;
+    doctor_id?: string;
     selected_tests?: SelectedTest[];
     test_total_paise?: number;
     applied_coupon_code?: string | null;
@@ -813,6 +905,13 @@ export async function createBooking(formData: FormData) {
     scheduled_for,
     status: initialStatus,
   };
+
+  // Teleconsult sets doctor_id at booking-create time so M4's earning
+  // trigger has the right doctor on file when the booking later
+  // transitions to COMPLETED.
+  if (teleconsultDoctor) {
+    bookingRow.doctor_id = teleconsultDoctor.id;
+  }
 
   if (isDiagnostics) {
     const testTotalRupees = selectedTests.reduce((s, t) => s + t.price, 0);
@@ -842,6 +941,88 @@ export async function createBooking(formData: FormData) {
 
   if (bookingErr || !inserted) {
     throw new Error(`Could not create booking: ${bookingErr?.message ?? "unknown"}`);
+  }
+
+  // ----------------------------------------------------------------
+  // C2: teleconsult side-effects — consultation_session + patient
+  // participant + Rampwin join-link delivery. Runs only when
+  // teleconsultDoctor was resolved above.
+  //
+  // Failure posture:
+  //   - Session insert failure THROWS — the booking row exists but the
+  //     consultation didn't materialise; ops sees the error and can
+  //     clean up. (We don't roll back the booking automatically because
+  //     RLS / triggers can fire side-effects we don't want to undo by
+  //     hand. Manual cleanup is rare and acceptable for C2.)
+  //   - Participant insert failure THROWS for the same reason.
+  //   - Rampwin send failure LOGS and continues — the patient can
+  //     receive the link out-of-band via ops; the booking + session +
+  //     token are all in place. C3 will add a "Resend join link"
+  //     affordance on the booking detail page once webhooks land.
+  // ----------------------------------------------------------------
+  if (teleconsultDoctor) {
+    const scheduledAtIso = scheduled_for ?? new Date().toISOString();
+
+    const { data: session, error: sessionErr } = await supabase
+      .from("consultation_sessions")
+      .insert({
+        booking_id: inserted.id,
+        doctor_id: teleconsultDoctor.id,
+        modality: "teleconsultation",
+        status: "scheduled",
+        // Snapshot the doctor's PMI URL at create time. May be NULL
+        // (doctor not yet set up); the /c/[token] page surfaces a
+        // fallback in that case.
+        zoom_join_url: teleconsultDoctor.duty_room_join_url,
+        scheduled_at: scheduledAtIso,
+        created_by: opsUser.id,
+      })
+      .select("id")
+      .single();
+    if (sessionErr || !session) {
+      throw new Error(
+        `Booking ${inserted.id} was created but the consultation session insert failed: ${sessionErr?.message ?? "unknown"}. Clean up via SQL and re-create.`,
+      );
+    }
+
+    const joinToken = generateConsultJoinToken();
+    const tokenExpiry = defaultJoinTokenExpiry(scheduledAtIso);
+    const { error: partErr } = await supabase
+      .from("consultation_participants")
+      .insert({
+        session_id: session.id,
+        role: "patient",
+        customer_id: customerId,
+        join_token: joinToken,
+        join_token_expires_at: tokenExpiry.toISOString(),
+      });
+    if (partErr) {
+      throw new Error(
+        `Booking ${inserted.id} + session ${session.id} created, but the patient participant insert failed: ${partErr.message}. The link cannot be delivered.`,
+      );
+    }
+
+    // Best-effort WhatsApp delivery. The Rampwin template
+    // (`sanocare_consult_join`) is provisioned by the founder/BSP —
+    // until that's done, this throw is the expected failure and ops
+    // delivers the link out-of-band.
+    try {
+      await sendConsultJoinLink({
+        phone: customerPhone,
+        joinToken,
+        patientName: customerName,
+        doctorName: teleconsultDoctor.full_name,
+      });
+      console.log("[createBooking] consult join-link delivered", {
+        booking_id: inserted.id,
+        session_id: session.id,
+      });
+    } catch (err) {
+      console.error(
+        "[createBooking] Rampwin consult-join delivery failed (non-fatal — booking + session + token are in place):",
+        err,
+      );
+    }
   }
 
   revalidatePath("/ops/bookings");
