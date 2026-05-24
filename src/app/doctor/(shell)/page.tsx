@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { getCurrentDoctor } from "../_lib/getCurrentDoctor";
-import { getDoctorLedger } from "../_lib/doctorData";
+import { getDoctorLedger, getDoctorWaitingQueue } from "../_lib/doctorData";
 import { computeDoctorFigures, rupees } from "@/lib/doctorFinance";
 import { DoctorFiguresGrid } from "../_components/DoctorFiguresGrid";
 import { DoctorLedgerTable } from "../_components/DoctorLedgerTable";
 import { EnterDutyRoomButton } from "../_components/EnterDutyRoomButton";
+import { DoctorWaitingQueue } from "../_components/DoctorWaitingQueue";
 
 export const metadata: Metadata = {
   title: "Doctor home · Sanocare",
@@ -31,7 +32,11 @@ export const fetchCache = "force-no-store";
  * doctor_id parameter anywhere in the doctor surface.
  */
 export default async function DoctorHomePage() {
-  const [doctor, ledger] = await Promise.all([getCurrentDoctor(), getDoctorLedger()]);
+  const [doctor, ledger, queue] = await Promise.all([
+    getCurrentDoctor(),
+    getDoctorLedger(),
+    getDoctorWaitingQueue(),
+  ]);
 
   const figures = computeDoctorFigures(ledger.oldestFirst);
 
@@ -68,6 +73,12 @@ export default async function DoctorHomePage() {
           <div className="text-xs text-slate-500 mt-1">{doctor.qualification}</div>
         )}
       </div>
+
+      {/* ============================== Waiting room queue (C2) ============================== */}
+      <DoctorWaitingQueue
+        sessions={queue}
+        dutyRoomReady={doctor.duty_room_join_url != null}
+      />
 
       {/* ============================== Enter Duty Room ============================== */}
       <EnterDutyRoomButton url={doctor.duty_room_join_url} />

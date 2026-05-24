@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
+import { createOpsRSCClient } from "@/lib/supabase-rsc";
 import { NewBookingForm } from "./NewBookingForm";
 
 export const metadata: Metadata = {
@@ -10,7 +11,35 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default function NewBookingPage() {
+/**
+ * Active doctors are fetched here and passed to NewBookingForm so the
+ * teleconsult flow can render a doctor selector synchronously. RLS on
+ * doctors (M019) allows any ops user to SELECT; we don't need
+ * service-role.
+ */
+async function fetchActiveDoctors() {
+  const supabase = await createOpsRSCClient();
+  const { data, error } = await supabase
+    .from("doctors")
+    .select("id, doctor_code, full_name, duty_room_join_url")
+    .eq("is_active", true)
+    .order("full_name", { ascending: true })
+    .limit(200);
+  if (error) {
+    console.error("[NewBookingPage] doctors fetch failed:", error);
+    return [];
+  }
+  return (data as Array<{
+    id: string;
+    doctor_code: string;
+    full_name: string;
+    duty_room_join_url: string | null;
+  }> | null) ?? [];
+}
+
+export default async function NewBookingPage() {
+  const activeDoctors = await fetchActiveDoctors();
+
   return (
     <div className="px-8 py-8 max-w-3xl">
       <Link
@@ -31,7 +60,7 @@ export default function NewBookingPage() {
         </p>
       </div>
 
-      <NewBookingForm />
+      <NewBookingForm activeDoctors={activeDoctors} />
     </div>
   );
 }

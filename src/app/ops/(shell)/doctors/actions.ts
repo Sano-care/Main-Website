@@ -5,6 +5,11 @@ import { redirect } from "next/navigation";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
 import { normaliseIndianPhone } from "@/lib/phone";
 import { getCurrentOpsUser } from "../../_lib/getCurrentOpsUser";
+import {
+  getZoomUser,
+  getZoomUserSettings,
+  isZoomNotFound,
+} from "@/lib/zoom/client";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -261,6 +266,149 @@ export async function updateDoctor(formData: FormData) {
 
   revalidatePath("/ops/doctors");
   revalidatePath(`/ops/doctors/${id}`);
+}
+
+// =====================================================================
+// autoFillDutyRoomFromZoom — admin only (C2)
+//
+// Looks up the doctor's licensed Zoom user by email (GET /users/{email}
+// — Server-to-Server OAuth accepts email as the userId path param) and
+// copies the user's personal_meeting_url into doctors.duty_room_join_url,
+// plus the Zoom user id into doctors.zoom_user_id.
+//
+// Returns a structured result instead of throwing so the form can show
+// partial-success states (e.g. PMI saved but waiting room is OFF in
+// Zoom — that's an NMC compliance flag, not a hard failure).
+//
+// Pre-conditions enforced here:
+//   - The action user is an ops admin (assertOpsAdmin)
+//   - The doctor exists and is active
+//   - The doctor has an email on file (it's the Zoom lookup key)
+//   - The Zoom user exists with that email
+//   - The Zoom user is licensed (type >= 2) — Basic users have no PMI
+//     and cannot host a meeting
+// =====================================================================
+export type AutoFillResult =
+  | { ok: true; pmi: string; zoom_user_id: string; warnings: string[] }
+  | { ok: false; error: string };
+
+export async function autoFillDutyRoomFromZoom(
+  formData: FormData,
+): Promise<AutoFillResult> {
+  try {
+    await assertOpsAdmin();
+    const supabase = await createOpsRSCClient();
+
+    const id = reqStr(formData, "id");
+    if (!UUID_RE.test(id)) {
+      return { ok: false, error: "Invalid doctor id." };
+    }
+
+    type DocRow = {
+      id: string;
+      full_name: string;
+      email: string | null;
+      is_active: boolean;
+    };
+    const { data: docRow } = await supabase
+      .from("doctors")
+      .select("id, full_name, email, is_active")
+      .eq("id", id)
+      .maybeSingle();
+    const doctor = (docRow as DocRow | null) ?? null;
+    if (!doctor) return { ok: false, error: "Doctor not found." };
+    if (!doctor.is_active) {
+      return {
+        ok: false,
+        error: "Doctor is inactive — re-activate before linking Zoom.",
+      };
+    }
+    if (!doctor.email) {
+      return {
+        ok: false,
+        error:
+          "Doctor has no email on file. The Zoom auto-fill keys on doctors.email matching the licensed Zoom user's email — set an email first.",
+      };
+    }
+
+    // Look up the Zoom user. GET /users/{userId} accepts an email
+    // address as the userId path param for S2S OAuth (operational
+    // note documented on migration 021).
+    let zoomUser;
+    try {
+      zoomUser = await getZoomUser(doctor.email);
+    } catch (err) {
+      if (isZoomNotFound(err)) {
+        return {
+          ok: false,
+          error: `Zoom has no user with email ${doctor.email}. Confirm the doctor's email matches their licensed Sanocare Zoom user, or provision them in Zoom first.`,
+        };
+      }
+      console.error("[autoFillDutyRoomFromZoom] getZoomUser failed:", err);
+      return {
+        ok: false,
+        error: `Zoom lookup failed: ${err instanceof Error ? err.message : "unknown"}`,
+      };
+    }
+
+    if (zoomUser.type < 2) {
+      return {
+        ok: false,
+        error: `Zoom user ${zoomUser.email} is a Basic account (type=${zoomUser.type}). A Pro/Business licence is required so the user has a Personal Meeting Room.`,
+      };
+    }
+
+    // Best-effort waiting-room check. Non-fatal — if the settings call
+    // fails we still save the PMI URL and surface a soft warning.
+    const warnings: string[] = [];
+    try {
+      const settings = await getZoomUserSettings(doctor.email);
+      if (settings.in_meeting?.waiting_room !== true) {
+        warnings.push(
+          "Waiting Room is OFF on this user's PMI in Zoom. NMC requires doctor-controlled entry — turn it on in the Zoom admin console before any consult.",
+        );
+      }
+    } catch (err) {
+      console.warn(
+        "[autoFillDutyRoomFromZoom] getZoomUserSettings failed (non-fatal):",
+        err,
+      );
+      warnings.push(
+        "Couldn't read this user's Zoom settings to verify Waiting Room is on. Verify manually in the Zoom admin console.",
+      );
+    }
+
+    const { error: updateErr } = await supabase
+      .from("doctors")
+      .update({
+        duty_room_join_url: zoomUser.personal_meeting_url,
+        zoom_user_id: zoomUser.id,
+      })
+      .eq("id", doctor.id);
+    if (updateErr) {
+      return {
+        ok: false,
+        error: `Could not save Zoom details: ${updateErr.message}`,
+      };
+    }
+
+    revalidatePath("/ops/doctors");
+    revalidatePath(`/ops/doctors/${doctor.id}`);
+
+    return {
+      ok: true,
+      pmi: String(zoomUser.pmi),
+      zoom_user_id: zoomUser.id,
+      warnings,
+    };
+  } catch (err) {
+    // Next.js redirects are thrown — re-throw so the framework handles.
+    if (err && typeof err === "object" && "digest" in err) throw err;
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not link Zoom.",
+    };
+  }
 }
 
 // =====================================================================

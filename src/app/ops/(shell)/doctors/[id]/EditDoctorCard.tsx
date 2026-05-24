@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, X, AlertCircle } from "lucide-react";
-import { updateDoctor } from "../actions";
+import { Pencil, X, AlertCircle, Video, Loader2, CheckCircle2 } from "lucide-react";
+import { updateDoctor, autoFillDutyRoomFromZoom, type AutoFillResult } from "../actions";
 
 type Doctor = {
   id: string;
@@ -38,6 +38,23 @@ export function EditDoctorCard({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [doctorType, setDoctorType] = useState(doctor.doctor_type);
+
+  // C2: Auto-fill Duty Room from Zoom (admin-only). Server action looks
+  // up the doctor's licensed Zoom user by email and copies the PMI URL +
+  // Zoom user id onto the doctor row. Result surfaces inline so warnings
+  // (e.g. "Waiting Room is OFF in Zoom") are visible without a redirect.
+  const [autoFillResult, setAutoFillResult] = useState<AutoFillResult | null>(null);
+  const [isAutoFilling, startAutoFillTransition] = useTransition();
+
+  const handleAutoFill = () => {
+    setAutoFillResult(null);
+    startAutoFillTransition(async () => {
+      const fd = new FormData();
+      fd.set("id", doctor.id);
+      const result = await autoFillDutyRoomFromZoom(fd);
+      setAutoFillResult(result);
+    });
+  };
 
   const handle = (formData: FormData) => {
     setError(null);
@@ -247,7 +264,24 @@ export function EditDoctorCard({
       </div>
 
       <div className="mt-5 pt-5 border-t border-slate-100">
-        <div className="text-xs text-slate-500 mb-1">Zoom Duty Room link</div>
+        <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
+          <div className="text-xs text-slate-500">Zoom Duty Room link</div>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleAutoFill}
+              disabled={isAutoFilling}
+              className="inline-flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 px-2.5 py-1 rounded-md transition-colors"
+            >
+              {isAutoFilling ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Video className="w-3 h-3" />
+              )}
+              {isAutoFilling ? "Looking up…" : "Auto-fill from Zoom"}
+            </button>
+          )}
+        </div>
         {doctor.duty_room_join_url ? (
           <a
             href={doctor.duty_room_join_url}
@@ -259,6 +293,39 @@ export function EditDoctorCard({
           </a>
         ) : (
           <div className="text-sm text-slate-400">— (not set up yet)</div>
+        )}
+
+        {/* Auto-fill result surface (admin-only, runs through the same
+            client island). Renders ok/warning/error states inline. */}
+        {autoFillResult && (
+          <div className="mt-3">
+            {autoFillResult.ok ? (
+              <div className="rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs p-3">
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-semibold">
+                      Zoom PMI linked (#{autoFillResult.pmi}).
+                    </div>
+                    <div>Reload the page to see the updated Duty Room link.</div>
+                    {autoFillResult.warnings.map((w, i) => (
+                      <div
+                        key={i}
+                        className="text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 mt-1"
+                      >
+                        {w}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs p-3 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{autoFillResult.error}</span>
+              </div>
+            )}
+          </div>
         )}
       </div>
 

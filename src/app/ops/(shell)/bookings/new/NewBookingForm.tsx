@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { AlertCircle, CheckCircle2, MapPin, Search, X, Loader2, Tag } from "lucide-react";
+import { AlertCircle, CheckCircle2, MapPin, Search, X, Loader2, Tag, Video } from "lucide-react";
 import { LabTestSearch } from "@/components/lab/LabTestSearch";
 import { useBookingStore } from "@/store/bookingStore";
 import type { AppliedCoupon } from "@/types/lab-coupon";
@@ -23,6 +23,13 @@ type MatchedCustomer = {
 };
 
 type ParsedLocation = { lat: number; lng: number };
+
+export type ActiveDoctorOption = {
+  id: string;
+  doctor_code: string;
+  full_name: string;
+  duty_room_join_url: string | null;
+};
 
 // =====================================================================
 // Location parsing
@@ -138,7 +145,11 @@ function osmLinkUrl(lat: number, lng: number): string {
 // Component
 // =====================================================================
 
-export function NewBookingForm() {
+export function NewBookingForm({
+  activeDoctors,
+}: {
+  activeDoctors: ActiveDoctorOption[];
+}) {
   // ---- Customer mode + lookup state ----
   const [mode, setMode] = useState<Mode>("existing");
   const [lookupQuery, setLookupQuery] = useState("");
@@ -148,6 +159,13 @@ export function NewBookingForm() {
 
   // ---- Service ----
   const [service, setService] = useState<string>("");
+
+  // ---- Teleconsult-only state (C2) ----
+  // Doctor selector for teleconsult bookings. The action requires
+  // doctor_id when service_category === 'teleconsult' and refuses to
+  // create the consultation_session if the selected doctor has no
+  // duty_room_join_url yet.
+  const [doctorId, setDoctorId] = useState<string>("");
 
   // ---- Location ----
   const [locationInput, setLocationInput] = useState("");
@@ -182,12 +200,22 @@ export function NewBookingForm() {
   const locationReady = parsedLocation !== null;
   const diagnosticsBasketReady =
     service !== "diagnostics" || selectedTests.length > 0;
+  // Teleconsult: doctor selection required. The DB and server action also
+  // enforce this — the consultation_session FK requires a doctor — but
+  // we gate at the form level too so ops sees an explicit "pick a
+  // doctor" before submit.
+  const teleconsultReady = service !== "teleconsult" || doctorId !== "";
+  const selectedDoctor = useMemo(
+    () => activeDoctors.find((d) => d.id === doctorId) ?? null,
+    [activeDoctors, doctorId],
+  );
   const serviceReady = service !== "";
   const canSubmit =
     customerReady &&
     serviceReady &&
     locationReady &&
     diagnosticsBasketReady &&
+    teleconsultReady &&
     !isSubmitting &&
     !isResolvingShortLink;
 
@@ -281,6 +309,11 @@ export function NewBookingForm() {
         );
       }
     }
+    // C2: teleconsult-only — inject the picked doctor id. The action
+    // validates doctor_id presence + active state + duty_room_join_url.
+    if (service === "teleconsult" && doctorId) {
+      formData.set("doctor_id", doctorId);
+    }
 
     startSubmit(async () => {
       try {
@@ -369,6 +402,61 @@ export function NewBookingForm() {
         </label>
       </fieldset>
 
+      {/* ============================== Teleconsult-only fields (C2) ============================== */}
+      {service === "teleconsult" && (
+        <fieldset className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+          <legend className="px-2 text-[11px] font-mono uppercase tracking-wider text-slate-500">
+            Teleconsultation
+          </legend>
+          <p className="text-xs text-slate-500 inline-flex items-start gap-1.5">
+            <Video className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            <span>
+              The patient will receive a WhatsApp link to join the doctor&apos;s
+              Zoom Duty Room. Make sure the patient&apos;s phone on file is
+              correct — that&apos;s where the link goes.
+            </span>
+          </p>
+          <label className="block">
+            <span className="block text-xs font-medium text-slate-700 mb-1">
+              Doctor *
+            </span>
+            <select
+              value={doctorId}
+              onChange={(e) => setDoctorId(e.target.value)}
+              required
+              className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+            >
+              <option value="" disabled>
+                Select a doctor…
+              </option>
+              {activeDoctors.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.full_name} ({d.doctor_code})
+                  {!d.duty_room_join_url ? "  — no Duty Room URL set" : ""}
+                </option>
+              ))}
+            </select>
+            {activeDoctors.length === 0 && (
+              <span className="block text-[11px] text-amber-700 mt-1">
+                No active doctors on file. Create one via /ops/doctors first.
+              </span>
+            )}
+            {selectedDoctor && !selectedDoctor.duty_room_join_url && (
+              <span className="block text-[11px] text-amber-700 mt-1">
+                {selectedDoctor.full_name} doesn&apos;t have a Duty Room URL
+                set yet. Either pick another doctor or set their URL on
+                /ops/doctors/{selectedDoctor.id} first.
+              </span>
+            )}
+          </label>
+          <p className="text-[11px] text-slate-500">
+            Tip: set the consultation time in the Booking details section
+            below — it becomes the patient&apos;s scheduled slot and the join
+            link&apos;s 24-hour expiry is measured from it.
+          </p>
+        </fieldset>
+      )}
+
       {/* ============================== Diagnostics basket ============================== */}
       {service === "diagnostics" && (
         <fieldset className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
@@ -456,6 +544,12 @@ export function NewBookingForm() {
             {service === "diagnostics" ? "PENDING_COLLECTION" : "PENDING"}
           </span>
           .
+          {service === "teleconsult" && (
+            <>
+              {" "}A consultation session + tokened WhatsApp join link are
+              created automatically.
+            </>
+          )}
         </p>
       </fieldset>
 
