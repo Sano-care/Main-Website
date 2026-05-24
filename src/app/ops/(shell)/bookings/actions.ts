@@ -1010,8 +1010,8 @@ export async function createBooking(formData: FormData) {
       await sendConsultJoinLink({
         phone: customerPhone,
         joinToken,
+        patientName: customerName,
         doctorName: teleconsultDoctor.full_name,
-        scheduledLabel: formatScheduledLabel(scheduledAtIso),
       });
       console.log("[createBooking] consult join-link delivered", {
         booking_id: inserted.id,
@@ -1036,20 +1036,4 @@ export async function createBooking(formData: FormData) {
     revalidatePath(`/ops/patients/${customerId}`);
   }
   redirect(`/ops/bookings/${inserted.id}`);
-}
-
-/**
- * Format a scheduled-at ISO timestamp as a human label for the
- * WhatsApp message body, e.g. "Tue 14 Jan, 4:30 PM".
- */
-function formatScheduledLabel(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString("en-IN", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
 }
