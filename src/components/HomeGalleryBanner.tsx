@@ -41,19 +41,56 @@ const SLIDES: ReadonlyArray<Slide> = [
 
 const AUTOPLAY_MS = 5000;
 
+// ---------------------------------------------------------------------------
+// Slides-per-view by breakpoint (matches Tailwind's md=768 / lg=1024).
+// SSR-safe default = 1; first client render hydrates the real value.
+// ---------------------------------------------------------------------------
+function computeSlidesPerView(): number {
+  if (typeof window === "undefined" || !window.matchMedia) return 1;
+  if (window.matchMedia("(min-width: 1024px)").matches) return 3;
+  if (window.matchMedia("(min-width: 768px)").matches) return 2;
+  return 1;
+}
+
 export function HomeGalleryBanner() {
   const slides = SLIDES; // single source of truth — swap for fetched data later
   const slideCount = slides.length;
 
+  const [slidesPerView, setSlidesPerView] = useState<number>(1);
   const [index, setIndex] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
-  // Pause is independent for hover (mouse) + touch — either condition
-  // freezes autoplay until BOTH clear.
   const [hovering, setHovering] = useState(false);
   const [touching, setTouching] = useState(false);
 
   const rootRef = useRef<HTMLElement>(null);
   const touchStartX = useRef<number | null>(null);
+
+  // -------------------------------------------------------------------------
+  // Slides-per-view follows the viewport. Re-evaluated on resize so dragging
+  // a window between breakpoints recomputes without a reload.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const apply = () => setSlidesPerView(computeSlidesPerView());
+    apply();
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
+  }, []);
+
+  // Reachable starting positions = slideCount - slidesPerView + 1. The track
+  // can stop at any of these; positions beyond would show empty space past
+  // the final slide, which the spec forbids ("never shows blank space").
+  const reachableCount = useMemo(
+    () => Math.max(1, slideCount - slidesPerView + 1),
+    [slideCount, slidesPerView],
+  );
+
+  // Clamp index when slidesPerView shrinks (e.g. mobile → desktop resize
+  // moves max from 5 down to 3). Without this, you'd briefly translate past
+  // the end of the track.
+  useEffect(() => {
+    setIndex((i) => Math.min(i, reachableCount - 1));
+  }, [reachableCount]);
 
   // -------------------------------------------------------------------------
   // Reduced-motion media query — re-evaluated on change so toggling the OS
@@ -69,33 +106,34 @@ export function HomeGalleryBanner() {
   }, []);
 
   // -------------------------------------------------------------------------
-  // Navigation
+  // Navigation — modulo on reachableCount so the loop length adapts to
+  // slidesPerView (1-up wraps over 6, 2-up over 5, 3-up over 4).
   // -------------------------------------------------------------------------
   const goTo = useCallback(
     (next: number) => {
-      // Loop infinitely in both directions.
-      setIndex(((next % slideCount) + slideCount) % slideCount);
+      setIndex(((next % reachableCount) + reachableCount) % reachableCount);
     },
-    [slideCount],
+    [reachableCount],
   );
   const next = useCallback(() => goTo(index + 1), [goTo, index]);
   const prev = useCallback(() => goTo(index - 1), [goTo, index]);
 
   // -------------------------------------------------------------------------
-  // Autoplay — off when reduced-motion is set OR any pause condition holds.
+  // Autoplay — off when reduced-motion is set, hover-paused, touch-paused,
+  // or when there's only one reachable position (nothing to advance to).
+  // Always steps by ONE image, regardless of slidesPerView.
   // -------------------------------------------------------------------------
   useEffect(() => {
     if (reducedMotion || hovering || touching) return;
+    if (reachableCount <= 1) return;
     const id = window.setInterval(() => {
-      setIndex((i) => (i + 1) % slideCount);
+      setIndex((i) => (i + 1) % reachableCount);
     }, AUTOPLAY_MS);
     return () => window.clearInterval(id);
-  }, [reducedMotion, hovering, touching, slideCount]);
+  }, [reducedMotion, hovering, touching, reachableCount]);
 
   // -------------------------------------------------------------------------
   // Keyboard: Left / Right when the carousel (or anything inside) is focused.
-  // We listen on the root so any focusable descendant (dot button etc.) also
-  // gets the shortcuts.
   // -------------------------------------------------------------------------
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLElement>) => {
@@ -113,7 +151,7 @@ export function HomeGalleryBanner() {
   // -------------------------------------------------------------------------
   // Touch swipe — record startX on touchstart, fire on touchend if the
   // horizontal delta exceeds the threshold. Touching also pauses autoplay
-  // for the duration of the gesture (and one tick after, via touchend).
+  // for the duration of the gesture.
   // -------------------------------------------------------------------------
   const SWIPE_THRESHOLD_PX = 50;
   const onTouchStart = useCallback((e: React.TouchEvent) => {
@@ -136,12 +174,28 @@ export function HomeGalleryBanner() {
   );
 
   // -------------------------------------------------------------------------
-  // Live-region label for screen-reader users. Updates as the slide moves.
+  // Live region — announces the leftmost-visible slide on each change.
+  // 1-up reads "Slide N of M: alt"; multi-up reads "Showing slides N to K".
   // -------------------------------------------------------------------------
-  const liveLabel = useMemo(
-    () => `Slide ${index + 1} of ${slideCount}: ${slides[index].alt}`,
-    [index, slideCount, slides],
-  );
+  const liveLabel = useMemo(() => {
+    if (slidesPerView === 1) {
+      return `Slide ${index + 1} of ${slideCount}: ${slides[index].alt}`;
+    }
+    const last = Math.min(index + slidesPerView, slideCount);
+    return `Showing slides ${index + 1} to ${last} of ${slideCount}`;
+  }, [index, slideCount, slidesPerView, slides]);
+
+  // -------------------------------------------------------------------------
+  // Visual math.
+  //   - Each slide occupies (100 / slideCount)% of the track — constant.
+  //   - Track is (slideCount * 100 / slidesPerView)% of the viewport — so a
+  //     1-up viewport sees a 600% track, 2-up sees 300%, 3-up sees 200%.
+  //   - Translating the track by (index * 100 / slideCount)% of itself moves
+  //     it by exactly ONE slide-width regardless of slidesPerView.
+  // -------------------------------------------------------------------------
+  const trackWidthPct = (slideCount * 100) / slidesPerView;
+  const slideWidthOnTrackPct = 100 / slideCount;
+  const translatePct = (index * 100) / slideCount;
 
   return (
     <section
@@ -153,60 +207,65 @@ export function HomeGalleryBanner() {
       onKeyDown={onKeyDown}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
-      className="w-full px-4 sm:px-6 pt-4 pb-2 sm:pt-6 sm:pb-3"
+      className="w-full px-4 sm:px-6 lg:px-8 pt-4 pb-2 sm:pt-6 sm:pb-3"
     >
-      <div className="mx-auto w-full max-w-[480px]">
-        {/* Viewport — clips the sliding track. aspect-[4/5] gives the
-            portrait frame; the image fills it via next/image fill. */}
-        <div
-          className="relative w-full overflow-hidden rounded-[20px] shadow-xl shadow-slate-900/10 bg-slate-100"
-          style={{ aspectRatio: "4 / 5" }}
-        >
-          {/* Sliding track. translate-x driven by `index`; transition is
-              removed under prefers-reduced-motion so the slide change is
-              instantaneous. */}
-          <div
-            className={
-              "absolute inset-0 flex h-full " +
-              (reducedMotion ? "" : "transition-transform duration-500 ease-out")
-            }
-            style={{
-              width: `${slideCount * 100}%`,
-              transform: `translateX(-${(index * 100) / slideCount}%)`,
-            }}
-          >
-            {slides.map((s, i) => (
-              <div
-                key={s.src}
-                role="group"
-                aria-roledescription="slide"
-                aria-label={`Slide ${i + 1} of ${slideCount}`}
-                aria-hidden={i !== index}
-                className="relative h-full"
-                style={{ width: `${100 / slideCount}%` }}
-              >
-                <Image
-                  src={s.src}
-                  alt={s.alt}
-                  fill
-                  // 1080x1350 source → 480px max on desktop, 100vw on mobile.
-                  sizes="(max-width: 640px) 100vw, 480px"
-                  priority={i === 0}
-                  loading={i === 0 ? undefined : "lazy"}
-                  className="object-cover"
-                  draggable={false}
-                />
-              </div>
-            ))}
+      <div className="mx-auto w-full max-w-[1280px]">
+        {/* Viewport (no rounding / shadow — those live on each tile now,
+            so multi-up and single-up render consistently). */}
+        <div className="relative w-full">
+          <div className="overflow-hidden">
+            <div
+              className={
+                "flex " +
+                (reducedMotion ? "" : "transition-transform duration-500 ease-out")
+              }
+              style={{
+                width: `${trackWidthPct}%`,
+                transform: `translateX(-${translatePct}%)`,
+              }}
+            >
+              {slides.map((s, i) => {
+                const isInView = i >= index && i < index + slidesPerView;
+                return (
+                  <div
+                    key={s.src}
+                    role="group"
+                    aria-roledescription="slide"
+                    aria-label={`Slide ${i + 1} of ${slideCount}`}
+                    aria-hidden={!isInView}
+                    className="shrink-0 px-2"
+                    style={{ width: `${slideWidthOnTrackPct}%` }}
+                  >
+                    {/* Tile — rounded card. aspect-[4/5] keeps all heights
+                        equal across the row regardless of slidesPerView. */}
+                    <div
+                      className="relative w-full rounded-[20px] shadow-xl shadow-slate-900/10 overflow-hidden bg-slate-100"
+                      style={{ aspectRatio: "4 / 5" }}
+                    >
+                      <Image
+                        src={s.src}
+                        alt={s.alt}
+                        fill
+                        sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
+                        priority={i === 0}
+                        loading={i === 0 ? undefined : "lazy"}
+                        className="object-cover"
+                        draggable={false}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Prev / next arrows — overlaid on the viewport, partly
-              transparent so they don't fight the image. */}
+          {/* Prev / next arrows — overlay the viewport, not individual tiles,
+              so they sit at the section edges regardless of slidesPerView. */}
           <button
             type="button"
             onClick={prev}
             aria-label="Previous slide"
-            className="absolute left-2 top-1/2 -translate-y-1/2 size-9 rounded-full bg-white/80 backdrop-blur-sm text-slate-800 shadow-md hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 transition-colors flex items-center justify-center"
+            className="absolute left-1 sm:left-3 top-1/2 -translate-y-1/2 size-9 rounded-full bg-white/80 backdrop-blur-sm text-slate-800 shadow-md hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 transition-colors flex items-center justify-center"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
@@ -214,7 +273,7 @@ export function HomeGalleryBanner() {
             type="button"
             onClick={next}
             aria-label="Next slide"
-            className="absolute right-2 top-1/2 -translate-y-1/2 size-9 rounded-full bg-white/80 backdrop-blur-sm text-slate-800 shadow-md hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 transition-colors flex items-center justify-center"
+            className="absolute right-1 sm:right-3 top-1/2 -translate-y-1/2 size-9 rounded-full bg-white/80 backdrop-blur-sm text-slate-800 shadow-md hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 transition-colors flex items-center justify-center"
           >
             <ChevronRight className="w-5 h-5" />
           </button>
@@ -225,17 +284,17 @@ export function HomeGalleryBanner() {
           </div>
         </div>
 
-        {/* Dot row — real buttons; active dot indicated via aria-current
-            (and visual fill). */}
+        {/* Dot row — one per REACHABLE position (not per slide). For 3-up
+            with 6 slides, that's 4 dots; 2-up → 5; 1-up → 6. */}
         <div
           className="mt-3 flex items-center justify-center gap-2"
           aria-label="Choose slide"
         >
-          {slides.map((s, i) => {
+          {Array.from({ length: reachableCount }, (_, i) => {
             const active = i === index;
             return (
               <button
-                key={s.src}
+                key={i}
                 type="button"
                 onClick={() => goTo(i)}
                 aria-label={`Go to slide ${i + 1}`}
