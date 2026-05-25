@@ -310,10 +310,10 @@ export async function changeStatus(formData: FormData) {
 
   // C2: keep the linked consultation_session.status in sync with the
   // terminal booking states. The doctor queue on /doctor filters by
-  // session status, so a teleconsult that was completed in Zoom but
+  // session status, so a teleconsult that finished in the call but
   // whose session row is still 'scheduled' would otherwise haunt the
-  // queue forever. C3's meeting.ended webhook will update this directly
-  // and this side-effect can be removed then.
+  // queue forever. C3-V's Daily meeting.ended webhook will update this
+  // directly and this side-effect can be removed then.
   if (newStatus === "COMPLETED") {
     await mirrorSessionStatus(supabase, bookingId, "completed");
   }
@@ -970,10 +970,10 @@ export async function createBooking(formData: FormData) {
         doctor_id: teleconsultDoctor.id,
         modality: "teleconsultation",
         status: "scheduled",
-        // Snapshot the doctor's PMI URL at create time. May be NULL
-        // (doctor not yet set up); the /c/[token] page surfaces a
-        // fallback in that case.
-        zoom_join_url: teleconsultDoctor.duty_room_join_url,
+        // Snapshot the doctor's Duty Room URL at create time. May be
+        // NULL (doctor not yet provisioned); the /c/[token] page
+        // surfaces a fallback in that case.
+        duty_room_url_snapshot: teleconsultDoctor.duty_room_join_url,
         scheduled_at: scheduledAtIso,
         created_by: opsUser.id,
       })

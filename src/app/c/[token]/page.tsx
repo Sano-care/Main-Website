@@ -29,7 +29,7 @@ interface ParticipantWithSession {
   session_status: SessionStatus;
   modality: string;
   scheduled_at: string;
-  zoom_join_url: string | null;
+  duty_room_url_snapshot: string | null;
   teleconsult_consent: boolean | null;
   doctor_id: string;
   doctor_code: string;
@@ -69,7 +69,7 @@ async function fetchParticipantByToken(
     supabaseAdmin
       .from("consultation_sessions")
       .select(
-        "id, status, modality, scheduled_at, zoom_join_url, teleconsult_consent, doctor_id",
+        "id, status, modality, scheduled_at, duty_room_url_snapshot, teleconsult_consent, doctor_id",
       )
       .eq("id", participant.session_id)
       .maybeSingle(),
@@ -99,7 +99,7 @@ async function fetchParticipantByToken(
     session_status: session.status as SessionStatus,
     modality: session.modality,
     scheduled_at: session.scheduled_at,
-    zoom_join_url: session.zoom_join_url,
+    duty_room_url_snapshot: session.duty_room_url_snapshot,
     teleconsult_consent: session.teleconsult_consent,
     doctor_id: doctor.id,
     doctor_code: doctor.doctor_code,
@@ -124,12 +124,15 @@ export default async function PatientJoinPage({
     data.join_token_expires_at != null &&
     new Date(data.join_token_expires_at) < new Date();
 
-  // The PMI URL the patient is ultimately redirected to: prefer the
-  // session-snapshotted zoom_join_url (denormalised at session-create
-  // time), fall back to the doctor's current duty_room_join_url. This
-  // lets a doctor whose PMI was set up after the session was scheduled
-  // still complete the consult.
-  const pmiUrl = data.zoom_join_url ?? data.doctor_duty_room_join_url ?? null;
+  // The Duty Room URL we hand to the embedded Daily client: prefer the
+  // session snapshot (denormalised at session-create), fall back to the
+  // doctor's current duty_room_join_url so a doctor whose room was
+  // provisioned after the session was scheduled still works. The actual
+  // join needs both a URL and a fresh meeting token — the API route
+  // mints the token; this URL is the host fallback only (the API also
+  // resolves it from the same chain).
+  const roomUrl =
+    data.duty_room_url_snapshot ?? data.doctor_duty_room_join_url ?? null;
 
   return (
     <div className="min-h-screen bg-background-light">
@@ -188,7 +191,7 @@ export default async function PatientJoinPage({
               token={token}
               status={data.session_status}
               expired={expired}
-              pmiUrl={pmiUrl}
+              roomUrl={roomUrl}
               patientName={data.customer_full_name}
               alreadyConsented={data.teleconsult_consent === true}
             />
@@ -216,14 +219,14 @@ function StateBody({
   token,
   status,
   expired,
-  pmiUrl,
+  roomUrl,
   patientName,
   alreadyConsented,
 }: {
   token: string;
   status: SessionStatus;
   expired: boolean;
-  pmiUrl: string | null;
+  roomUrl: string | null;
   patientName: string | null;
   alreadyConsented: boolean;
 }) {
@@ -254,7 +257,7 @@ function StateBody({
       />
     );
   }
-  if (!pmiUrl) {
+  if (!roomUrl) {
     return (
       <Notice
         tone="amber"

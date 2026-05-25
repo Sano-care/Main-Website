@@ -5,11 +5,8 @@ import { redirect } from "next/navigation";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
 import { normaliseIndianPhone } from "@/lib/phone";
 import { getCurrentOpsUser } from "../../_lib/getCurrentOpsUser";
-import {
-  getZoomUser,
-  getZoomUserSettings,
-  isZoomNotFound,
-} from "@/lib/zoom/client";
+import { provisionDutyRoom } from "@/lib/daily/client";
+import { DailyApiError, DailyAuthError } from "@/lib/daily/auth";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -104,19 +101,18 @@ function reqCanonicalPhone(formData: FormData, key: string): string {
 }
 
 /**
- * C1: the doctor's Zoom Duty Room join URL. Optional (NULL = "not set up
- * yet"; the /doctor home shows a graceful fallback). When provided, must
- * start with http:// or https:// — anything else is almost certainly a
- * typo (Zoom links are always https). No deeper Zoom-shape check in C1;
- * C2 will validate against the actual Zoom REST API when the meeting
- * integration lands.
+ * The doctor's Duty Room join URL — transport-neutral, typically
+ * provisioned by provisionDoctorDutyRoom() on Daily.co but also
+ * accepts a manual paste fallback. Optional (NULL = "not set up
+ * yet"; /doctor shows a graceful notice). When provided, must start
+ * with http:// or https:// — anything else is a typo.
  */
 function dutyRoomUrlOrNull(formData: FormData, key: string): string | null {
   const raw = str(formData, key);
   if (!raw) return null;
   if (!/^https?:\/\//i.test(raw)) {
     throw new Error(
-      "Duty Room link should start with https:// (paste the full Zoom Personal Meeting Room URL).",
+      "Duty Room link should start with https:// (paste the full video-room URL).",
     );
   }
   return raw;
@@ -269,32 +265,34 @@ export async function updateDoctor(formData: FormData) {
 }
 
 // =====================================================================
-// autoFillDutyRoomFromZoom — admin only (C2)
+// provisionDoctorDutyRoom — admin only (C2-V)
 //
-// Looks up the doctor's licensed Zoom user by email (GET /users/{email}
-// — Server-to-Server OAuth accepts email as the userId path param) and
-// copies the user's personal_meeting_url into doctors.duty_room_join_url,
-// plus the Zoom user id into doctors.zoom_user_id.
+// Creates the doctor's Daily.co Duty Room (POST /v1/rooms) and writes
+// the resulting room URL + name onto the doctor row. Replaces C2's
+// C2's autoFillDutyRoomFromZoom — same intent (one-click setup of a
+// doctor's video room), different transport.
+//
+// Idempotent on the Daily side via provisionDutyRoom() — re-clicking
+// the button after a successful create returns the existing room.
+//
+// Room name convention: `${doctor_code}-duty-room`, lowercased. Stable
+// per-doctor; survives any later rename of the doctor's full_name.
 //
 // Returns a structured result instead of throwing so the form can show
-// partial-success states (e.g. PMI saved but waiting room is OFF in
-// Zoom — that's an NMC compliance flag, not a hard failure).
+// success ("room ready") or error ("Daily API key not set" / "Daily
+// returned 5xx") inline.
 //
 // Pre-conditions enforced here:
 //   - The action user is an ops admin (assertOpsAdmin)
 //   - The doctor exists and is active
-//   - The doctor has an email on file (it's the Zoom lookup key)
-//   - The Zoom user exists with that email
-//   - The Zoom user is licensed (type >= 2) — Basic users have no PMI
-//     and cannot host a meeting
 // =====================================================================
-export type AutoFillResult =
-  | { ok: true; pmi: string; zoom_user_id: string; warnings: string[] }
+export type ProvisionResult =
+  | { ok: true; room_name: string; room_url: string }
   | { ok: false; error: string };
 
-export async function autoFillDutyRoomFromZoom(
+export async function provisionDoctorDutyRoom(
   formData: FormData,
-): Promise<AutoFillResult> {
+): Promise<ProvisionResult> {
   try {
     await assertOpsAdmin();
     const supabase = await createOpsRSCClient();
@@ -306,13 +304,13 @@ export async function autoFillDutyRoomFromZoom(
 
     type DocRow = {
       id: string;
+      doctor_code: string;
       full_name: string;
-      email: string | null;
       is_active: boolean;
     };
     const { data: docRow } = await supabase
       .from("doctors")
-      .select("id, full_name, email, is_active")
+      .select("id, doctor_code, full_name, is_active")
       .eq("id", id)
       .maybeSingle();
     const doctor = (docRow as DocRow | null) ?? null;
@@ -320,75 +318,53 @@ export async function autoFillDutyRoomFromZoom(
     if (!doctor.is_active) {
       return {
         ok: false,
-        error: "Doctor is inactive — re-activate before linking Zoom.",
-      };
-    }
-    if (!doctor.email) {
-      return {
-        ok: false,
-        error:
-          "Doctor has no email on file. The Zoom auto-fill keys on doctors.email matching the licensed Zoom user's email — set an email first.",
+        error: "Doctor is inactive — re-activate before provisioning a Duty Room.",
       };
     }
 
-    // Look up the Zoom user. GET /users/{userId} accepts an email
-    // address as the userId path param for S2S OAuth (operational
-    // note documented on migration 021).
-    let zoomUser;
+    // Stable, predictable room name per doctor. doctor_code is unique
+    // and immutable for the lifetime of the row (M019 / M020), so the
+    // room name is stable too. Lowercased because Daily room names are
+    // case-sensitive and lowercase is the convention.
+    const roomName = `${doctor.doctor_code.toLowerCase()}-duty-room`;
+
+    let room;
     try {
-      zoomUser = await getZoomUser(doctor.email);
+      room = await provisionDutyRoom({ name: roomName });
     } catch (err) {
-      if (isZoomNotFound(err)) {
+      if (err instanceof DailyAuthError) {
+        console.error("[provisionDoctorDutyRoom] Daily auth/env missing:", err);
         return {
           ok: false,
-          error: `Zoom has no user with email ${doctor.email}. Confirm the doctor's email matches their licensed Sanocare Zoom user, or provision them in Zoom first.`,
+          error:
+            "Daily.co is not configured — DAILY_API_KEY and/or DAILY_DOMAIN aren't set on Netlify. Contact the founder (task #98).",
         };
       }
-      console.error("[autoFillDutyRoomFromZoom] getZoomUser failed:", err);
-      return {
-        ok: false,
-        error: `Zoom lookup failed: ${err instanceof Error ? err.message : "unknown"}`,
-      };
-    }
-
-    if (zoomUser.type < 2) {
-      return {
-        ok: false,
-        error: `Zoom user ${zoomUser.email} is a Basic account (type=${zoomUser.type}). A Pro/Business licence is required so the user has a Personal Meeting Room.`,
-      };
-    }
-
-    // Best-effort waiting-room check. Non-fatal — if the settings call
-    // fails we still save the PMI URL and surface a soft warning.
-    const warnings: string[] = [];
-    try {
-      const settings = await getZoomUserSettings(doctor.email);
-      if (settings.in_meeting?.waiting_room !== true) {
-        warnings.push(
-          "Waiting Room is OFF on this user's PMI in Zoom. NMC requires doctor-controlled entry — turn it on in the Zoom admin console before any consult.",
-        );
+      if (err instanceof DailyApiError) {
+        console.error("[provisionDoctorDutyRoom] Daily API error:", err);
+        return {
+          ok: false,
+          error: `Daily.co returned an error (HTTP ${err.status}): ${err.message}. Check the dashboard or try again.`,
+        };
       }
-    } catch (err) {
-      console.warn(
-        "[autoFillDutyRoomFromZoom] getZoomUserSettings failed (non-fatal):",
-        err,
-      );
-      warnings.push(
-        "Couldn't read this user's Zoom settings to verify Waiting Room is on. Verify manually in the Zoom admin console.",
-      );
+      console.error("[provisionDoctorDutyRoom] unexpected error:", err);
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : "Could not provision Duty Room.",
+      };
     }
 
     const { error: updateErr } = await supabase
       .from("doctors")
       .update({
-        duty_room_join_url: zoomUser.personal_meeting_url,
-        zoom_user_id: zoomUser.id,
+        duty_room_join_url: room.url,
+        duty_room_provider_ref: room.name,
       })
       .eq("id", doctor.id);
     if (updateErr) {
       return {
         ok: false,
-        error: `Could not save Zoom details: ${updateErr.message}`,
+        error: `Could not save Duty Room details: ${updateErr.message}`,
       };
     }
 
@@ -397,16 +373,15 @@ export async function autoFillDutyRoomFromZoom(
 
     return {
       ok: true,
-      pmi: String(zoomUser.pmi),
-      zoom_user_id: zoomUser.id,
-      warnings,
+      room_name: room.name,
+      room_url: room.url,
     };
   } catch (err) {
     // Next.js redirects are thrown — re-throw so the framework handles.
     if (err && typeof err === "object" && "digest" in err) throw err;
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Could not link Zoom.",
+      error: err instanceof Error ? err.message : "Could not provision Duty Room.",
     };
   }
 }

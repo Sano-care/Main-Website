@@ -4,10 +4,10 @@ import { getCurrentDoctor } from "./getCurrentDoctor";
 
 /**
  * A teleconsult / vc-home-visit session waiting on this doctor's Duty
- * Room. Returned by getDoctorWaitingQueue(). C2 ships read-only — the
- * doctor sees the queue + enters the same PMI; ops marks the booking
- * COMPLETED after the consult (which posts the M4 earning via the
- * trg_bookings_doctor_earnings trigger).
+ * Room. Returned by getDoctorWaitingQueue(). C2-V ships read-only — the
+ * doctor sees the queue + opens their Daily Duty Room; ops marks the
+ * booking COMPLETED after the consult (which posts the M4 earning via
+ * the trg_bookings_doctor_earnings trigger).
  */
 export type DoctorWaitingSession = {
   id: string;
@@ -117,11 +117,11 @@ export const getDoctorLedger = cache(async (): Promise<{
  * Fetch the current doctor's Duty Room queue — consultation_sessions
  * with status in (scheduled, waiting, in_progress), oldest first.
  *
- * In C2 there are no Zoom webhooks (those are C3) so sessions stay at
- * 'scheduled' the whole time and the queue is essentially "upcoming
- * teleconsults for this doctor". The patient_clicked_link_at column
- * surfaces whether the patient has tapped their WhatsApp link yet —
- * a useful "they're probably about to show up in the waiting room"
+ * C2-V doesn't subscribe to Daily webhooks yet (that's C3-V), so
+ * sessions stay at 'scheduled' the whole time and the queue is
+ * essentially "upcoming teleconsults for this doctor". The
+ * patient_clicked_link_at column surfaces whether the patient has
+ * tapped their WhatsApp link yet — a useful "they're about to knock"
  * signal even without webhook-driven presence.
  *
  * Limit 50 keeps the home page bounded; if a doctor ever has more
