@@ -13,12 +13,12 @@ import { PathcoreCoBrandStrip } from "@/components/PathcoreCoBrandStrip";
 export const metadata: Metadata = {
   title: "Lab Tests at Home — Search 1,900+ Tests · Sanocare",
   description:
-    "Find the price of any lab test we offer at home in South Delhi. 1,900+ tests across pathology and diagnostics. Free home collection — pay only for the test. NABL-partner labs.",
+    "Find the price of any lab test we offer at home in South Delhi. 1,900+ tests across pathology and diagnostics. Free home collection — pay only for the test. Processed by our partner laboratories.",
   alternates: { canonical: "/lab-tests" },
   openGraph: {
     title: "Lab Tests at Home — Search 1,900+ Tests · Sanocare",
     description:
-      "Free home collection, pay only for the test. NABL-partner labs across South Delhi.",
+      "Free home collection, pay only for the test. Partner laboratories across South Delhi.",
     url: "https://sanocare.in/lab-tests",
     type: "website",
   },
@@ -75,7 +75,7 @@ export default function LabTestsPage() {
               </span>
               <span className="inline-flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-primary" />
-                NABL-accredited partner labs
+                Processed at our partner laboratories
               </span>
               <span className="inline-flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-primary" />
@@ -127,7 +127,7 @@ export default function LabTestsPage() {
               {
                 step: "3",
                 title: "Report in your record",
-                desc: "Sample is processed at an NABL-accredited partner lab. Report uploads to your Sanocare record + emailed to you.",
+                desc: "Sample is processed at our partner laboratory. Report uploads to your Sanocare record + emailed to you.",
               },
             ].map((s) => (
               <li
@@ -152,7 +152,7 @@ export default function LabTestsPage() {
             </div>
             <p className="text-sm text-text-main leading-relaxed">
               Lab samples are processed by our{" "}
-              <strong>NABL-accredited partner laboratories</strong>. Sample
+              <strong>partner laboratories</strong>. Sample
               collection follows{" "}
               <strong>chain-of-custody protocol</strong> with patient
               identifiers, collection timestamps and tamper-evident seals.
