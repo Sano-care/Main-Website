@@ -145,8 +145,8 @@ BEGIN
   ) INTO v_meeting_id_present;
 
   RAISE NOTICE 'Migration 022 complete:';
-  RAISE NOTICE '  doctors.duty_room_provider_ref populated on %% row(s)', v_doctors_with_provider;
-  RAISE NOTICE '  doctors.duty_room_join_url populated on %% row(s) (legacy Zoom URLs until C2-V overwrites)', v_doctors_with_url;
-  RAISE NOTICE '  consultation_sessions.duty_room_url_snapshot populated on %% row(s) (legacy Zoom URLs, expected ~0 after Sanocare-side cancel)', v_sessions_with_url;
-  RAISE NOTICE '  consultation_sessions.zoom_meeting_id still present: %% (expected: false)', v_meeting_id_present;
+  RAISE NOTICE '  doctors.duty_room_provider_ref populated on % row(s)', v_doctors_with_provider;
+  RAISE NOTICE '  doctors.duty_room_join_url populated on % row(s) (legacy Zoom URLs until C2-V overwrites)', v_doctors_with_url;
+  RAISE NOTICE '  consultation_sessions.duty_room_url_snapshot populated on % row(s) (legacy Zoom URLs, expected ~0 after Sanocare-side cancel)', v_sessions_with_url;
+  RAISE NOTICE '  consultation_sessions.zoom_meeting_id still present: % (expected: false)', v_meeting_id_present;
 END $$;
