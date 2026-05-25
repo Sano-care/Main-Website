@@ -1,11 +1,9 @@
 import {
   Activity,
-  Award,
   Baby,
   BadgeCheck,
   Brain,
   Building2,
-  CheckCircle,
   Clock,
   FileText,
   Globe,
@@ -774,7 +772,6 @@ export const ABOUT_PAGE_CONTENT = {
       titleSuffix: "Story",
       description: "Milestones that defined our path toward excellence.",
     },
-    accreditationsLabel: "Accredited by Leading Health Organizations",
     ctaSection: {
       title: "Ready to Experience Better Healthcare?",
       description:
@@ -878,12 +875,6 @@ export const ABOUT_PAGE_CONTENT = {
     { key: "member_2", name: "[Team Member 2]", role: "Head of Operations" },
     { key: "member_3", name: "[Team Member 3]", role: "Director of Nursing" },
     { key: "member_4", name: "[Team Member 4]", role: "Patient Experience Lead" },
-  ],
-  accreditations: [
-    { icon: Shield, name: "NABH" },
-    { icon: Award, name: "ISO Certified" },
-    { icon: Heart, name: "HealthTrust" },
-    { icon: CheckCircle, name: "QualityCare" },
   ],
 };
 
