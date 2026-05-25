@@ -8,6 +8,7 @@ import { QuickCategories } from "./QuickCategories";
 import { LabTestsBanner } from "./LabTestsBanner";
 import { LabTestSearch } from "@/components/lab/LabTestSearch";
 import { LabTestBasket } from "@/components/lab/LabTestBasket";
+import { PathcoreCoBrandStrip } from "@/components/PathcoreCoBrandStrip";
 
 export const metadata: Metadata = {
   title: "Lab Tests at Home — Search 1,900+ Tests · Sanocare",
@@ -35,6 +36,10 @@ export default function LabTestsPage() {
         <Suspense fallback={null}>
           <LabTestsBanner />
         </Suspense>
+
+        {/* Diagnostics co-brand strip — names Pathcore as the processing
+            lab. Sits above the hero so the partnership reads first. */}
+        <PathcoreCoBrandStrip />
 
         {/* Hero with search + basket right-rail (desktop). Basket is a bottom
             drawer on mobile, anchored at the bottom of the page. */}
