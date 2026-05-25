@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Pencil, X, AlertCircle, Video, Loader2, CheckCircle2 } from "lucide-react";
-import { updateDoctor, autoFillDutyRoomFromZoom, type AutoFillResult } from "../actions";
+import { updateDoctor, provisionDoctorDutyRoom, type ProvisionResult } from "../actions";
 
 type Doctor = {
   id: string;
@@ -39,20 +39,21 @@ export function EditDoctorCard({
   const [isPending, startTransition] = useTransition();
   const [doctorType, setDoctorType] = useState(doctor.doctor_type);
 
-  // C2: Auto-fill Duty Room from Zoom (admin-only). Server action looks
-  // up the doctor's licensed Zoom user by email and copies the PMI URL +
-  // Zoom user id onto the doctor row. Result surfaces inline so warnings
-  // (e.g. "Waiting Room is OFF in Zoom") are visible without a redirect.
-  const [autoFillResult, setAutoFillResult] = useState<AutoFillResult | null>(null);
-  const [isAutoFilling, startAutoFillTransition] = useTransition();
+  // C2-V: Provision Duty Room on Daily (admin-only). Server action calls
+  // Daily REST POST /rooms (idempotent via "already exists" -> GET
+  // fallback) and writes the resulting room URL + name onto the doctor
+  // row. Result surfaces inline so failures (e.g. DAILY_API_KEY missing)
+  // are visible without a redirect.
+  const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
+  const [isProvisioning, startProvisionTransition] = useTransition();
 
-  const handleAutoFill = () => {
-    setAutoFillResult(null);
-    startAutoFillTransition(async () => {
+  const handleProvision = () => {
+    setProvisionResult(null);
+    startProvisionTransition(async () => {
       const fd = new FormData();
       fd.set("id", doctor.id);
-      const result = await autoFillDutyRoomFromZoom(fd);
-      setAutoFillResult(result);
+      const result = await provisionDoctorDutyRoom(fd);
+      setProvisionResult(result);
     });
   };
 
@@ -122,14 +123,15 @@ export function EditDoctorCard({
               Duty Room
             </div>
             <Field
-              label="Zoom Duty Room link"
+              label="Duty Room link"
               name="duty_room_join_url"
               type="url"
               defaultValue={doctor.duty_room_join_url ?? ""}
             />
             <p className="text-xs text-slate-500">
-              Paste the doctor&apos;s Zoom Personal Meeting Room URL. Leave blank
-              until Zoom is provisioned — their /doctor home will show a fallback.
+              Use &quot;Provision Duty Room&quot; above to create one on Daily.
+              You can also paste a URL manually here as a fallback. Leave
+              blank until provisioned — their /doctor home shows a notice.
             </p>
           </div>
 
@@ -265,20 +267,20 @@ export function EditDoctorCard({
 
       <div className="mt-5 pt-5 border-t border-slate-100">
         <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
-          <div className="text-xs text-slate-500">Zoom Duty Room link</div>
+          <div className="text-xs text-slate-500">Duty Room link</div>
           {isAdmin && (
             <button
               type="button"
-              onClick={handleAutoFill}
-              disabled={isAutoFilling}
+              onClick={handleProvision}
+              disabled={isProvisioning}
               className="inline-flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 px-2.5 py-1 rounded-md transition-colors"
             >
-              {isAutoFilling ? (
+              {isProvisioning ? (
                 <Loader2 className="w-3 h-3 animate-spin" />
               ) : (
                 <Video className="w-3 h-3" />
               )}
-              {isAutoFilling ? "Looking up…" : "Auto-fill from Zoom"}
+              {isProvisioning ? "Provisioning…" : "Provision Duty Room"}
             </button>
           )}
         </div>
@@ -295,34 +297,27 @@ export function EditDoctorCard({
           <div className="text-sm text-slate-400">— (not set up yet)</div>
         )}
 
-        {/* Auto-fill result surface (admin-only, runs through the same
-            client island). Renders ok/warning/error states inline. */}
-        {autoFillResult && (
+        {/* Provision result surface (admin-only). Renders ok/error
+            states inline so a Daily auth/config issue is visible
+            without a page reload. */}
+        {provisionResult && (
           <div className="mt-3">
-            {autoFillResult.ok ? (
+            {provisionResult.ok ? (
               <div className="rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs p-3">
                 <div className="flex items-start gap-2">
                   <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
                   <div className="space-y-1">
                     <div className="font-semibold">
-                      Zoom PMI linked (#{autoFillResult.pmi}).
+                      Daily Duty Room ready ({provisionResult.room_name}).
                     </div>
-                    <div>Reload the page to see the updated Duty Room link.</div>
-                    {autoFillResult.warnings.map((w, i) => (
-                      <div
-                        key={i}
-                        className="text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 mt-1"
-                      >
-                        {w}
-                      </div>
-                    ))}
+                    <div>Reload the page to see the updated link.</div>
                   </div>
                 </div>
               </div>
             ) : (
               <div className="rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs p-3 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{autoFillResult.error}</span>
+                <span>{provisionResult.error}</span>
               </div>
             )}
           </div>

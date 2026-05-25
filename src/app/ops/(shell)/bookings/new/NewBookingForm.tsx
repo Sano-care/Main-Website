@@ -412,7 +412,7 @@ export function NewBookingForm({
             <Video className="w-3.5 h-3.5 mt-0.5 shrink-0" />
             <span>
               The patient will receive a WhatsApp link to join the doctor&apos;s
-              Zoom Duty Room. Make sure the patient&apos;s phone on file is
+              Duty Room. Make sure the patient&apos;s phone on file is
               correct — that&apos;s where the link goes.
             </span>
           </p>

@@ -98,9 +98,9 @@ export function DoctorWaitingQueue({
       )}
 
       <div className="px-6 py-3 bg-slate-50 text-[11px] text-slate-500 border-t border-slate-100">
-        Patients are admitted from Zoom&apos;s waiting room — one at a time.
-        Make sure you&apos;re signed in to Zoom as your Sanocare licensed
-        account, or the host controls won&apos;t work.
+        Patients knock to join your Duty Room — admit them one at a time
+        from inside the call. The room runs inside Sanocare; no external
+        app needed.
       </div>
     </div>
   );

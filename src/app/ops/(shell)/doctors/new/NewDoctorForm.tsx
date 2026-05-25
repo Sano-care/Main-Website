@@ -65,14 +65,15 @@ export function NewDoctorForm() {
           Duty Room
         </legend>
         <Field
-          label="Zoom Duty Room link"
+          label="Duty Room link"
           name="duty_room_join_url"
           type="url"
-          placeholder="https://zoom.us/j/… (paste the doctor's Personal Meeting Room URL)"
+          placeholder="https://… (optional — provision automatically after create via /ops/doctors/[id])"
         />
         <p className="text-xs text-slate-500">
-          Optional for now — leave blank if Zoom isn&apos;t set up yet. The doctor&apos;s
-          /doctor home will show a graceful fallback until you paste this in.
+          Optional at create time — typically left blank, then provisioned
+          on Daily via the doctor&apos;s detail page after create. The
+          doctor&apos;s /doctor home shows a fallback notice until set.
         </p>
       </fieldset>
 

@@ -4,7 +4,7 @@ import { getDoctorLedger, getDoctorWaitingQueue } from "../_lib/doctorData";
 import { computeDoctorFigures, rupees } from "@/lib/doctorFinance";
 import { DoctorFiguresGrid } from "../_components/DoctorFiguresGrid";
 import { DoctorLedgerTable } from "../_components/DoctorLedgerTable";
-import { EnterDutyRoomButton } from "../_components/EnterDutyRoomButton";
+import { DutyRoomEmbed } from "../_components/DutyRoomEmbed";
 import { DoctorWaitingQueue } from "../_components/DoctorWaitingQueue";
 
 export const metadata: Metadata = {
@@ -80,8 +80,8 @@ export default async function DoctorHomePage() {
         dutyRoomReady={doctor.duty_room_join_url != null}
       />
 
-      {/* ============================== Enter Duty Room ============================== */}
-      <EnterDutyRoomButton url={doctor.duty_room_join_url} />
+      {/* ============================== Duty Room (Daily Prebuilt embed) ============================== */}
+      <DutyRoomEmbed url={doctor.duty_room_join_url} />
 
       {/* ============================== Figures ============================== */}
       <DoctorFiguresGrid
