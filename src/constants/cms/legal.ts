@@ -123,7 +123,7 @@ We share your personal data with a limited set of third parties strictly necessa
 | **Agora.io / LiveKit** | Audio/video call data during in-app consultations | Video consultation delivery |
 | **Twilio Inc. / MSG91** | Mobile number, SMS content | Transactional SMS |
 | **Google LLC (Firebase Cloud Messaging)** | Device token | Push notifications |
-| **NABL-accredited laboratory partners** | Patient identifiers, test order | Lab processing of samples we collect |
+| **Laboratory partners** | Patient identifiers, test order | Lab processing of samples we collect |
 | **Government authorities** | As legally required | Compliance with court orders, law enforcement |
 | **Our clinicians** (doctors, medics) | The clinical data necessary to deliver your care | Care delivery |
 
@@ -181,7 +181,7 @@ Sanocare offers planned, non-emergency primary healthcare delivered to your home
 - **Home visits** — a GNM / B.Sc Nursing-qualified medic visits you at home and delivers a structured assessment, with an MBBS doctor joining on live video to lead the consultation and issue a digital prescription.
 - **Nursing-only visits** — a single procedure (injection, IV, wound dressing, sample collection) performed by a GNM / B.Sc Nursing-qualified medic, without a doctor consultation.
 - **Teleconsultations** — a remote video consultation with an MBBS doctor.
-- **Lab sample collection at home** — phlebotomy at your address, with samples processed by NABL-accredited laboratory partners.
+- **Lab sample collection at home** — phlebotomy at your address, with samples processed by our laboratory partners.
 
 Services are currently available in select pincodes of South Delhi. We expand our service area periodically; check the pincode coverage on our website for current availability.
 
