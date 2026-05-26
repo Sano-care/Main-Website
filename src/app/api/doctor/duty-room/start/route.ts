@@ -97,6 +97,18 @@ export async function POST() {
       is_owner: true,
       exp,
       user_name: doctor.full_name,
+      // Skip Daily's prejoin UI for the doctor. They're not joining
+      // someone else's call — they're going on duty in their own
+      // room. The previous fix tried to use the iframe-level
+      // `showPrejoinUI: false` option, but that property doesn't
+      // exist in DailyCallOptions (daily-js 0.90.0) — it was silently
+      // ignored because the factory was cast to `any`. The
+      // token-level `enable_prejoin_ui` is the actually-honoured knob.
+      // Daily's internal ~10s prejoin-inactivity timeout (which fired
+      // a spurious 'left-meeting' on the production v1 deploy) is
+      // also sidestepped here because the doctor lands in-call
+      // immediately, never sitting in prejoin.
+      enable_prejoin_ui: false,
     });
     meetingToken = result.token;
   } catch (err) {

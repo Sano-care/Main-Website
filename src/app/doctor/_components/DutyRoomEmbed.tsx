@@ -51,21 +51,16 @@ export function DutyRoomEmbed({ url }: { url: string | null }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<DailyFrameLike | null>(null);
 
-  // Safety hatch: if for any reason 'joined-meeting' takes more than
-  // 10s after the iframe is mounted, drop the "Connecting…" overlay
-  // anyway so the doctor can see the iframe and intervene. This is
-  // belt-and-suspenders on top of the showPrejoinUI:false fix — even
-  // if a future Daily SDK update brings the prejoin back, the overlay
-  // won't trap clicks indefinitely.
-  const [overlayTimedOut, setOverlayTimedOut] = useState(false);
-  useEffect(() => {
-    if (state !== "starting") {
-      setOverlayTimedOut(false);
-      return;
-    }
-    const t = setTimeout(() => setOverlayTimedOut(true), 10_000);
-    return () => clearTimeout(t);
-  }, [state]);
+  // No safety-timeout for the loading overlay. v1 of this fix had a
+  // 10-second setTimeout that flipped a state flag to hide the
+  // overlay, but the user's production diagnostic showed Daily firing
+  // 'left-meeting' at ~t=9.76s under the v1 deploy (240ms before the
+  // timeout would have fired). The most likely cause is Daily's own
+  // ~10s prejoin-inactivity timeout — once the auto-join in v2 lands
+  // (via enable_prejoin_ui:false on the meeting token), the doctor
+  // is in-call within a few seconds and never sits in prejoin, so
+  // there's nothing for the safety timeout to mask. The overlay
+  // still has pointer-events-none below as belt-and-suspenders.
 
   // Mount Daily Prebuilt when args land. Cleans up on unmount or state
   // transition away from in-call / starting.
@@ -109,20 +104,15 @@ export function DutyRoomEmbed({ url }: { url: string | null }) {
             },
             // Daily Prebuilt UX flags.
             //
-            // showPrejoinUI: false — CRITICAL. Daily's default prejoin
-            // ("Are you ready to join?") sits inside the iframe and
-            // requires the user to click an in-iframe "Join meeting"
-            // button to fire 'joined-meeting'. The Sanocare "Connecting
-            // to your Duty Room…" overlay above this iframe (rendered
-            // while state==='starting') covered that button — so the
-            // event never fired and the overlay never cleared, leaving
-            // the doctor permanently stuck in "Connecting…". This is
-            // also the wrong UX shape for our use case: the doctor
-            // isn't joining someone else's call, they're going on duty
-            // in their own room. Skip the prejoin and land them in the
-            // room directly. Mic/cam selection is still available via
-            // Daily's in-call "More" menu.
-            showPrejoinUI: false,
+            // The prejoin-skip is set on the SERVER side at meeting-
+            // token mint time (enable_prejoin_ui: false in
+            // /api/doctor/duty-room/start). The iframe-level
+            // `showPrejoinUI` option doesn't exist in daily-js 0.90.0's
+            // DailyCallOptions — the v1 attempt silently no-op'd
+            // because the Factory was cast to `any`. Don't reintroduce
+            // it here unless we bump daily-js to a version that
+            // actually supports it.
+            //
             // Show Daily's built-in controls.
             showLeaveButton: true,
             showFullscreenButton: true,
@@ -225,11 +215,13 @@ export function DutyRoomEmbed({ url }: { url: string | null }) {
         <div className="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
           <div className="relative w-full h-full max-w-6xl bg-slate-900 rounded-2xl overflow-hidden shadow-2xl">
             <div ref={containerRef} className="absolute inset-0" />
-            {state === "starting" && !overlayTimedOut && (
-              // pointer-events-none so even if the overlay lingers past
-              // 'joined-meeting' (e.g. event missed), the iframe stays
-              // clickable. The 10s timeout above is the secondary
-              // safety; this is the primary belt.
+            {state === "starting" && (
+              // pointer-events-none so the overlay never traps clicks
+              // intended for the Daily iframe — primary defence against
+              // any future scenario where 'joined-meeting' is delayed
+              // or missed. The v1 safety-timeout that hid this overlay
+              // after 10s was removed in v2 (post-mortem: see the
+              // useEffect above this return).
               <div className="absolute inset-0 flex items-center justify-center text-white text-sm gap-2 bg-slate-900/60 pointer-events-none">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Connecting to your Duty Room…

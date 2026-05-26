@@ -45,4 +45,17 @@ export interface DailyMeetingTokenProperties {
   enable_screenshare?: boolean;
   /** Patient: true (start muted in medical context); doctor: false. */
   start_audio_off?: boolean;
+  /**
+   * Doctor side: pass `false` to skip Daily's built-in "Are you ready
+   * to join?" prejoin UI. The doctor isn't joining someone else's
+   * meeting — they're going on duty in their own room, so the prejoin
+   * step is wrong UX shape AND, in 0.90.0, the iframe-level
+   * `showPrejoinUI` option doesn't exist (the v1 fix silently no-op'd
+   * because Factory was cast to `any`); the only honoured knob is
+   * here at the token level (and also at room / domain level).
+   *
+   * Patient side: leave undefined (Daily default = true) so patients
+   * can pre-test camera/mic before being admitted to the consult.
+   */
+  enable_prejoin_ui?: boolean;
 }
