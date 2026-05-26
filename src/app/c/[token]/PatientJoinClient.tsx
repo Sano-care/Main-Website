@@ -66,6 +66,23 @@ export function PatientJoinClient({
   // it to destroy on unmount.
   const frameRef = useRef<DailyFrameLike | null>(null);
 
+  // ===== Body scroll lock during in-call (v6) =====
+  //
+  // When the Daily iframe goes fullscreen, lock document.body
+  // overflow so the patient can't accidentally scroll the host page
+  // behind the iframe (iOS Safari rubber-band, scroll wheel on
+  // desktop, etc.). Restored on cleanup so the consent screen,
+  // ended-state surface, and parent page chrome all scroll normally
+  // outside the in-call window.
+  useEffect(() => {
+    if (state !== "in-call") return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, [state]);
+
   // ===== Mount Daily Prebuilt EXACTLY ONCE per dailyArgs lifecycle =====
   //
   // Mirror of the v4 fix applied to DutyRoomEmbed.tsx (doctor side).
@@ -235,9 +252,32 @@ export function PatientJoinClient({
   // ===== Render =====
 
   if (state === "in-call" || state === "joining") {
+    const isInCall = state === "in-call";
     return (
-      <div className="space-y-4">
-        <div className="text-xs text-text-secondary flex items-start gap-2">
+      // v6 layout: while "joining" (consent done, Daily prejoin /
+      // device test loading) we keep the small card with the
+      // waiting-room context above — useful so the patient knows
+      // what's happening and can read the doctor / booking info.
+      // The moment 'joined-meeting' fires and state flips to
+      // "in-call", the iframe wrapper expands to a fullscreen fixed
+      // overlay (z-50, 100dvh) — the patient needs the doctor's
+      // face large enough to read expressions and hand gestures.
+      // The pre-call status text is hidden via the `hidden` class
+      // (NOT removed from the JSX tree) so React's reconciliation
+      // keeps the iframe-wrapper div as the same DOM node across
+      // the transition. If we conditionally REMOVED siblings, React
+      // could shift positions and remount the wrapper — which would
+      // detach Daily's iframe from the DOM mid-call. The wrapper's
+      // own className flip is in-place (same DOM node, updated
+      // attributes), so the <div ref={containerRef}> stays and the
+      // Daily iframe inside it keeps its parent.
+      <div className={isInCall ? "" : "space-y-4"}>
+        <div
+          className={
+            "text-xs text-text-secondary flex items-start gap-2" +
+            (isInCall ? " hidden" : "")
+          }
+        >
           <ShieldCheck className="w-3.5 h-3.5 shrink-0 mt-0.5" />
           <span>
             You&apos;re in your doctor&apos;s waiting room. They&apos;ll admit
@@ -246,25 +286,37 @@ export function PatientJoinClient({
           </span>
         </div>
         <div
-          // Square-ish aspect on mobile, 16:9 on desktop. Container holds
-          // the Daily iframe (which positions absolutely inside).
-          className="relative w-full bg-slate-900 rounded-2xl overflow-hidden"
-          style={{ aspectRatio: "16 / 10", minHeight: "320px" }}
+          // joining: small card (16:10 aspect, min 320px) so the
+          // patient sees the Daily prejoin / device-test UI inline
+          // alongside the consent context.
+          // in-call: fixed fullscreen — `inset-0` covers the
+          // viewport, `h-[100dvh]` uses the dynamic viewport height
+          // so iOS Safari's URL bar doesn't bite into the visible
+          // area (100vh on Safari includes the URL-bar area; 100dvh
+          // is the actually-visible height). bg-slate-900 fills any
+          // gap if Daily's iframe has letterboxing.
+          className={
+            isInCall
+              ? "fixed inset-0 z-50 w-screen h-[100dvh] bg-slate-900"
+              : "relative w-full bg-slate-900 rounded-2xl overflow-hidden"
+          }
+          style={
+            isInCall ? undefined : { aspectRatio: "16 / 10", minHeight: "320px" }
+          }
         >
           <div ref={containerRef} className="absolute inset-0" />
           {state === "joining" && (
             // pointer-events-none is CRITICAL — without it, this
             // overlay covers Daily's in-iframe Join button on the
             // prejoin screen and the patient tap doesn't reach it
-            // (founder reproduced on mobile: Join button visible
-            // through the dim, tapping does nothing). With
-            // pointer-events-none, the dim is visual only; taps
-            // pass through to Daily's prejoin Join control. Once
-            // Daily fires 'joined-meeting', the handler above flips
-            // state to "in-call", which conditionally removes this
-            // overlay via the surrounding state guard.
+            // (founder reproduced on mobile pre-v5: Join button
+            // visible through the dim, tapping does nothing).
             //
-            // Mirror of the v3 doctor-side fix in DutyRoomEmbed.tsx.
+            // Only rendered while state === "joining" — once Daily
+            // fires 'joined-meeting' the state guard removes it,
+            // leaving the iframe (now fullscreen via the wrapper
+            // className flip above) as the sole content. Mirror of
+            // the v3 doctor-side fix in DutyRoomEmbed.tsx.
             <div className="absolute inset-0 flex items-center justify-center text-white text-sm gap-2 pointer-events-none">
               <Loader2 className="w-4 h-4 animate-spin" />
               Connecting to your consultation…
