@@ -51,21 +51,14 @@ export function DutyRoomEmbed({ url }: { url: string | null }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<DailyFrameLike | null>(null);
 
-  // Safety hatch: if for any reason 'joined-meeting' takes more than
-  // 10s after the iframe is mounted, drop the "Connecting…" overlay
-  // anyway so the doctor can see the iframe and intervene. This is
-  // belt-and-suspenders on top of the showPrejoinUI:false fix — even
-  // if a future Daily SDK update brings the prejoin back, the overlay
-  // won't trap clicks indefinitely.
-  const [overlayTimedOut, setOverlayTimedOut] = useState(false);
-  useEffect(() => {
-    if (state !== "starting") {
-      setOverlayTimedOut(false);
-      return;
-    }
-    const t = setTimeout(() => setOverlayTimedOut(true), 10_000);
-    return () => clearTimeout(t);
-  }, [state]);
+  // No safety-timeout for the loading overlay. The v1 had a 10s
+  // setTimeout that flipped an overlayTimedOut state; the v2
+  // post-mortem flagged it as suspect timing-wise, and the v3
+  // approach makes it unnecessary anyway: the overlay below has
+  // pointer-events-none so Daily's in-iframe Join button is
+  // clickable THROUGH the dim, even while state === "starting".
+  // Doctor clicks Join → 'joined-meeting' fires → state flips to
+  // "in-call" → overlay JSX is conditionally removed by state.
 
   // Mount Daily Prebuilt when args land. Cleans up on unmount or state
   // transition away from in-call / starting.
@@ -107,23 +100,33 @@ export function DutyRoomEmbed({ url }: { url: string | null }) {
                 supportiveText: "#94a3b8",
               },
             },
-            // Daily Prebuilt UX flags.
+            // Daily Prebuilt UX flags. NOTE: we deliberately do NOT
+            // try to skip Daily's prejoin UI here.
             //
-            // showPrejoinUI: false — CRITICAL. Daily's default prejoin
-            // ("Are you ready to join?") sits inside the iframe and
-            // requires the user to click an in-iframe "Join meeting"
-            // button to fire 'joined-meeting'. The Sanocare "Connecting
-            // to your Duty Room…" overlay above this iframe (rendered
-            // while state==='starting') covered that button — so the
-            // event never fired and the overlay never cleared, leaving
-            // the doctor permanently stuck in "Connecting…". This is
-            // also the wrong UX shape for our use case: the doctor
-            // isn't joining someone else's call, they're going on duty
-            // in their own room. Skip the prejoin and land them in the
-            // room directly. Mic/cam selection is still available via
-            // Daily's in-call "More" menu.
-            showPrejoinUI: false,
-            // Show Daily's built-in controls.
+            //   v1 attempted `showPrejoinUI: false` — that property
+            //   does not exist in DailyCallOptions in daily-js
+            //   0.90.0; it was silently ignored.
+            //
+            //   v2 attempted token-level `enable_prejoin_ui: false`
+            //   on the meeting-token mint — that property is NOT in
+            //   the POST /meeting-tokens request schema (it lives
+            //   only inside DailyRoomInfo.tokenConfig as the room's
+            //   default-token-config readback). Daily silently
+            //   accepted the unknown field, stamped `epui:false` as
+            //   a no-op JWT claim, and the iframe SDK then hung at
+            //   `iframe-ready-for-launch-config` for ~25s before
+            //   surfacing an error — apparently confused by the
+            //   malformed token.
+            //
+            // For now: accept Daily's prejoin UI. The doctor sees
+            // "Are you ready to join?" inside the iframe, clicks
+            // Join, lands in the room. Our loading overlay below
+            // has pointer-events-none so the Join button is
+            // clickable THROUGH the dim. UX is slightly heavier
+            // than auto-join but it's functional and unblocks the
+            // smoke test. Auto-join can be revisited via a Daily
+            // SDK bump or a documented room-level enable_prejoin_ui
+            // PATCH in a follow-up.
             showLeaveButton: true,
             showFullscreenButton: true,
             showLocalVideo: true,
@@ -225,11 +228,18 @@ export function DutyRoomEmbed({ url }: { url: string | null }) {
         <div className="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
           <div className="relative w-full h-full max-w-6xl bg-slate-900 rounded-2xl overflow-hidden shadow-2xl">
             <div ref={containerRef} className="absolute inset-0" />
-            {state === "starting" && !overlayTimedOut && (
-              // pointer-events-none so even if the overlay lingers past
-              // 'joined-meeting' (e.g. event missed), the iframe stays
-              // clickable. The 10s timeout above is the secondary
-              // safety; this is the primary belt.
+            {state === "starting" && (
+              // pointer-events-none is CRITICAL — without it, this
+              // overlay covers Daily's in-iframe Join button on the
+              // prejoin screen and the doctor can't proceed
+              // ('joined-meeting' never fires; everything wedges).
+              // With pointer-events-none, the dim is visual only;
+              // clicks pass through to Daily's prejoin Join
+              // control. Once the doctor clicks Join,
+              // 'joined-meeting' fires and the handler above flips
+              // state to "in-call", which conditionally removes
+              // this overlay via the surrounding `state ===
+              // "starting"` guard.
               <div className="absolute inset-0 flex items-center justify-center text-white text-sm gap-2 bg-slate-900/60 pointer-events-none">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Connecting to your Duty Room…
