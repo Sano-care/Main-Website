@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import {
   Video,
@@ -265,6 +266,29 @@ export function DutyRoomEmbed({ url }: { url: string | null }) {
         <div className="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
           <div className="relative w-full h-full max-w-6xl bg-slate-900 rounded-2xl overflow-hidden shadow-2xl">
             <div ref={containerRef} className="absolute inset-0" />
+            {/* v6.1: Sanocare brand badge anchored top-left of the
+                iframe wrapper. pointer-events-none so Daily's UI
+                (mute, camera, leave) is never blocked. z-10 stacks
+                above the iframe but below modal-level chrome. The
+                Close button at top-3 right-3 sits at the same
+                z-level on the opposite corner — they never overlap.
+                Safe area: Daily's prejoin "Are you ready to join?"
+                lives middle-top, in-call header "Waiting for
+                others" lives middle-top, the bottom control bar
+                spans the bottom; top-left is clean. */}
+            <div className="absolute top-3 left-3 z-10 pointer-events-none inline-flex items-center gap-1.5 bg-white/90 backdrop-blur-sm rounded-md px-2.5 py-1.5 shadow-sm">
+              <Image
+                src="/logo.svg"
+                alt=""
+                width={20}
+                height={20}
+                className="w-5 h-5 sm:w-6 sm:h-6"
+                priority={false}
+              />
+              <span className="text-xs sm:text-sm font-semibold text-slate-900">
+                Sanocare
+              </span>
+            </div>
             {state === "starting" && (
               // pointer-events-none is CRITICAL — without it, this
               // overlay covers Daily's in-iframe Join button on the

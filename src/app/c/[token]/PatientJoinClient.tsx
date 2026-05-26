@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { Video, Loader2, AlertCircle, ShieldCheck, CheckCircle2 } from "lucide-react";
 
@@ -150,6 +151,14 @@ export function PatientJoinClient({
             // For the patient, prejoin is also genuinely useful —
             // they get to test camera/mic before being admitted.
             showLeaveButton: true,
+            // v6.1: parity with the doctor side. With v6's
+            // fixed-inset-0 wrapper the iframe already fills the
+            // viewport, but tapping Daily's fullscreen icon
+            // additionally requests browser fullscreen (URL bar +
+            // system chrome hide) for true edge-to-edge video.
+            // Tap again to exit fullscreen and return to v6's
+            // viewport-fullscreen.
+            showFullscreenButton: true,
           },
         );
 
@@ -305,6 +314,28 @@ export function PatientJoinClient({
           }
         >
           <div ref={containerRef} className="absolute inset-0" />
+          {/* v6.1: Sanocare brand badge anchored top-left of the
+              iframe wrapper. Renders across both joining (small
+              card view) and in-call (fullscreen view) — the
+              `position: absolute` anchors to whichever wrapper
+              shape is active. pointer-events-none ensures Daily's
+              UI (mute/camera/leave/fullscreen) stays clickable.
+              Safe area on the patient side: Daily renders prejoin
+              middle-top, in-call header middle-top, control bar
+              spans the bottom — top-left is clean. */}
+          <div className="absolute top-3 left-3 z-10 pointer-events-none inline-flex items-center gap-1.5 bg-white/90 backdrop-blur-sm rounded-md px-2.5 py-1.5 shadow-sm">
+            <Image
+              src="/logo.svg"
+              alt=""
+              width={20}
+              height={20}
+              className="w-5 h-5 sm:w-6 sm:h-6"
+              priority={false}
+            />
+            <span className="text-xs sm:text-sm font-semibold text-slate-900">
+              Sanocare
+            </span>
+          </div>
           {state === "joining" && (
             // pointer-events-none is CRITICAL — without it, this
             // overlay covers Daily's in-iframe Join button on the
