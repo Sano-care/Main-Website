@@ -66,9 +66,25 @@ export function PatientJoinClient({
   // it to destroy on unmount.
   const frameRef = useRef<DailyFrameLike | null>(null);
 
-  // ===== Mount Daily Prebuilt when args land =====
+  // ===== Mount Daily Prebuilt EXACTLY ONCE per dailyArgs lifecycle =====
+  //
+  // Mirror of the v4 fix applied to DutyRoomEmbed.tsx (doctor side).
+  // The pre-v5 dep array was [state, dailyArgs] and the inner guard
+  // was `state !== "joining"`. When 'joined-meeting' fired, the
+  // handler set state="in-call"; the dep change re-ran THIS effect,
+  // executed its cleanup (frame.destroy()), and then re-mounted via
+  // createFrame + frame.join() with the SAME (now already-used)
+  // meeting token. The second join() failed; catch set
+  // state="error" → blank iframe rect, error banner.
+  //
+  // v5 fix: depend on `dailyArgs` only. The effect mounts when args
+  // land, stays mounted across state transitions, and cleans up
+  // exactly when dailyArgs is cleared (handleRetry / left-meeting /
+  // error / catch). Same shape as doctor v4 in
+  // src/app/doctor/_components/DutyRoomEmbed.tsx.
   useEffect(() => {
-    if (state !== "joining" || !dailyArgs || !containerRef.current) return;
+    if (!dailyArgs) return;
+    if (!containerRef.current) return;
 
     let cancelled = false;
     (async () => {
@@ -109,6 +125,13 @@ export function PatientJoinClient({
                 supportiveText: "#475569",
               },
             },
+            // Daily Prebuilt UX flags. We deliberately do NOT try to
+            // skip Daily's prejoin UI here — see the doctor-side
+            // post-mortems in DutyRoomEmbed.tsx for the v1 (silent
+            // no-op showPrejoinUI) and v2 (token-level
+            // enable_prejoin_ui not in request schema) failure modes.
+            // For the patient, prejoin is also genuinely useful —
+            // they get to test camera/mic before being admitted.
             showLeaveButton: true,
           },
         );
@@ -116,25 +139,41 @@ export function PatientJoinClient({
         frameRef.current = frame;
 
         frame.on("joined-meeting", () => {
+          // Telemetry parallel to doctor's [duty-room-embed]
+          // joined-meeting log — pins any regression of the
+          // remount-on-join bug immediately on MCP probes.
+          console.log("[patient-join-client] joined-meeting", {
+            cancelled,
+            frameAlive: !!frameRef.current,
+          });
           if (!cancelled) setState("in-call");
         });
         frame.on("left-meeting", () => {
-          if (!cancelled) setState("ended");
+          console.log("[patient-join-client] left-meeting", { cancelled });
+          if (!cancelled) {
+            setState("ended");
+            // Clear dailyArgs so the effect cleanup runs and destroys
+            // the frame (render falls through to the "Call ended"
+            // surface where containerRef is no longer in the DOM).
+            setDailyArgs(null);
+          }
         });
         frame.on("error", (e: unknown) => {
-          console.error("[patient-join] Daily error event", e);
+          console.error("[patient-join-client] Daily error event", e);
           if (!cancelled) {
             setError("The call disconnected unexpectedly. Please rejoin.");
             setState("error");
+            setDailyArgs(null);
           }
         });
 
         await frame.join({ url: dailyArgs.roomUrl, token: dailyArgs.meetingToken });
       } catch (err) {
-        console.error("[patient-join] Daily mount error", err);
+        console.error("[patient-join-client] Daily mount error", err);
         if (!cancelled) {
           setError("Couldn't connect to the video call. Please try again.");
           setState("error");
+          setDailyArgs(null);
         }
       }
     })();
@@ -151,7 +190,10 @@ export function PatientJoinClient({
         });
       }
     };
-  }, [state, dailyArgs]);
+    // CRITICAL: depend on dailyArgs ONLY, not [state, dailyArgs].
+    // setState("in-call") on 'joined-meeting' must NOT re-run this
+    // effect — see the v5 mirror comment above the effect body.
+  }, [dailyArgs]);
 
   const handleJoin = async () => {
     if (!consented) {
@@ -211,7 +253,19 @@ export function PatientJoinClient({
         >
           <div ref={containerRef} className="absolute inset-0" />
           {state === "joining" && (
-            <div className="absolute inset-0 flex items-center justify-center text-white text-sm gap-2">
+            // pointer-events-none is CRITICAL — without it, this
+            // overlay covers Daily's in-iframe Join button on the
+            // prejoin screen and the patient tap doesn't reach it
+            // (founder reproduced on mobile: Join button visible
+            // through the dim, tapping does nothing). With
+            // pointer-events-none, the dim is visual only; taps
+            // pass through to Daily's prejoin Join control. Once
+            // Daily fires 'joined-meeting', the handler above flips
+            // state to "in-call", which conditionally removes this
+            // overlay via the surrounding state guard.
+            //
+            // Mirror of the v3 doctor-side fix in DutyRoomEmbed.tsx.
+            <div className="absolute inset-0 flex items-center justify-center text-white text-sm gap-2 pointer-events-none">
               <Loader2 className="w-4 h-4 animate-spin" />
               Connecting to your consultation…
             </div>
