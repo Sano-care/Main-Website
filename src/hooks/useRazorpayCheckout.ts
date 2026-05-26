@@ -16,10 +16,16 @@ interface OpenCheckoutArgs {
 
 /**
  * useRazorpayCheckout — client-side hook that wraps window.Razorpay.
- * Razorpay Checkout JS is loaded via <Script> in src/app/layout.tsx.
+ * Razorpay Checkout JS is loaded via <Script> inside the components
+ * that initiate payment — currently src/components/BookingModal.tsx
+ * and src/app/reports/[token]/ReportPaymentClient.tsx. It is
+ * intentionally NOT loaded from src/app/layout.tsx so that the doctor
+ * portal and ops surfaces don't pull ~7.9 MB of Razorpay chunks they
+ * never use.
  *
- * Resolves with the payment-success payload on success, rejects on dismiss
- * or any failure.
+ * Resolves with the payment-success payload on success, rejects on
+ * dismiss or any failure (including "Razorpay Checkout is still
+ * loading" — see openCheckout body).
  */
 export function useRazorpayCheckout() {
   const openCheckout = useCallback(

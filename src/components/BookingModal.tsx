@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Script from "next/script";
 import { motion, AnimatePresence } from "framer-motion";
 import { ShieldCheck } from "lucide-react";
 import { X, User, Phone, MapPin, Crosshair, Loader2, ArrowRight, Check, Clock, UserCheck, Calendar, CheckCircle2, AlertCircle, Users } from "lucide-react";
@@ -195,7 +196,22 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
   };
 
   return (
-    <AnimatePresence>
+    <>
+      {/*
+       * Razorpay Checkout JS — scoped to this component (and
+       * ReportPaymentClient) instead of the root layout, so the
+       * doctor portal and ops surfaces no longer pull ~7.9 MB of
+       * Razorpay v2-entry-* chunks they don't use. The Script is
+       * outside the AnimatePresence so it loads as soon as
+       * BookingModal mounts (page load), not only when the modal
+       * opens — by the time the patient taps "Pay", window.Razorpay
+       * is already on the page.
+       */}
+      <Script
+        src="https://checkout.razorpay.com/v1/checkout.js"
+        strategy="lazyOnload"
+      />
+      <AnimatePresence>
       {isOpen && (
         <motion.div
           className="fixed inset-0 z-[100] flex items-center justify-center p-4"
@@ -463,6 +479,7 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+      </AnimatePresence>
+    </>
   );
 }

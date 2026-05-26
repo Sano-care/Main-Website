@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Script from "next/script";
 import { Loader2, Download, CheckCircle2 } from "lucide-react";
 import { useRazorpayCheckout } from "@/hooks/useRazorpayCheckout";
 
@@ -129,6 +130,17 @@ export function ReportPaymentClient({
 
   return (
     <div className="space-y-3">
+      {/*
+       * Razorpay Checkout JS — scoped here (and in BookingModal)
+       * rather than the root layout, so non-payment surfaces
+       * (/doctor, /ops, marketing pages) don't pull ~7.9 MB of
+       * Razorpay chunks they never use. Next's <Script> dedupes on
+       * src, so loading from multiple components is safe.
+       */}
+      <Script
+        src="https://checkout.razorpay.com/v1/checkout.js"
+        strategy="lazyOnload"
+      />
       <button
         type="button"
         onClick={handlePayAndView}

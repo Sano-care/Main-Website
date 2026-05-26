@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter, IBM_Plex_Mono } from "next/font/google";
-import Script from "next/script";
 import { CmsPreloadProvider } from "@/components/providers/CmsPreloadProvider";
 import { getCmsPreloadSnapshot } from "@/services/cms/CmsContentServerService";
 import "./globals.css";
@@ -158,11 +157,22 @@ export default async function RootLayout({
         className={`${inter.variable} ${ibmPlexMono.variable} font-sans antialiased`}
       >
         <CmsPreloadProvider snapshot={cmsSnapshot}>{children}</CmsPreloadProvider>
-        {/* Razorpay Checkout — lazy-loaded so it doesn't block initial render */}
-        <Script
-          src="https://checkout.razorpay.com/v1/checkout.js"
-          strategy="lazyOnload"
-        />
+        {/*
+         * Razorpay Checkout JS is intentionally NOT loaded here.
+         *
+         * It used to live in this root layout, which meant every page
+         * (including the doctor portal at /doctor, the ops dashboard,
+         * and every static marketing page) loaded ~100 v2-entry-*.js
+         * chunks totalling roughly 7.9 MB of needless fetches per
+         * page-load. Razorpay is only invoked from the patient checkout
+         * flow (BookingModal — Hero + lab-tests booking) and the
+         * report-unlock page (ReportPaymentClient at /reports/[token]),
+         * so the <Script> tag now lives inside those two components.
+         *
+         * Next.js's <Script> dedupes by `src`, so even if both surfaces
+         * mount in the same session (rare but possible) the JS loads
+         * exactly once.
+         */}
       </body>
     </html>
   );
