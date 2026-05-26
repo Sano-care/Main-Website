@@ -51,6 +51,22 @@ export function DutyRoomEmbed({ url }: { url: string | null }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<DailyFrameLike | null>(null);
 
+  // Safety hatch: if for any reason 'joined-meeting' takes more than
+  // 10s after the iframe is mounted, drop the "Connecting…" overlay
+  // anyway so the doctor can see the iframe and intervene. This is
+  // belt-and-suspenders on top of the showPrejoinUI:false fix — even
+  // if a future Daily SDK update brings the prejoin back, the overlay
+  // won't trap clicks indefinitely.
+  const [overlayTimedOut, setOverlayTimedOut] = useState(false);
+  useEffect(() => {
+    if (state !== "starting") {
+      setOverlayTimedOut(false);
+      return;
+    }
+    const t = setTimeout(() => setOverlayTimedOut(true), 10_000);
+    return () => clearTimeout(t);
+  }, [state]);
+
   // Mount Daily Prebuilt when args land. Cleans up on unmount or state
   // transition away from in-call / starting.
   useEffect(() => {
@@ -91,7 +107,26 @@ export function DutyRoomEmbed({ url }: { url: string | null }) {
                 supportiveText: "#94a3b8",
               },
             },
+            // Daily Prebuilt UX flags.
+            //
+            // showPrejoinUI: false — CRITICAL. Daily's default prejoin
+            // ("Are you ready to join?") sits inside the iframe and
+            // requires the user to click an in-iframe "Join meeting"
+            // button to fire 'joined-meeting'. The Sanocare "Connecting
+            // to your Duty Room…" overlay above this iframe (rendered
+            // while state==='starting') covered that button — so the
+            // event never fired and the overlay never cleared, leaving
+            // the doctor permanently stuck in "Connecting…". This is
+            // also the wrong UX shape for our use case: the doctor
+            // isn't joining someone else's call, they're going on duty
+            // in their own room. Skip the prejoin and land them in the
+            // room directly. Mic/cam selection is still available via
+            // Daily's in-call "More" menu.
+            showPrejoinUI: false,
+            // Show Daily's built-in controls.
             showLeaveButton: true,
+            showFullscreenButton: true,
+            showLocalVideo: true,
           },
         );
 
@@ -190,8 +225,12 @@ export function DutyRoomEmbed({ url }: { url: string | null }) {
         <div className="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
           <div className="relative w-full h-full max-w-6xl bg-slate-900 rounded-2xl overflow-hidden shadow-2xl">
             <div ref={containerRef} className="absolute inset-0" />
-            {state === "starting" && (
-              <div className="absolute inset-0 flex items-center justify-center text-white text-sm gap-2 bg-slate-900/60">
+            {state === "starting" && !overlayTimedOut && (
+              // pointer-events-none so even if the overlay lingers past
+              // 'joined-meeting' (e.g. event missed), the iframe stays
+              // clickable. The 10s timeout above is the secondary
+              // safety; this is the primary belt.
+              <div className="absolute inset-0 flex items-center justify-center text-white text-sm gap-2 bg-slate-900/60 pointer-events-none">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Connecting to your Duty Room…
               </div>
