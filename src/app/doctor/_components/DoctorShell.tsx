@@ -1,5 +1,6 @@
 import Image from "next/image";
-import { Shield } from "lucide-react";
+import Link from "next/link";
+import { Shield, Home, FileText } from "lucide-react";
 import { DoctorSignOutButton } from "./DoctorSignOutButton";
 
 /**
@@ -35,6 +36,20 @@ export function DoctorShell({
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <nav className="hidden sm:flex items-center gap-1 text-sm">
+              <Link
+                href="/doctor"
+                className="inline-flex items-center gap-1.5 text-slate-700 hover:text-slate-900 px-3 py-1.5 rounded-md hover:bg-slate-100"
+              >
+                <Home className="w-3.5 h-3.5" /> Home
+              </Link>
+              <Link
+                href="/doctor/prescriptions"
+                className="inline-flex items-center gap-1.5 text-slate-700 hover:text-slate-900 px-3 py-1.5 rounded-md hover:bg-slate-100"
+              >
+                <FileText className="w-3.5 h-3.5" /> Prescriptions
+              </Link>
+            </nav>
             <div className="text-right">
               <div className="text-sm font-semibold text-slate-900">{fullName}</div>
               <div className="text-[11px] font-mono text-slate-500">

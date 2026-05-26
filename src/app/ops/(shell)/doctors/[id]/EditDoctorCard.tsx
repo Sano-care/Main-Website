@@ -1,8 +1,26 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Pencil, X, AlertCircle, Video, Loader2, CheckCircle2 } from "lucide-react";
-import { updateDoctor, provisionDoctorDutyRoom, type ProvisionResult } from "../actions";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Pencil,
+  X,
+  AlertCircle,
+  Video,
+  Loader2,
+  CheckCircle2,
+  Upload,
+  Trash2,
+} from "lucide-react";
+import {
+  updateDoctor,
+  provisionDoctorDutyRoom,
+  uploadDoctorSignature,
+  clearDoctorSignature,
+  getDoctorSignaturePreviewUrl,
+  type ProvisionResult,
+  type SignatureUploadResult,
+} from "../actions";
 
 type Doctor = {
   id: string;
@@ -19,6 +37,7 @@ type Doctor = {
   overtime_hourly_paise: number | null;
   pay_notes: string | null;
   duty_room_join_url: string | null;
+  signature_image_url: string | null;
   is_active: boolean;
 };
 
@@ -117,6 +136,23 @@ export function EditDoctorCard({
             />
           </Row>
           <Field label="Email" name="email" type="email" defaultValue={doctor.email ?? ""} />
+
+          {/* C2-Rx: signature management. Sits inside the edit modal so
+              admins land here naturally during onboarding. The file
+              input is intentionally NOT given a `name` attribute — that
+              way, when the surrounding profile form submits, the file
+              is NOT sent to updateDoctor (which has no idea what to do
+              with it). All signature interactions go through the
+              dedicated server actions (uploadDoctorSignature,
+              clearDoctorSignature) via type="button" controls, so this
+              subsection is structurally decoupled from the form's
+              submit / save-changes flow. */}
+          <div className="pt-3 border-t border-slate-100 space-y-2">
+            <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
+              Doctor signature
+            </div>
+            <SignatureField doctor={doctor} />
+          </div>
 
           <div className="pt-3 border-t border-slate-100 space-y-2">
             <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
@@ -328,6 +364,223 @@ export function EditDoctorCard({
         <div className="mt-5 pt-5 border-t border-slate-100">
           <div className="text-xs text-slate-500 mb-1">Pay notes</div>
           <div className="text-sm text-slate-800 whitespace-pre-wrap">{doctor.pay_notes}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------
+// C2-Rx — Signature management subsection (lives inside the edit form).
+//
+// Surface contract:
+//   - if the doctor has a signature on file: render a thumbnail preview
+//     (~80x40, fetched via getDoctorSignaturePreviewUrl which mints a
+//     5-min signed URL on the private 'doctor-signatures' bucket), plus
+//     a "Clear signature" button that calls clearDoctorSignature
+//   - always: a PNG/JPG file picker capped at 200KB (server-side
+//     magic-byte check enforces it again), a helper line explaining
+//     where the image gets rendered, and an "Upload signature" button
+//     that calls uploadDoctorSignature
+//   - errors from either action surface inline (matching the
+//     ProvisionResult pattern used by the Duty Room provisioner above)
+//
+// Form-detachment: the file <input> has NO `name` attribute and both
+// action buttons are type="button" — so when an admin clicks the
+// surrounding "Save changes" submit, the file bytes are NOT sent to
+// updateDoctor (which has no idea what to do with a `signature` field).
+// All signature traffic stays on the dedicated server actions.
+//
+// After a successful upload or clear, we router.refresh() the segment
+// so the parent server component re-reads doctor.signature_image_url
+// and this subsection's useEffect re-fires to re-mint the preview URL.
+// ---------------------------------------------------------------------
+function SignatureField({ doctor }: { doctor: Doctor }) {
+  const router = useRouter();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<SignatureUploadResult | null>(null);
+  const [clearError, setClearError] = useState<string | null>(null);
+  const [uploading, startUploadTransition] = useTransition();
+  const [clearing, startClearTransition] = useTransition();
+  const [pickerEmptyError, setPickerEmptyError] = useState(false);
+
+  // Re-mint the preview signed URL whenever the saved storage path
+  // changes (on upload success router.refresh updates the prop).
+  useEffect(() => {
+    let cancelled = false;
+    if (!doctor.signature_image_url) {
+      setPreviewUrl(null);
+      return;
+    }
+    setPreviewLoading(true);
+    getDoctorSignaturePreviewUrl(doctor.signature_image_url)
+      .then((url) => {
+        if (!cancelled) {
+          setPreviewUrl(url);
+          setPreviewLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPreviewUrl(null);
+          setPreviewLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [doctor.signature_image_url]);
+
+  const hasSig = doctor.signature_image_url != null;
+
+  const handleUpload = () => {
+    setUploadResult(null);
+    setPickerEmptyError(false);
+    const file = inputRef.current?.files?.[0];
+    if (!file) {
+      setPickerEmptyError(true);
+      return;
+    }
+    startUploadTransition(async () => {
+      const fd = new FormData();
+      fd.set("id", doctor.id);
+      fd.set("signature", file);
+      const r = await uploadDoctorSignature(fd);
+      setUploadResult(r);
+      if (r.ok) {
+        if (inputRef.current) inputRef.current.value = "";
+        // Re-fetch the doctor row so the preview re-mints with the new
+        // storage path. revalidatePath inside the action already
+        // invalidated the segment cache — router.refresh pulls fresh.
+        router.refresh();
+      }
+    });
+  };
+
+  const handleClear = () => {
+    setClearError(null);
+    setUploadResult(null);
+    startClearTransition(async () => {
+      const fd = new FormData();
+      fd.set("id", doctor.id);
+      try {
+        await clearDoctorSignature(fd);
+        router.refresh();
+      } catch (e) {
+        if (e && typeof e === "object" && "digest" in e) throw e;
+        setClearError(
+          e instanceof Error ? e.message : "Could not clear signature.",
+        );
+      }
+    });
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Preview row — only renders when a signature is on file. The
+          signed URL is short-lived (5 min) but adequate for the duration
+          of the edit-modal session; if it expires while the modal is
+          open, the next render mints a fresh one. */}
+      {hasSig && (
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="h-12 w-24 rounded border border-slate-200 bg-white flex items-center justify-center overflow-hidden">
+            {previewLoading ? (
+              <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+            ) : previewUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={previewUrl}
+                alt="Doctor signature preview"
+                className="max-h-full max-w-full object-contain"
+              />
+            ) : (
+              <div className="text-[10px] text-slate-400">preview failed</div>
+            )}
+          </div>
+          <div className="text-xs text-slate-500 font-mono break-all flex-1 min-w-[140px]">
+            {doctor.signature_image_url}
+          </div>
+          <button
+            type="button"
+            onClick={handleClear}
+            disabled={clearing || uploading}
+            className="inline-flex items-center gap-1.5 text-xs text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 disabled:opacity-50 px-3 py-1.5 rounded-md border border-rose-200"
+          >
+            {clearing ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Trash2 className="w-3 h-3" />
+            )}
+            {clearing ? "Clearing…" : "Clear signature"}
+          </button>
+        </div>
+      )}
+
+      {/* File picker. The input has NO `name` attribute so the parent
+          form's FormData never includes it on submit. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/png,image/jpeg"
+          className="block text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-slate-300 file:bg-slate-50 file:text-slate-700 file:text-xs file:font-semibold hover:file:bg-slate-100 file:cursor-pointer"
+          onChange={() => {
+            setPickerEmptyError(false);
+            setUploadResult(null);
+          }}
+        />
+        <button
+          type="button"
+          onClick={handleUpload}
+          disabled={uploading || clearing}
+          className="inline-flex items-center gap-1.5 text-xs bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white px-3 py-1.5 rounded-md"
+        >
+          {uploading ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <Upload className="w-3 h-3" />
+          )}
+          {uploading ? "Uploading…" : hasSig ? "Replace signature" : "Upload signature"}
+        </button>
+      </div>
+
+      <p className="text-xs text-slate-500">
+        PNG or JPG, max 200 KB. Embedded at the bottom of every
+        prescription this doctor sends.
+      </p>
+
+      {!hasSig && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
+          Not uploaded yet — this doctor cannot issue prescriptions until
+          a signature is on file (sendPrescription refuses).
+        </p>
+      )}
+
+      {pickerEmptyError && (
+        <div className="rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-xs p-2 flex items-start gap-2">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <span>Pick a PNG or JPG file first, then click Upload.</span>
+        </div>
+      )}
+
+      {uploadResult?.ok && (
+        <div className="rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs p-2 flex items-start gap-2">
+          <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <span>Signature uploaded.</span>
+        </div>
+      )}
+      {uploadResult && !uploadResult.ok && (
+        <div className="rounded-md bg-rose-50 border border-rose-200 text-rose-800 text-xs p-2 flex items-start gap-2">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <span>{uploadResult.error}</span>
+        </div>
+      )}
+      {clearError && (
+        <div className="rounded-md bg-rose-50 border border-rose-200 text-rose-800 text-xs p-2 flex items-start gap-2">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <span>{clearError}</span>
         </div>
       )}
     </div>
