@@ -13,6 +13,7 @@ import {
   Settings,
   LogOut,
   Shield,
+  FileText,
 } from "lucide-react";
 import Image from "next/image";
 import { useOpsAuth } from "../OpsAuthProvider";
@@ -30,6 +31,7 @@ const NAV: NavItem[] = [
   { href: "/ops/patients", label: "Patients", icon: Users },
   { href: "/ops/partners", label: "Partners", icon: Building2 },
   { href: "/ops/doctors", label: "Doctors", icon: Stethoscope },
+  { href: "/ops/prescriptions", label: "Prescriptions", icon: FileText },
   { href: "/ops/labs", label: "Labs", icon: Microscope },
   { href: "/ops/settings", label: "Settings", icon: Settings },
 ];

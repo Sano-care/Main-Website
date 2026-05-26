@@ -490,6 +490,12 @@ export default async function BookingDetailPage({
         </div>
       </div>
 
+      {/* C2-Rx: prescriptions linked to this booking. Lists every Rx
+          (across versions) so ops can resend or jump into a detail
+          surface. Most bookings have zero or one; teleconsult chains
+          with amend may have more. */}
+      <BookingPrescriptionsSection bookingId={booking.id} />
+
       {/* Ops notes */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
         <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-3">
@@ -613,3 +619,121 @@ function Stamp({ label, iso }: { label: string; iso: string | null }) {
     </div>
   );
 }
+
+
+// =====================================================================
+// C2-Rx — Prescriptions linked to this booking
+//
+// Renders an inline list of every Rx (across versions and statuses) for
+// the given booking. Each row links to /ops/prescriptions/[code] for
+// the full ops view (resend WhatsApp / download PDF). Server component;
+// no client interactivity needed here — actions live on the detail
+// page.
+// =====================================================================
+type BookingRxRow = {
+  id: string;
+  prescription_code: string;
+  version: number;
+  status: "draft" | "sent" | "superseded" | "voided";
+  sent_at: string | null;
+  created_at: string;
+  whatsapp_sent_at: string | null;
+  patient_view_token: string | null;
+  doctor: { full_name: string } | null;
+};
+
+async function BookingPrescriptionsSection({
+  bookingId,
+}: {
+  bookingId: string;
+}) {
+  const supabase = await createOpsRSCClient();
+  const { data, error } = await supabase
+    .from("prescriptions")
+    .select(
+      "id, prescription_code, version, status, sent_at, created_at, whatsapp_sent_at, patient_view_token, doctor:doctors(full_name)",
+    )
+    .eq("booking_id", bookingId)
+    .order("created_at", { ascending: false });
+
+  const rows = (data as unknown as BookingRxRow[] | null) ?? [];
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+        <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
+          Prescriptions ({rows.length})
+        </div>
+      </div>
+      {error ? (
+        <div className="text-sm text-rose-700">
+          Could not load prescriptions: {error.message}
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="text-sm text-slate-400">
+          No prescriptions issued for this booking yet.
+        </div>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {rows.map((r) => (
+            <li
+              key={r.id}
+              className="py-2 flex items-center justify-between gap-3 flex-wrap"
+            >
+              <div className="min-w-0">
+                <Link
+                  href={`/ops/prescriptions/${r.prescription_code}${
+                    r.version > 1 ? `?v=${r.version}` : ""
+                  }`}
+                  className="font-mono text-sm text-slate-900 hover:underline"
+                >
+                  {r.prescription_code}
+                  {r.version > 1 && (
+                    <span className="text-[10px] uppercase tracking-wider text-slate-500 ml-1">
+                      v{r.version}
+                    </span>
+                  )}
+                </Link>
+                <span className="ml-2 text-xs text-slate-500">
+                  by {r.doctor?.full_name ?? "—"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span
+                  className={
+                    "inline-block text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full " +
+                    (r.status === "sent"
+                      ? "bg-emerald-100 text-emerald-800"
+                      : r.status === "draft"
+                        ? "bg-amber-100 text-amber-800"
+                        : r.status === "voided"
+                          ? "bg-rose-100 text-rose-800"
+                          : "bg-slate-100 text-slate-700")
+                  }
+                >
+                  {r.status}
+                </span>
+                {r.status === "sent" && (
+                  r.whatsapp_sent_at ? (
+                    <span className="text-emerald-700">WhatsApp ✓</span>
+                  ) : (
+                    <span className="text-amber-700">delivery pending</span>
+                  )
+                )}
+                <span className="text-slate-500">
+                  {new Date(r.sent_at ?? r.created_at).toLocaleString("en-IN", {
+                    day: "2-digit",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+

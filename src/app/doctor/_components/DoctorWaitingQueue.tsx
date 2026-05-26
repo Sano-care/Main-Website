@@ -1,4 +1,5 @@
-import { Video, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import Link from "next/link";
+import { Video, Clock, CheckCircle2, AlertCircle, FileText } from "lucide-react";
 import type { DoctorWaitingSession } from "../_lib/doctorData";
 
 /**
@@ -76,7 +77,7 @@ export function DoctorWaitingQueue({
                     </span>
                   </div>
                 </div>
-                <div className="shrink-0 flex flex-col items-end gap-1 text-xs">
+                <div className="shrink-0 flex flex-col items-end gap-1.5 text-xs">
                   {consented ? (
                     <span className="inline-flex items-center gap-1 text-emerald-700">
                       <CheckCircle2 className="w-3.5 h-3.5" />
@@ -90,6 +91,16 @@ export function DoctorWaitingQueue({
                   ) : (
                     <span className="text-slate-400">Awaiting patient</span>
                   )}
+                  {/* C2-Rx: jump straight into the composer for this
+                      consult. Open a new draft if none exists, otherwise
+                      continue the existing one. The composer route resolves
+                      idempotency itself. */}
+                  <Link
+                    href={`/doctor/sessions/${s.id}/prescribe`}
+                    className="inline-flex items-center gap-1 text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-md"
+                  >
+                    <FileText className="w-3 h-3" /> Prescribe
+                  </Link>
                 </div>
               </li>
             );

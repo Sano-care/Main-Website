@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
+import { supabaseAdmin } from "@/lib/supabase-server";
 import { normaliseIndianPhone } from "@/lib/phone";
 import { getCurrentOpsUser } from "../../_lib/getCurrentOpsUser";
 import { provisionDutyRoom } from "@/lib/daily/client";
@@ -572,4 +573,169 @@ export async function postAdjustment(formData: FormData) {
   }
 
   revalidatePath(`/ops/doctors/${doctor_id}`);
+}
+
+// =====================================================================
+// uploadDoctorSignature — admin only (C2-Rx)
+//
+// Uploads a signature image to the private 'doctor-signatures' bucket
+// and writes the storage PATH (not URL) onto doctors.signature_image_url.
+// The Rx PDF renderer downloads the bytes via the service role and
+// embeds them as a data URL.
+//
+// Format: PNG or JPG, max 200KB. We re-check the magic bytes server-
+// side because content-type from the browser is trivially spoofable.
+// Path convention: `${doctor_id}/sig.<ext>` — stable per-doctor; upsert
+// overwrites any prior signature for that doctor.
+//
+// Returns a structured result so the EditDoctorCard can show success
+// or error inline (same pattern as ProvisionResult).
+// =====================================================================
+export type SignatureUploadResult =
+  | { ok: true; storage_path: string }
+  | { ok: false; error: string };
+
+const SIGNATURE_BUCKET = "doctor-signatures";
+const SIGNATURE_MAX_BYTES = 200 * 1024; // 200KB hard cap
+
+function detectImageExt(magic: Uint8Array): "png" | "jpg" | null {
+  // PNG magic: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    magic.length >= 8 &&
+    magic[0] === 0x89 &&
+    magic[1] === 0x50 &&
+    magic[2] === 0x4e &&
+    magic[3] === 0x47 &&
+    magic[4] === 0x0d &&
+    magic[5] === 0x0a &&
+    magic[6] === 0x1a &&
+    magic[7] === 0x0a
+  ) {
+    return "png";
+  }
+  // JPEG magic: FF D8 FF
+  if (
+    magic.length >= 3 &&
+    magic[0] === 0xff &&
+    magic[1] === 0xd8 &&
+    magic[2] === 0xff
+  ) {
+    return "jpg";
+  }
+  return null;
+}
+
+export async function uploadDoctorSignature(
+  formData: FormData,
+): Promise<SignatureUploadResult> {
+  try {
+    await assertOpsAdmin();
+
+    const id = reqStr(formData, "id");
+    if (!UUID_RE.test(id)) {
+      return { ok: false, error: "Invalid doctor id." };
+    }
+
+    const file = formData.get("signature");
+    if (!(file instanceof File) || file.size === 0) {
+      return { ok: false, error: "No signature file provided." };
+    }
+    if (file.size > SIGNATURE_MAX_BYTES) {
+      return {
+        ok: false,
+        error: `Signature too large: ${Math.round(file.size / 1024)} KB (cap ${SIGNATURE_MAX_BYTES / 1024} KB).`,
+      };
+    }
+
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const ext = detectImageExt(buf);
+    if (!ext) {
+      return {
+        ok: false,
+        error:
+          "Could not recognise the signature as PNG or JPG. Re-export it from the source and try again.",
+      };
+    }
+
+    const storagePath = `${id}/sig.${ext}`;
+    const contentType = ext === "png" ? "image/png" : "image/jpeg";
+
+    // upsert overwrites the previous signature in place. No need to
+    // garbage-collect older paths because we always write the same
+    // file name per doctor (./sig.png OR ./sig.jpg). If a doctor flips
+    // ext (png→jpg), the prior path stays orphaned — that's acceptable
+    // (~200KB per doctor at worst); we don't bother cleaning up.
+    const { error: uploadErr } = await supabaseAdmin.storage
+      .from(SIGNATURE_BUCKET)
+      .upload(storagePath, buf, { contentType, upsert: true });
+    if (uploadErr) {
+      return {
+        ok: false,
+        error: `Could not upload signature: ${uploadErr.message}`,
+      };
+    }
+
+    // Save the storage path (NOT a URL — the Rx renderer resolves it
+    // server-side every send).
+    const supabase = await createOpsRSCClient();
+    const { error: updateErr } = await supabase
+      .from("doctors")
+      .update({ signature_image_url: storagePath })
+      .eq("id", id);
+    if (updateErr) {
+      return {
+        ok: false,
+        error: `Could not save signature path: ${updateErr.message}`,
+      };
+    }
+
+    revalidatePath("/ops/doctors");
+    revalidatePath(`/ops/doctors/${id}`);
+    return { ok: true, storage_path: storagePath };
+  } catch (err) {
+    if (err && typeof err === "object" && "digest" in err) throw err;
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not upload signature.",
+    };
+  }
+}
+
+/**
+ * Clear a doctor's signature (the doctor's NEXT send will fail with the
+ * "no signature on file" message until ops re-uploads). Leaves the
+ * underlying object in storage — only the pointer is nulled.
+ */
+export async function clearDoctorSignature(formData: FormData): Promise<void> {
+  await assertOpsAdmin();
+  const id = reqStr(formData, "id");
+  if (!UUID_RE.test(id)) throw new Error("Invalid doctor id.");
+
+  const supabase = await createOpsRSCClient();
+  const { error } = await supabase
+    .from("doctors")
+    .update({ signature_image_url: null })
+    .eq("id", id);
+  if (error) {
+    throw new Error(`Could not clear signature: ${error.message}`);
+  }
+  revalidatePath("/ops/doctors");
+  revalidatePath(`/ops/doctors/${id}`);
+}
+
+/**
+ * Mint a short-lived signed URL on the doctor's signature in the
+ * private bucket so ops can preview it in the EditDoctorCard. We do
+ * NOT expose this URL outside the ops surface — it leaks only when an
+ * ops admin is already logged in.
+ */
+export async function getDoctorSignaturePreviewUrl(
+  storagePath: string,
+): Promise<string | null> {
+  await assertOpsAdmin();
+  const { data, error } = await supabaseAdmin.storage
+    .from(SIGNATURE_BUCKET)
+    .createSignedUrl(storagePath, 60 * 5); // 5 minutes
+  if (error || !data?.signedUrl) return null;
+  return data.signedUrl;
 }
