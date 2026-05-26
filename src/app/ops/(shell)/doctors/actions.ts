@@ -596,7 +596,12 @@ export type SignatureUploadResult =
   | { ok: false; error: string };
 
 const SIGNATURE_BUCKET = "doctor-signatures";
-const SIGNATURE_MAX_BYTES = 200 * 1024; // 200KB hard cap
+// 500 KB hard cap. Bumped from 200 KB after Dr Sanskriti's
+// signature_processed.png (~239 KB exported) failed the prior ceiling.
+// The user-facing validation message below this constant pulls the
+// number directly via `SIGNATURE_MAX_BYTES / 1024`, so it tracks
+// automatically.
+const SIGNATURE_MAX_BYTES = 500 * 1024;
 
 function detectImageExt(magic: Uint8Array): "png" | "jpg" | null {
   // PNG magic: 89 50 4E 47 0D 0A 1A 0A

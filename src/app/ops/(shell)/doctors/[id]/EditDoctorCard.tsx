@@ -547,7 +547,7 @@ function SignatureField({ doctor }: { doctor: Doctor }) {
       </div>
 
       <p className="text-xs text-slate-500">
-        PNG or JPG, max 200 KB. Embedded at the bottom of every
+        PNG or JPG, max 500 KB. Embedded at the bottom of every
         prescription this doctor sends.
       </p>
 
