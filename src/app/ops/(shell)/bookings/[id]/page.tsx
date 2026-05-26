@@ -651,7 +651,7 @@ async function BookingPrescriptionsSection({
   const { data, error } = await supabase
     .from("prescriptions")
     .select(
-      "id, prescription_code, version, status, sent_at, created_at, whatsapp_sent_at, patient_view_token, doctor:doctors(full_name)",
+      "id, prescription_code, version, status, sent_at, created_at, whatsapp_sent_at, patient_view_token, doctor:doctors!doctor_id(full_name)",
     )
     .eq("booking_id", bookingId)
     .order("created_at", { ascending: false });

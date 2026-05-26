@@ -97,7 +97,20 @@ interface RampwinResponse {
   error?: string | { message?: string };
 }
 
-function isDocumentHeaderEnabled(): boolean {
+/**
+ * Single source of truth for the RAMPWIN_RX_TEMPLATE_DOCUMENT_HEADER_OK
+ * flag. Both this module and every caller that has to *prepare* for
+ * document-header mode (signing the PDF URL ahead of the sendRxLink
+ * call) must agree on the answer — if they disagree (e.g. one trims
+ * trailing whitespace and the other doesn't), sends fail hard:
+ * sendRxLink throws "signedPdfUrl was not supplied" while the caller
+ * believed body-only mode was active and skipped signing.
+ *
+ * Exported so src/app/doctor/_actions/prescription.ts and
+ * src/app/ops/(shell)/prescriptions/actions.ts can call this directly
+ * instead of re-implementing the parse.
+ */
+export function isRxDocumentHeaderEnabled(): boolean {
   const v = process.env.RAMPWIN_RX_TEMPLATE_DOCUMENT_HEADER_OK?.trim().toLowerCase();
   return v === "true" || v === "1" || v === "yes";
 }
@@ -148,7 +161,7 @@ export async function sendRxLink(input: SendRxLinkInput): Promise<SendRxLinkResu
     );
   }
 
-  const useDocumentHeader = isDocumentHeaderEnabled();
+  const useDocumentHeader = isRxDocumentHeaderEnabled();
   const templateShape: SendRxLinkResult["templateShape"] = useDocumentHeader
     ? "document-header"
     : "body-only";

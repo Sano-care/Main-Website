@@ -77,7 +77,7 @@ export default async function OpsRxDetail({
   let query = supabase
     .from("prescriptions")
     .select(
-      "id, prescription_code, version, status, doctor_id, session_id, booking_id, superseded_by, patient_name, patient_age, patient_sex, patient_weight_kg, chief_complaint, provisional_diagnosis, general_advice, follow_up_advice, pdf_storage_path, patient_view_token, whatsapp_sent_at, whatsapp_message_id, created_at, sent_at, voided_at, void_reason, doctor:doctors(doctor_code, full_name, registration_no), booking:bookings(booking_code)",
+      "id, prescription_code, version, status, doctor_id, session_id, booking_id, superseded_by, patient_name, patient_age, patient_sex, patient_weight_kg, chief_complaint, provisional_diagnosis, general_advice, follow_up_advice, pdf_storage_path, patient_view_token, whatsapp_sent_at, whatsapp_message_id, created_at, sent_at, voided_at, void_reason, doctor:doctors!doctor_id(doctor_code, full_name, registration_no), booking:bookings(booking_code)",
     )
     .eq("prescription_code", rx_code);
   if (version != null) query = query.eq("version", version);

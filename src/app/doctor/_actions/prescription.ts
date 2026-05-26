@@ -41,7 +41,11 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 import { renderPrescriptionPdf } from "@/lib/rx/pdf/renderPrescriptionPdf";
 import type { PrescriptionPdfData } from "@/lib/rx/pdf/PrescriptionPdf";
 import { generateRxPatientViewToken } from "@/lib/rx/tokens";
-import { sendRxLink, RampwinRxDeliveryError } from "@/lib/rx/rampwin";
+import {
+  sendRxLink,
+  RampwinRxDeliveryError,
+  isRxDocumentHeaderEnabled,
+} from "@/lib/rx/rampwin";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRESCRIPTIONS_BUCKET = "prescriptions";
@@ -609,15 +613,12 @@ export async function sendPrescription(
     let whatsappSent = false;
     if (patient.patient_phone) {
       // For document-header mode, sign a 1-hour URL Meta can fetch
-      // during message render.
+      // during message render. We MUST use the same env-parse helper
+      // as rampwin.ts — if this side and the sender disagree (e.g. on
+      // trailing whitespace in the env var), sendRxLink throws
+      // "signedPdfUrl was not supplied" and every Rx fails.
       let signedPdfUrl: string | null = null;
-      const useDocHeader =
-        process.env.RAMPWIN_RX_TEMPLATE_DOCUMENT_HEADER_OK?.toLowerCase();
-      if (
-        useDocHeader === "true" ||
-        useDocHeader === "1" ||
-        useDocHeader === "yes"
-      ) {
+      if (isRxDocumentHeaderEnabled()) {
         const { data: signed, error: signErr } = await supabaseAdmin.storage
           .from(PRESCRIPTIONS_BUCKET)
           .createSignedUrl(storagePath, 60 * 60);

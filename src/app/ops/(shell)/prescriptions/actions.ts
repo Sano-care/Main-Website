@@ -19,7 +19,11 @@ import { revalidatePath } from "next/cache";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { getCurrentOpsUser } from "../../_lib/getCurrentOpsUser";
-import { sendRxLink, RampwinRxDeliveryError } from "@/lib/rx/rampwin";
+import {
+  sendRxLink,
+  RampwinRxDeliveryError,
+  isRxDocumentHeaderEnabled,
+} from "@/lib/rx/rampwin";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRESCRIPTIONS_BUCKET = "prescriptions";
@@ -117,13 +121,11 @@ export async function resendRxWhatsApp(
       };
     }
 
-    // For document-header mode, mint a 1h signed URL.
+    // For document-header mode, mint a 1h signed URL. Uses the shared
+    // env-parse helper so this and rampwin.ts can never disagree on a
+    // trailing-whitespace value.
     let signedPdfUrl: string | null = null;
-    const useDocHeader = process.env.RAMPWIN_RX_TEMPLATE_DOCUMENT_HEADER_OK?.toLowerCase();
-    if (
-      (useDocHeader === "true" || useDocHeader === "1" || useDocHeader === "yes") &&
-      rx.pdf_storage_path
-    ) {
+    if (isRxDocumentHeaderEnabled() && rx.pdf_storage_path) {
       const { data: signed } = await supabaseAdmin.storage
         .from(PRESCRIPTIONS_BUCKET)
         .createSignedUrl(rx.pdf_storage_path, 60 * 60);

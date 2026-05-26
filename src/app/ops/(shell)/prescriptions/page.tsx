@@ -40,7 +40,7 @@ export default async function OpsPrescriptionsList({
   let query = supabase
     .from("prescriptions")
     .select(
-      "id, prescription_code, version, status, doctor_id, booking_id, patient_name, sent_at, created_at, whatsapp_sent_at, doctor:doctors(doctor_code, full_name)",
+      "id, prescription_code, version, status, doctor_id, booking_id, patient_name, sent_at, created_at, whatsapp_sent_at, doctor:doctors!doctor_id(doctor_code, full_name)",
     )
     .order("created_at", { ascending: false })
     .limit(200);

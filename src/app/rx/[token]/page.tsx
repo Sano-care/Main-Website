@@ -58,7 +58,12 @@ async function lookupByToken(token: string): Promise<LookupResult> {
   const { data, error } = await supabaseAdmin
     .from("prescriptions")
     .select(
-      "prescription_code, version, status, patient_name, sent_at, void_reason, doctor:doctors(full_name)",
+      // FK hint !doctor_id disambiguates prescriptions -> doctors;
+      // the table has two FKs (doctor_id + created_by_doctor_id), so
+      // PostgREST refuses the embed without the hint and the page 500s.
+      // !doctor_id resolves to the prescribing doctor (the name + sig
+      // on the Rx), not the row's saver.
+      "prescription_code, version, status, patient_name, sent_at, void_reason, doctor:doctors!doctor_id(full_name)",
     )
     .eq("patient_view_token", token)
     .maybeSingle();
