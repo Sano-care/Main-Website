@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useBookingStore } from "@/store/bookingStore";
 import type { AppliedCoupon } from "@/types/lab-coupon";
+import { PathcoreCoBrandStrip } from "@/components/PathcoreCoBrandStrip";
 
 interface Props {
   /** When true, basket renders as a sticky right-rail panel (desktop).
@@ -278,15 +279,22 @@ function BasketContents({
     return (
       <div className="text-center py-6">
         <ShoppingBag className="w-10 h-10 text-text-secondary mx-auto mb-3 opacity-40" />
-        <p className="text-sm text-text-secondary">
+        <p className="text-sm text-text-secondary mb-4">
           Your basket is empty. Search and add tests from above to see prices.
         </p>
+        <PathcoreCoBrandStrip variant="compact" />
       </div>
     );
   }
 
   return (
     <>
+      {/* Pathcore co-brand credit — names the processing lab inside
+          the diagnostics basket. Same line on rail + drawer. */}
+      <div className="mb-3">
+        <PathcoreCoBrandStrip variant="compact" />
+      </div>
+
       {/* Test list */}
       <ul className="space-y-2.5 mb-4">
         {selectedTests.map((t) => (

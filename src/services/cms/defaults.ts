@@ -248,7 +248,6 @@ export function getCmsDefaultSectionSeeds(): CmsDefaultSectionSeed[] {
       values: ABOUT_PAGE_CONTENT.values,
       milestones: ABOUT_PAGE_CONTENT.milestones,
       team_members: ABOUT_PAGE_CONTENT.teamMembers,
-      accreditations: ABOUT_PAGE_CONTENT.accreditations,
     }),
   );
 
@@ -390,7 +389,6 @@ export function getCmsDefaultMediaSeeds(): CmsDefaultMediaSeed[] {
   collectFromSections("about", {
     page_copy: ABOUT_PAGE_CONTENT.pageCopy,
     team_members: ABOUT_PAGE_CONTENT.teamMembers,
-    accreditations: ABOUT_PAGE_CONTENT.accreditations,
   });
 
   return uniqueMediaSeeds(seeds);

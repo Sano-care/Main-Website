@@ -21,7 +21,6 @@ type AboutPillar = (typeof ABOUT_PAGE_CONTENT.pillars)[number];
 type AboutValue = (typeof ABOUT_PAGE_CONTENT.values)[number];
 type AboutMilestone = (typeof ABOUT_PAGE_CONTENT.milestones)[number];
 type AboutTeamMember = (typeof ABOUT_PAGE_CONTENT.teamMembers)[number];
-type AboutAccreditation = (typeof ABOUT_PAGE_CONTENT.accreditations)[number];
 
 function withCompanyName(value: string, companyName: string): string {
   return value.replace("{companyName}", companyName);
@@ -379,35 +378,6 @@ function TimelineSection({
   );
 }
 
-function AccreditationsSection({
-  aboutPageCopy,
-  accreditations,
-}: {
-  aboutPageCopy: AboutPageCopy;
-  accreditations: AboutAccreditation[];
-}) {
-  return (
-    <section className="border-t border-slate-200 bg-white/50 py-16">
-      <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
-        <p className="mb-10 text-center text-xs font-bold uppercase tracking-widest text-slate-500">
-          {aboutPageCopy.accreditationsLabel}
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-12 opacity-50 grayscale transition-opacity hover:opacity-100 lg:gap-24">
-          {accreditations.map((acc) => {
-            const Icon = typeof acc.icon === "function" ? acc.icon : Shield;
-            return (
-              <div key={acc.name} className="flex items-center gap-2 group">
-                <Icon className="w-10 h-10 group-hover:text-primary transition-colors" />
-                <span className="font-bold text-xl font-serif">{acc.name}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function CTASection({ aboutPageCopy }: { aboutPageCopy: AboutPageCopy }) {
   return (
     <section className="py-20 lg:py-28 bg-gradient-to-br from-primary to-primary-dark">
@@ -471,19 +441,10 @@ export default function AboutPage() {
     "team_members",
     ABOUT_PAGE_CONTENT.teamMembers,
   );
-  const { data: accreditationsData } = useCmsSection(
-    "about",
-    "accreditations",
-    ABOUT_PAGE_CONTENT.accreditations,
-  );
 
   const values = valuesData.map((value, index) => ({
     ...value,
     icon: value.icon ?? ABOUT_PAGE_CONTENT.values[index]?.icon ?? Shield,
-  }));
-  const accreditations = accreditationsData.map((accreditation, index) => ({
-    ...accreditation,
-    icon: accreditation.icon ?? ABOUT_PAGE_CONTENT.accreditations[index]?.icon ?? Shield,
   }));
 
   return (
@@ -496,7 +457,6 @@ export default function AboutPage() {
         <ValuesSection aboutPageCopy={aboutPageCopy} companyInfo={companyInfo} values={values} />
         <TeamSection aboutPageCopy={aboutPageCopy} teamMembers={teamMembers} />
         <TimelineSection aboutPageCopy={aboutPageCopy} companyInfo={companyInfo} milestones={milestones} />
-        <AccreditationsSection aboutPageCopy={aboutPageCopy} accreditations={accreditations} />
         <CTASection aboutPageCopy={aboutPageCopy} />
       </main>
 

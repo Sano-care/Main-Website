@@ -14,6 +14,14 @@ type Slide = { src: string; alt: string };
 
 const SLIDES: ReadonlyArray<Slide> = [
   {
+    // Pathcore launch announcement — leads the carousel. Added as part
+    // of the diagnostics co-branding announcement; the image is the
+    // approved Pathcore Launch Kit slide at 1080×1350 (same shape as
+    // the existing slides, so no layout changes).
+    src: "/banner/optimized/0-pathcore-launch.jpg",
+    alt: "Sanocare partners with Pathcore Diagnostics for home lab tests across South Delhi",
+  },
+  {
     src: "/banner/optimized/1-experienced-team.jpg",
     alt: "Sanocare's experienced doctors and qualified nurses",
   },
