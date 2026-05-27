@@ -26,13 +26,21 @@
 //     -> use the body-only template (default):
 //          name = RAMPWIN_RX_TEMPLATE_NAME_BODY (default
 //                 'sanocare_rx_link')
-//          body parameters (positional, three vars):
+//          body parameters (positional, FIVE vars — bumped from 3 in
+//          the 2026-05-27 hotfix after the Meta-approved template
+//          surfaced its real shape during the AAYUSHI / SAN-B-00051
+//          smoke test):
 //                  {{1}} patient first name
 //                  {{2}} doctor full name
-//                  {{3}} full https://sanocare.in/rx/<token> URL
-//          NO URL button — the full URL sits in the body so WhatsApp
-//          renders it as a tappable link inline (same pattern as the
-//          consult-join template).
+//                  {{3}} consultation date, "27 May 2026" en-IN format
+//                  {{4}} prescription code (SAN-RX-NNNNN)
+//                  {{5}} patient_view_token (32-hex; the template
+//                        body literal contains "sanocare.in/rx/{{5}}"
+//                        so we send the TOKEN ONLY, not the full URL)
+//          NO URL button — the URL is in the body's literal text.
+//          The earlier 3-var shape (first name / doctor / full URL)
+//          rendered "undefined" for params 4-5 and ultimately failed
+//          hard with Meta's param-count validator.
 //
 // In either mode, send failures throw RampwinRxDeliveryError; the
 // server action catches the throw and persists pdf_storage_path +
@@ -68,10 +76,27 @@ export interface SendRxLinkInput {
   phone: string;
   /** Patient's full display name; first word used as the WhatsApp greeting var. */
   patientName: string;
-  /** Doctor's full display name (only used in the body-only shape). */
+  /** Doctor's full display name (used as {{2}} in the body-only template). */
   doctorName: string;
-  /** The 32-hex patient-view token. The Rx URL is built from it. */
+  /** The 32-hex patient-view token — used as {{5}} in the body-only template
+   *  (the template body literal contains "sanocare.in/rx/{{5}}"). */
   patientViewToken: string;
+  /**
+   * ISO timestamp of the consultation (consultation_sessions.scheduled_at,
+   * falling back to prescriptions.sent_at if the session row is gone).
+   * Formatted server-side as "27 May 2026" (en-IN) for body-only {{3}}.
+   * REQUIRED in body-only mode; the 2026-05-27 hotfix surfaced this as a
+   * silent "undefined" placeholder before Meta added strict param-count
+   * validation. Ignored in document-header mode.
+   */
+  consultationDateIso?: string;
+  /**
+   * Prescription code, e.g. "SAN-RX-00003". REQUIRED in body-only mode
+   * (sent as {{4}}). In document-header mode it doubles as the filename
+   * Meta surfaces in chat. The earlier `{prescriptionCode?: string}`
+   * shape rendered "undefined" on body-only sends — same hotfix.
+   */
+  prescriptionCode?: string;
   /**
    * Required only when the document-header template is enabled. A
    * publicly-fetchable HTTPS URL Meta can pull during render; pass a
@@ -80,8 +105,20 @@ export interface SendRxLinkInput {
    * body-only mode.
    */
   signedPdfUrl?: string | null;
-  /** Used to render the document-header filename (Meta shows this in chat). */
-  prescriptionCode?: string;
+}
+
+/** Format an ISO timestamp as "27 May 2026" in en-IN locale. Used for
+ *  the body-only template's {{3}} consultation-date placeholder.
+ *  Returns the input verbatim if it doesn't parse — defensive against
+ *  upstream loaders that hand us a malformed string. */
+function formatConsultationDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export interface SendRxLinkResult {
@@ -128,11 +165,14 @@ function firstName(fullName: string): string {
  *   Body-only (default; lower Meta approval risk):
  *     name:     RAMPWIN_RX_TEMPLATE_NAME_BODY (default 'sanocare_rx_link')
  *     category: 'UTILITY'
- *     body parameters (positional, three vars):
- *       {{1}} patient first name (e.g. "Anjali")
- *       {{2}} doctor full name   (e.g. "Dr Ravi Kapoor")
- *       {{3}} full Rx URL        (e.g. "https://sanocare.in/rx/<token>")
- *     NO URL button — full URL sits in the body so WhatsApp linkifies it.
+ *     body parameters (positional, FIVE vars — bumped 2026-05-27):
+ *       {{1}} patient first name      (e.g. "Aayushi")
+ *       {{2}} doctor full name        (e.g. "Dr Sanskriti Singh")
+ *       {{3}} consultation date       (e.g. "27 May 2026")
+ *       {{4}} prescription code       (e.g. "SAN-RX-00003")
+ *       {{5}} patient_view_token      (32-hex; template literal is
+ *                                       "sanocare.in/rx/{{5}}")
+ *     NO URL button — the URL is in the body's literal text.
  *
  *   Document-header (enable via env flag once Meta-approved):
  *     name:     RAMPWIN_RX_TEMPLATE_NAME_DOCUMENT (default 'sanocare_rx_document')
@@ -142,6 +182,18 @@ function firstName(fullName: string): string {
  *     body parameters (positional, one var):
  *       {{1}} patient first name
  *     NO URL button — the PDF is attached.
+ *
+ * Meta-side template text reference (confirmed against Rampwin
+ * dashboard, 2026-05-27):
+ *
+ *   "Hi {{1}}, your prescription from Dr {{2}} for your consultation
+ *    on {{3}} is ready.
+ *    Rx code: {{4}}
+ *    View and download at: sanocare.in/rx/{{5}}"
+ *
+ * If the rendered message drops the "for" between {{2}} and "your
+ * consultation", that's a dashboard-side drift — fix in Rampwin/Meta,
+ * not in code. We only ship the placeholder values.
  *
  * The fetch shape mirrors src/lib/consult/rampwin.ts — only the
  * components array differs.
@@ -206,19 +258,33 @@ export async function sendRxLink(input: SendRxLinkInput): Promise<SendRxLinkResu
     templateName =
       process.env.RAMPWIN_RX_TEMPLATE_NAME_BODY?.trim() || "sanocare_rx_link";
 
-    // Build the full Rx URL the BSP template carries inline as {{3}}.
-    const siteUrl = (
-      process.env.NEXT_PUBLIC_SITE_URL?.trim() || DEFAULT_SITE_URL
-    ).replace(/\/+$/, "");
-    const rxUrl = `${siteUrl}/rx/${input.patientViewToken}`;
+    // Body-only template — 5 positional vars (hotfix 2026-05-27).
+    // Every var must be a non-empty string; Meta refuses sends with
+    // literal "undefined" placeholders AND rejects param-count
+    // mismatches outright. Validate up front so the caller gets a
+    // clear error instead of a Rampwin "number of localizable_params
+    // (3) does not match the expected number of params (5)" reply.
+    if (!input.consultationDateIso) {
+      throw new RampwinRxDeliveryError(
+        "Body-only template requires consultationDateIso (used as {{3}} in the Meta template body). Load consultation_sessions.scheduled_at and pass it through.",
+      );
+    }
+    if (!input.prescriptionCode) {
+      throw new RampwinRxDeliveryError(
+        "Body-only template requires prescriptionCode (used as {{4}} in the Meta template body).",
+      );
+    }
+    const consultationDate = formatConsultationDate(input.consultationDateIso);
 
     components = [
       {
         type: "body",
         parameters: [
-          { type: "text", text: firstName(input.patientName) },
-          { type: "text", text: input.doctorName },
-          { type: "text", text: rxUrl },
+          { type: "text", text: firstName(input.patientName) }, // {{1}}
+          { type: "text", text: input.doctorName },              // {{2}}
+          { type: "text", text: consultationDate },              // {{3}}
+          { type: "text", text: input.prescriptionCode },        // {{4}}
+          { type: "text", text: input.patientViewToken },        // {{5}}
         ],
       },
     ];

@@ -272,6 +272,24 @@ async function loadConsultModeForSession(sessionId: string): Promise<string | nu
   return m ?? null;
 }
 
+/**
+ * Loads consultation_sessions.scheduled_at as an ISO string for the
+ * WhatsApp template's {{3}} consultation_date placeholder. Returns
+ * null if the session row is gone (Rx outlived its session — rare but
+ * possible if ops cleaned up an old session manually). The Rampwin
+ * sender treats `consultationDateIso` as required, so the caller must
+ * fall back to rx.sent_at when this returns null.
+ */
+async function loadConsultationScheduledAt(sessionId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from("consultation_sessions")
+    .select("scheduled_at")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return (data as { scheduled_at?: string | null }).scheduled_at ?? null;
+}
+
 // ---------------------------------------------------------------------
 // Lab tests + item loaders (v3)
 //
@@ -953,6 +971,14 @@ export async function sendPrescription(
         }
       }
 
+      // Body-only template needs the consultation date for {{3}}.
+      // Pull session.scheduled_at; fall back to sentAtIso (we just
+      // wrote this row's sent_at locally) if the session is missing.
+      // Either way, we're guaranteed a non-null ISO string for the
+      // Rampwin sender — body-only mode throws if it isn't supplied.
+      const scheduledAt = await loadConsultationScheduledAt(rx.session_id);
+      const consultationDateIso = scheduledAt ?? sentAtIso;
+
       try {
         const sendResult = await sendRxLink({
           phone: patient.patient_phone,
@@ -961,6 +987,7 @@ export async function sendPrescription(
           patientViewToken,
           signedPdfUrl,
           prescriptionCode: rx.prescription_code,
+          consultationDateIso,
         });
         await supabaseAdmin
           .from("prescriptions")

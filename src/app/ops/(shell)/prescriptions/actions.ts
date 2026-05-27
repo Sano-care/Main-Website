@@ -67,11 +67,16 @@ export async function resendRxWhatsApp(
       return { ok: false, error: "Invalid prescription id." };
     }
 
-    // Load the prescription + the doctor + the patient phone.
+    // Load the prescription + the doctor + the patient phone. We
+    // also pull session_id + sent_at because the WhatsApp template's
+    // {{3}} placeholder is the consultation date; we use
+    // consultation_sessions.scheduled_at as the primary source,
+    // falling back to prescriptions.sent_at when the session row is
+    // gone (rare; ops can manually delete a stale session).
     const { data: rxRow, error: rxErr } = await supabaseAdmin
       .from("prescriptions")
       .select(
-        "id, prescription_code, version, status, doctor_id, booking_id, patient_name, patient_view_token, pdf_storage_path",
+        "id, prescription_code, version, status, doctor_id, session_id, booking_id, patient_name, patient_view_token, pdf_storage_path, sent_at",
       )
       .eq("id", id)
       .maybeSingle();
@@ -84,10 +89,12 @@ export async function resendRxWhatsApp(
       version: number;
       status: string;
       doctor_id: string;
+      session_id: string;
       booking_id: string;
       patient_name: string;
       patient_view_token: string | null;
       pdf_storage_path: string | null;
+      sent_at: string | null;
     };
     if (rx.status !== "sent") {
       return {
@@ -136,6 +143,21 @@ export async function resendRxWhatsApp(
       process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://sanocare.in"
     ).replace(/\/+$/, "")}/rx/${rx.patient_view_token}`;
 
+    // Body-only template needs the consultation date for {{3}}. Prefer
+    // consultation_sessions.scheduled_at; fall back to rx.sent_at when
+    // the session row is gone. We accept the fallback because the
+    // wording "your consultation on <date>" remains sensible — sent_at
+    // is typically minutes after scheduled_at for an in-flight Rx.
+    const { data: sessionRow } = await supabaseAdmin
+      .from("consultation_sessions")
+      .select("scheduled_at")
+      .eq("id", rx.session_id)
+      .maybeSingle();
+    const consultationDateIso =
+      (sessionRow as { scheduled_at: string | null } | null)?.scheduled_at ??
+      rx.sent_at ??
+      new Date().toISOString();
+
     try {
       const result = await sendRxLink({
         phone,
@@ -144,6 +166,7 @@ export async function resendRxWhatsApp(
         patientViewToken: rx.patient_view_token,
         signedPdfUrl,
         prescriptionCode: rx.prescription_code,
+        consultationDateIso,
       });
       await supabaseAdmin
         .from("prescriptions")

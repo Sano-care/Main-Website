@@ -287,10 +287,11 @@ async function main() {
     } | null;
   };
 
-  // ---- Session modality ----
+  // ---- Session modality + scheduled_at (for the body-only template's
+  //      {{3}} consultation_date placeholder) ----
   const { data: sessionData, error: sessionErr } = await supabase
     .from("consultation_sessions")
-    .select("modality")
+    .select("modality, scheduled_at")
     .eq("id", head.session_id)
     .maybeSingle();
   if (sessionErr) {
@@ -299,9 +300,13 @@ async function main() {
     );
     process.exit(1);
   }
-  const consultMode = fmtConsultMode(
-    (sessionData as { modality?: string | null } | null)?.modality,
-  );
+  const sessionRowTyped = sessionData as {
+    modality?: string | null;
+    scheduled_at?: string | null;
+  } | null;
+  const consultMode = fmtConsultMode(sessionRowTyped?.modality);
+  const consultationDateIso =
+    sessionRowTyped?.scheduled_at ?? head.sent_at ?? new Date().toISOString();
 
   // ---- Build PrescriptionPdfData ----
   const pdfData: PrescriptionPdfData = {
@@ -490,6 +495,7 @@ async function main() {
       patientViewToken: head.patient_view_token,
       signedPdfUrl,
       prescriptionCode: head.prescription_code,
+      consultationDateIso, // body-only template {{3}} — see rampwin.ts
     });
     console.log(
       `[dry_render_rx] WhatsApp OK (messageId=${send.providerMessageId ?? "<none>"}).`,
