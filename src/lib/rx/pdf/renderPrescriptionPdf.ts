@@ -5,10 +5,16 @@
 // Supabase storage bucket; the patient-view route (/rx/[token]) then
 // mints a short-lived signed URL on read.
 //
-// Font registration: Inter Regular + Bold from src/lib/rx/pdf/fonts/.
-// Next.js's outputFileTracingIncludes (see next.config.ts) bundles the
-// TTFs into every function reachable from doctor / ops / api / rx
-// routes, so process.cwd()-relative reads work in production.
+// Font registration: three families bundled as variable TTFs under
+// src/lib/rx/pdf/fonts/ — Cormorant Garamond (serif headings),
+// Source Serif 4 (clinical prose), Inter (tabular figures). Each
+// family is registered multiple times with distinct fontWeight values
+// pointing to the same variable file; @react-pdf maps fontWeight to
+// the font's wght axis at render time, producing rendered glyphs at
+// 500/600/700 etc. without separate static instances. Next.js's
+// outputFileTracingIncludes (see next.config.ts) bundles the TTFs
+// into every function reachable from doctor / ops / api / rx routes,
+// so process.cwd()-relative reads work in production.
 //
 // Signature handling: this module also resolves the doctor's signature
 // storage path into a base64 data URL (PNG / JPG) by downloading the
@@ -16,7 +22,8 @@
 // role. We embed-as-data-url rather than passing a signed URL because
 // @react-pdf/renderer fetches Image src at render time, and serverless
 // functions don't always have outbound HTTPS to *.supabase.co within
-// the React-PDF fetch sandbox.
+// the React-PDF fetch sandbox. The same pattern is used for the
+// doctor's optional rubber-stamp image (doctor-stamps bucket).
 
 import { renderToBuffer, Font } from "@react-pdf/renderer";
 import { createElement } from "react";
@@ -32,17 +39,49 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 // alongside this module under ./fonts/; Next.js's
 // outputFileTracingIncludes (see next.config.ts) bundles them into every
 // function that can reach this code.
+//
+// All three families are variable fonts. Registering the same `src`
+// multiple times with different `fontWeight` values tells @react-pdf to
+// map each style request to the correct point on the wght variation
+// axis. Source Serif 4 and Inter also expose an opsz (optical-size)
+// axis; @react-pdf doesn't pass an optical-size hint, so the renderer
+// gets the default optical size — fine for our use at 9–11 pt.
 // ---------------------------------------------------------------------
 let fontsRegistered = false;
-function registerInterOnce() {
+function registerFontsOnce() {
   if (fontsRegistered) return;
 
   const fontsDir = path.join(process.cwd(), "src/lib/rx/pdf/fonts");
+  const cormorant = path.join(fontsDir, "CormorantGaramond-Variable.ttf");
+  const sourceSerif = path.join(fontsDir, "SourceSerif4-Variable.ttf");
+  const inter = path.join(fontsDir, "Inter-Variable.ttf");
+
+  Font.register({
+    family: "CormorantGaramond",
+    fonts: [
+      { src: cormorant, fontWeight: 500 },
+      { src: cormorant, fontWeight: 600 },
+      { src: cormorant, fontWeight: 700 },
+    ],
+  });
+
+  Font.register({
+    family: "SourceSerif4",
+    fonts: [
+      { src: sourceSerif, fontWeight: 400 },
+      { src: sourceSerif, fontWeight: 500 },
+      { src: sourceSerif, fontWeight: 600 },
+      { src: sourceSerif, fontWeight: 700 },
+    ],
+  });
+
   Font.register({
     family: "Inter",
     fonts: [
-      { src: path.join(fontsDir, "Inter-Regular.ttf") },
-      { src: path.join(fontsDir, "Inter-Bold.ttf"), fontWeight: "bold" },
+      { src: inter, fontWeight: 400 },
+      { src: inter, fontWeight: 500 },
+      { src: inter, fontWeight: 600 },
+      { src: inter, fontWeight: 700 },
     ],
   });
 
@@ -115,7 +154,7 @@ export async function renderPrescriptionPdf(args: {
   data: PrescriptionPdfData;
   signature: RenderSignatureSource;
 }): Promise<Buffer> {
-  registerInterOnce();
+  registerFontsOnce();
 
   let signatureMode: "placeholder" | "embedded" = "placeholder";
   let signatureDataUrl: string | null = null;
