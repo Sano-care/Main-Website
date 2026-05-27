@@ -159,6 +159,10 @@ export default async function PrescribePage({
               ordinal: t.ordinal,
               test_name: t.test_name,
               instructions: t.instructions,
+              lab_test_id: t.lab_test_id,
+              catalog_code: t.catalog_code,
+              catalog_category: t.catalog_category,
+              catalog_price_paise: t.catalog_price_paise,
             })),
           }}
         />

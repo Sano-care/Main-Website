@@ -327,6 +327,65 @@ async function loadRxLabTestsForPdf(rxId: string): Promise<RxLabTestRow[]> {
   return (data ?? []) as unknown as RxLabTestRow[];
 }
 
+// Drawer hydration loader — joins lab_tests (M027) so the composer
+// can re-render catalog metadata (category, code, price) for previously
+// saved rows. The PDF renderer uses loadRxLabTestsForPdf above and
+// stays test_name + instructions only.
+type RxLabTestForDrawerRow = {
+  ordinal: number;
+  test_name: string;
+  instructions: string | null;
+  lab_test_id: string | null;
+  catalog_code: string | null;
+  catalog_category: string | null;
+  catalog_method: string | null;
+  catalog_sample: string | null;
+  catalog_tat: string | null;
+  catalog_price_paise: number | null;
+};
+
+async function loadRxLabTestsForDrawer(
+  rxId: string,
+): Promise<RxLabTestForDrawerRow[]> {
+  const { data, error } = await supabaseAdmin
+    .from("prescription_lab_tests")
+    .select(
+      "ordinal, test_name, instructions, lab_test_id, catalog:lab_tests(code, category, method, sample, tat, price_paise)",
+    )
+    .eq("prescription_id", rxId)
+    .order("ordinal", { ascending: true });
+  if (error) {
+    if (error.code === "PGRST116") return [];
+    throw new Error(`Could not load lab tests: ${error.message}`);
+  }
+  const rows = (data ?? []) as unknown as Array<{
+    ordinal: number;
+    test_name: string;
+    instructions: string | null;
+    lab_test_id: string | null;
+    catalog: {
+      code: string | null;
+      category: string | null;
+      method: string | null;
+      sample: string | null;
+      tat: string | null;
+      price_paise: number | null;
+    } | null;
+  }>;
+  return rows.map((r) => ({
+    ordinal: r.ordinal,
+    test_name: r.test_name,
+    instructions: r.instructions,
+    lab_test_id: r.lab_test_id,
+    catalog_code: r.catalog?.code ?? null,
+    catalog_category: r.catalog?.category ?? null,
+    catalog_method: r.catalog?.method ?? null,
+    catalog_sample: r.catalog?.sample ?? null,
+    catalog_tat: r.catalog?.tat ?? null,
+    catalog_price_paise: r.catalog?.price_paise ?? null,
+  }));
+}
+
 // =====================================================================
 // createDraftPrescription
 //
@@ -477,7 +536,15 @@ function parseItemsJson(raw: string): DraftItemInput[] {
 type DraftLabTestInput = {
   test_name: string;
   instructions: string | null;
+  /** Optional UUID FK into public.lab_tests (M027). When the doctor
+   *  picks from the LabTestAutocomplete dropdown, the catalog row's id
+   *  rides through here so the FK can land on prescription_lab_tests.
+   *  Free-text rows (typed test names not in the catalog) leave this
+   *  null — preserves the M026 free-text fallback. */
+  lab_test_id: string | null;
 };
+
+const UUID_RE_LOCAL = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function parseLabTestsJson(raw: string): DraftLabTestInput[] {
   let parsed: unknown;
@@ -499,9 +566,17 @@ function parseLabTestsJson(raw: string): DraftLabTestInput[] {
       throw new Error(`Lab test ${i + 1}: test name is required.`);
     }
     const instrRaw = typeof r.instructions === "string" ? r.instructions.trim() : "";
+    let lab_test_id: string | null = null;
+    if (r.lab_test_id != null && r.lab_test_id !== "") {
+      if (typeof r.lab_test_id !== "string" || !UUID_RE_LOCAL.test(r.lab_test_id)) {
+        throw new Error(`Lab test ${i + 1}: lab_test_id is not a valid UUID.`);
+      }
+      lab_test_id = r.lab_test_id;
+    }
     return {
       test_name: name,
       instructions: instrRaw === "" ? null : instrRaw,
+      lab_test_id,
     };
   });
 }
@@ -640,6 +715,7 @@ export async function updatePrescriptionDraft(formData: FormData): Promise<void>
         ordinal: idx + 1,
         test_name: t.test_name,
         instructions: t.instructions,
+        lab_test_id: t.lab_test_id, // M027: catalog FK, nullable for free-text rows
       }));
       const { error: labInsErr } = await supabaseAdmin
         .from("prescription_lab_tests")
@@ -1073,10 +1149,10 @@ export async function amendPrescription(
       }
     }
 
-    // Deep-copy lab tests (M026).
+    // Deep-copy lab tests (M026 + M027 catalog FK).
     const { data: parentLabTests, error: labErr } = await supabaseAdmin
       .from("prescription_lab_tests")
-      .select("ordinal, test_name, instructions")
+      .select("ordinal, test_name, instructions, lab_test_id")
       .eq("prescription_id", head.id)
       .order("ordinal", { ascending: true });
     if (labErr) {
@@ -1087,6 +1163,7 @@ export async function amendPrescription(
         ordinal: (t as { ordinal: number }).ordinal,
         test_name: (t as { test_name: string }).test_name,
         instructions: (t as { instructions: string | null }).instructions,
+        lab_test_id: (t as { lab_test_id: string | null }).lab_test_id ?? null,
       }));
       const { error: copyErr } = await supabaseAdmin
         .from("prescription_lab_tests")
@@ -1317,6 +1394,18 @@ export type DrawerComposerInitial = {
     ordinal: number;
     test_name: string;
     instructions: string | null;
+    /** M027: catalog FK (UUID) when the doctor picked from the
+     *  LabTestAutocomplete; null for free-text rows. */
+    lab_test_id: string | null;
+    /** Catalog snapshot fields surfaced in the drawer composer so the
+     *  doctor sees "Lipid Profile · Routine · ₹450" not just "Lipid".
+     *  All null when lab_test_id is null. */
+    catalog_code: string | null;
+    catalog_category: string | null;
+    catalog_method: string | null;
+    catalog_sample: string | null;
+    catalog_tat: string | null;
+    catalog_price_paise: number | null;
   }>;
 };
 
@@ -1389,9 +1478,12 @@ export async function ensureDraftForSession(
     }
 
     // Now load the current head + items + lab tests for hydration.
+    // labTests goes through the drawer-specific loader (joins lab_tests
+    // catalog for category/code/price snapshot) — the PDF loader stays
+    // test_name + instructions only.
     const { rx } = await assertPrescriptionOwnership(prescriptionId);
     const items = await loadRxItemsForPdf(rx.id);
-    const labTests = await loadRxLabTestsForPdf(rx.id);
+    const labTests = await loadRxLabTestsForDrawer(rx.id);
 
     const initial: DrawerComposerInitial = {
       prescription_id: rx.id,
@@ -1431,6 +1523,13 @@ export async function ensureDraftForSession(
         ordinal: t.ordinal,
         test_name: t.test_name,
         instructions: t.instructions,
+        lab_test_id: t.lab_test_id,
+        catalog_code: t.catalog_code,
+        catalog_category: t.catalog_category,
+        catalog_method: t.catalog_method,
+        catalog_sample: t.catalog_sample,
+        catalog_tat: t.catalog_tat,
+        catalog_price_paise: t.catalog_price_paise,
       })),
     };
 

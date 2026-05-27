@@ -55,6 +55,20 @@ export type DoctorRxLabTest = {
   ordinal: number;
   test_name: string;
   instructions: string | null;
+  /** Optional FK into lab_tests (M027). Set when the doctor picked the
+   *  test from autocomplete. */
+  lab_test_id: string | null;
+  /** Catalog fields hydrated via LEFT JOIN on lab_tests. All null when
+   *  lab_test_id is null (free-text row). Surfaced in the composer's
+   *  test row so doctor sees "Lipid Profile · Routine · ₹450" not just
+   *  "Lipid". The rendered PDF stays test_name + instructions only —
+   *  these are doctor-UX-only fields. */
+  catalog_code: string | null;
+  catalog_category: string | null;
+  catalog_method: string | null;
+  catalog_sample: string | null;
+  catalog_tat: string | null;
+  catalog_price_paise: number | null;
 };
 
 export type DoctorRxDetail = {
@@ -240,9 +254,17 @@ async function loadItems(rxId: string): Promise<DoctorRxItem[]> {
 }
 
 async function loadLabTests(rxId: string): Promise<DoctorRxLabTest[]> {
+  // LEFT JOIN against lab_tests (M027) so catalog fields hydrate when
+  // the row carries a lab_test_id, and stay null for free-text rows.
+  // Supabase-js translates the `catalog:lab_tests(...)` embed into a
+  // PostgREST inner-or-outer join based on the FK definition; M027's
+  // FK was created with ON DELETE SET NULL, so PostgREST treats this
+  // as an outer join (null catalog block when lab_test_id is null).
   const { data, error } = await supabaseAdmin
     .from("prescription_lab_tests")
-    .select("id, ordinal, test_name, instructions")
+    .select(
+      "id, ordinal, test_name, instructions, lab_test_id, catalog:lab_tests(code, category, method, sample, tat, price_paise)",
+    )
     .eq("prescription_id", rxId)
     .order("ordinal", { ascending: true });
   if (error) {
@@ -252,5 +274,32 @@ async function loadLabTests(rxId: string): Promise<DoctorRxLabTest[]> {
     console.error("[loadLabTests] supabase error:", error);
     throw new Error(`Could not load Rx lab tests: ${error.message}`);
   }
-  return (data as DoctorRxLabTest[] | null) ?? [];
+  const rows = (data ?? []) as unknown as Array<{
+    id: string;
+    ordinal: number;
+    test_name: string;
+    instructions: string | null;
+    lab_test_id: string | null;
+    catalog: {
+      code: string | null;
+      category: string | null;
+      method: string | null;
+      sample: string | null;
+      tat: string | null;
+      price_paise: number | null;
+    } | null;
+  }>;
+  return rows.map((r) => ({
+    id: r.id,
+    ordinal: r.ordinal,
+    test_name: r.test_name,
+    instructions: r.instructions,
+    lab_test_id: r.lab_test_id,
+    catalog_code: r.catalog?.code ?? null,
+    catalog_category: r.catalog?.category ?? null,
+    catalog_method: r.catalog?.method ?? null,
+    catalog_sample: r.catalog?.sample ?? null,
+    catalog_tat: r.catalog?.tat ?? null,
+    catalog_price_paise: r.catalog?.price_paise ?? null,
+  }));
 }

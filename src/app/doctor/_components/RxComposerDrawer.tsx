@@ -50,6 +50,10 @@ import {
   DrugAutocomplete,
   type MedicineSearchResult,
 } from "@/components/rx/DrugAutocomplete";
+import {
+  LabTestAutocomplete,
+  type LabTestSearchResult,
+} from "@/components/rx/LabTestAutocomplete";
 
 // ---- Local form-row shapes --------------------------------------------
 
@@ -68,6 +72,13 @@ type LabRow = {
   ordinal: number;
   test_name: string;
   instructions: string | null;
+  // M027: catalog FK + snapshot fields. lab_test_id is null for
+  // free-text rows; the catalog_* fields are doctor-UX-only (the PDF
+  // renders test_name + instructions only).
+  lab_test_id: string | null;
+  catalog_code: string | null;
+  catalog_category: string | null;
+  catalog_price_paise: number | null;
 };
 
 type Mode =
@@ -98,7 +109,22 @@ function emptyItem(ord: number): ItemRow {
 }
 
 function emptyLab(ord: number): LabRow {
-  return { ordinal: ord, test_name: "", instructions: null };
+  return {
+    ordinal: ord,
+    test_name: "",
+    instructions: null,
+    lab_test_id: null,
+    catalog_code: null,
+    catalog_category: null,
+    catalog_price_paise: null,
+  };
+}
+
+function formatPaiseAsRupees(paise: number | null): string | null {
+  if (paise == null) return null;
+  const rupees = paise / 100;
+  if (Number.isInteger(rupees)) return `₹${rupees.toLocaleString("en-IN")}`;
+  return `₹${rupees.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function classNames(...xs: Array<string | false | null | undefined>) {
@@ -206,6 +232,10 @@ export function RxComposerDrawer({ open, onClose }: RxComposerDrawerProps) {
             ordinal: idx + 1,
             test_name: t.test_name,
             instructions: t.instructions,
+            lab_test_id: t.lab_test_id,
+            catalog_code: t.catalog_code,
+            catalog_category: t.catalog_category,
+            catalog_price_paise: t.catalog_price_paise,
           })),
         );
         setMode({ kind: "ready", session, initial: init });
@@ -279,6 +309,35 @@ export function RxComposerDrawer({ open, onClose }: RxComposerDrawerProps) {
     },
     [],
   );
+  const onPickLabCatalog = useCallback(
+    (ord: number, picked: LabTestSearchResult) => {
+      // On select: set test_name, lab_test_id, snapshot catalog
+      // fields, and OPTIONALLY pre-fill instructions only when the
+      // row's instructions field is currently empty (per brief §4 —
+      // doctor's typed text wins, we never overwrite existing input).
+      setLabs((prev) =>
+        prev.map((t) => {
+          if (t.ordinal !== ord) return t;
+          const shouldPrefillInstructions =
+            (!t.instructions || t.instructions.trim() === "") &&
+            !!picked.instructions &&
+            picked.instructions.trim() !== "";
+          return {
+            ...t,
+            test_name: picked.name,
+            lab_test_id: picked.id,
+            catalog_code: picked.code,
+            catalog_category: picked.category,
+            catalog_price_paise: picked.price_paise,
+            instructions: shouldPrefillInstructions
+              ? picked.instructions
+              : t.instructions,
+          };
+        }),
+      );
+    },
+    [],
+  );
 
   // ---- Save & send ----------------------------------------------------
   const buildFormData = useCallback((): FormData => {
@@ -323,6 +382,7 @@ export function RxComposerDrawer({ open, onClose }: RxComposerDrawerProps) {
           .map((t) => ({
             test_name: t.test_name.trim(),
             instructions: t.instructions?.trim() || null,
+            lab_test_id: t.lab_test_id, // M027: catalog FK, null for free-text
           })),
       ),
     );
@@ -715,16 +775,31 @@ export function RxComposerDrawer({ open, onClose }: RxComposerDrawerProps) {
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    <FormField label="Test">
-                      <input
-                        value={t.test_name}
-                        onChange={(e) =>
-                          updateLab(t.ordinal, "test_name", e.target.value)
-                        }
-                        placeholder="CBC, Lipid panel, etc."
-                        className={inputCls()}
-                      />
-                    </FormField>
+                    <LabTestAutocomplete
+                      value={t.test_name}
+                      onChange={(v) => updateLab(t.ordinal, "test_name", v)}
+                      onPickCatalog={(p) => onPickLabCatalog(t.ordinal, p)}
+                      label="Test"
+                    />
+                    {t.lab_test_id && (t.catalog_category || t.catalog_code || t.catalog_price_paise != null) && (
+                      <div className="text-[11px] italic text-slate-500 mt-1">
+                        {[
+                          t.catalog_category,
+                          t.catalog_code ? (
+                            <span className="font-mono not-italic" key="code">
+                              {t.catalog_code}
+                            </span>
+                          ) : null,
+                          formatPaiseAsRupees(t.catalog_price_paise),
+                        ]
+                          .filter(Boolean)
+                          .reduce<React.ReactNode[]>((acc, part, idx) => {
+                            if (idx > 0) acc.push(" · ");
+                            acc.push(part);
+                            return acc;
+                          }, [])}
+                      </div>
+                    )}
                     <FormField label="Instructions">
                       <input
                         value={t.instructions ?? ""}

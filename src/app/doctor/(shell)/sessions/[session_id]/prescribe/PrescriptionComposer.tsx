@@ -35,6 +35,10 @@ import {
   DrugAutocomplete,
   type MedicineSearchResult,
 } from "@/components/rx/DrugAutocomplete";
+import {
+  LabTestAutocomplete,
+  type LabTestSearchResult,
+} from "@/components/rx/LabTestAutocomplete";
 
 type ItemRow = {
   ordinal: number;
@@ -56,6 +60,11 @@ type LabRow = {
   ordinal: number;
   test_name: string;
   instructions: string | null;
+  // M027 catalog FK + snapshot (doctor UX only; PDF stays simple).
+  lab_test_id: string | null;
+  catalog_code: string | null;
+  catalog_category: string | null;
+  catalog_price_paise: number | null;
 };
 
 type ComposerInitial = {
@@ -77,8 +86,23 @@ type ComposerInitial = {
   general_advice: string | null;
   follow_up_advice: string | null;
   items: ItemRow[];
-  lab_tests: LabRow[];
+  lab_tests: Array<{
+    ordinal: number;
+    test_name: string;
+    instructions: string | null;
+    lab_test_id: string | null;
+    catalog_code: string | null;
+    catalog_category: string | null;
+    catalog_price_paise: number | null;
+  }>;
 };
+
+function formatPaiseAsRupees(paise: number | null): string | null {
+  if (paise == null) return null;
+  const rupees = paise / 100;
+  if (Number.isInteger(rupees)) return `₹${rupees.toLocaleString("en-IN")}`;
+  return `₹${rupees.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 type SendOk = { prescription_code: string; rx_url: string; whatsapp_sent: boolean };
 
@@ -152,6 +176,10 @@ export function PrescriptionComposer({
       ordinal: idx + 1,
       test_name: t.test_name,
       instructions: t.instructions,
+      lab_test_id: t.lab_test_id,
+      catalog_code: t.catalog_code,
+      catalog_category: t.catalog_category,
+      catalog_price_paise: t.catalog_price_paise,
     })),
   );
 
@@ -194,10 +222,13 @@ export function PrescriptionComposer({
       .filter((it) => it.drug_name.length > 0);
     fd.set("items_json", JSON.stringify(cleanItems));
     // Lab tests — wholesale replace (matches the drawer behaviour).
+    // lab_test_id rides through so the M027 catalog FK lands on
+    // prescription_lab_tests; null for free-text rows.
     const cleanLabs = labs
       .map((t) => ({
         test_name: t.test_name.trim(),
         instructions: t.instructions?.trim() || null,
+        lab_test_id: t.lab_test_id,
       }))
       .filter((t) => t.test_name.length > 0);
     fd.set("lab_tests_json", JSON.stringify(cleanLabs));
@@ -283,7 +314,15 @@ export function PrescriptionComposer({
   function addLab() {
     setLabs((prev) => [
       ...prev,
-      { ordinal: prev.length + 1, test_name: "", instructions: null },
+      {
+        ordinal: prev.length + 1,
+        test_name: "",
+        instructions: null,
+        lab_test_id: null,
+        catalog_code: null,
+        catalog_category: null,
+        catalog_price_paise: null,
+      },
     ]);
   }
   function removeLab(idx: number) {
@@ -291,6 +330,31 @@ export function PrescriptionComposer({
   }
   function updateLab<K extends keyof LabRow>(idx: number, key: K, value: LabRow[K]) {
     setLabs((prev) => prev.map((t, i) => (i === idx ? { ...t, [key]: value } : t)));
+  }
+  function onPickLabCatalog(idx: number, picked: LabTestSearchResult) {
+    // On select: set test_name + lab_test_id + catalog snapshot, and
+    // pre-fill instructions only when the row's instructions field is
+    // currently empty (doctor's typed text wins).
+    setLabs((prev) =>
+      prev.map((t, i) => {
+        if (i !== idx) return t;
+        const shouldPrefillInstructions =
+          (!t.instructions || t.instructions.trim() === "") &&
+          !!picked.instructions &&
+          picked.instructions.trim() !== "";
+        return {
+          ...t,
+          test_name: picked.name,
+          lab_test_id: picked.id,
+          catalog_code: picked.code,
+          catalog_category: picked.category,
+          catalog_price_paise: picked.price_paise,
+          instructions: shouldPrefillInstructions
+            ? picked.instructions
+            : t.instructions,
+        };
+      }),
+    );
   }
 
   // After a successful send, show the success surface instead of the
@@ -532,12 +596,31 @@ export function PrescriptionComposer({
                 </div>
                 <div className="col-span-11 grid grid-cols-1 sm:grid-cols-12 gap-2">
                   <div className="sm:col-span-5">
-                    <Field
-                      label="Test"
+                    <LabTestAutocomplete
                       value={t.test_name}
                       onChange={(v) => updateLab(idx, "test_name", v)}
-                      placeholder="CBC, Lipid panel, etc."
+                      onPickCatalog={(p) => onPickLabCatalog(idx, p)}
+                      label="Test"
                     />
+                    {t.lab_test_id && (t.catalog_category || t.catalog_code || t.catalog_price_paise != null) && (
+                      <div className="text-[11px] italic text-slate-500 mt-1">
+                        {[
+                          t.catalog_category,
+                          t.catalog_code ? (
+                            <span className="font-mono not-italic" key="code">
+                              {t.catalog_code}
+                            </span>
+                          ) : null,
+                          formatPaiseAsRupees(t.catalog_price_paise),
+                        ]
+                          .filter(Boolean)
+                          .reduce<React.ReactNode[]>((acc, part, i) => {
+                            if (i > 0) acc.push(" · ");
+                            acc.push(part);
+                            return acc;
+                          }, [])}
+                      </div>
+                    )}
                   </div>
                   <div className="sm:col-span-7">
                     <Field
