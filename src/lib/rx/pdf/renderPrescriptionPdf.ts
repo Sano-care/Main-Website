@@ -53,9 +53,27 @@ function registerFontsOnce() {
   if (fontsRegistered) return;
 
   const fontsDir = path.join(process.cwd(), "src/lib/rx/pdf/fonts");
+  // Upright (wght-axis) variable TTFs.
   const cormorant = path.join(fontsDir, "CormorantGaramond-Variable.ttf");
   const sourceSerif = path.join(fontsDir, "SourceSerif4-Variable.ttf");
   const inter = path.join(fontsDir, "Inter-Variable.ttf");
+  // Italic VFs — separate files on Google Fonts because each family
+  // ships upright and italic as distinct variable axes. @react-pdf
+  // resolves `fontStyle: 'italic'` against entries that explicitly
+  // declare fontStyle: 'italic'; without them the renderer throws
+  // "Could not resolve font for <family>, fontWeight X, fontStyle italic"
+  // when the template uses italic anywhere. (The v3 template uses
+  // italic on the Rx ℞ symbol, drug-composition lines, advice list
+  // sub-labels, auth-note copy, NMC compliance footnote, etc.)
+  const cormorantItalic = path.join(
+    fontsDir,
+    "CormorantGaramond-Italic-Variable.ttf",
+  );
+  const sourceSerifItalic = path.join(
+    fontsDir,
+    "SourceSerif4-Italic-Variable.ttf",
+  );
+  const interItalic = path.join(fontsDir, "Inter-Italic-Variable.ttf");
 
   Font.register({
     family: "CormorantGaramond",
@@ -63,6 +81,9 @@ function registerFontsOnce() {
       { src: cormorant, fontWeight: 500 },
       { src: cormorant, fontWeight: 600 },
       { src: cormorant, fontWeight: 700 },
+      { src: cormorantItalic, fontWeight: 500, fontStyle: "italic" },
+      { src: cormorantItalic, fontWeight: 600, fontStyle: "italic" },
+      { src: cormorantItalic, fontWeight: 700, fontStyle: "italic" },
     ],
   });
 
@@ -73,6 +94,10 @@ function registerFontsOnce() {
       { src: sourceSerif, fontWeight: 500 },
       { src: sourceSerif, fontWeight: 600 },
       { src: sourceSerif, fontWeight: 700 },
+      { src: sourceSerifItalic, fontWeight: 400, fontStyle: "italic" },
+      { src: sourceSerifItalic, fontWeight: 500, fontStyle: "italic" },
+      { src: sourceSerifItalic, fontWeight: 600, fontStyle: "italic" },
+      { src: sourceSerifItalic, fontWeight: 700, fontStyle: "italic" },
     ],
   });
 
@@ -83,6 +108,10 @@ function registerFontsOnce() {
       { src: inter, fontWeight: 500 },
       { src: inter, fontWeight: 600 },
       { src: inter, fontWeight: 700 },
+      { src: interItalic, fontWeight: 400, fontStyle: "italic" },
+      { src: interItalic, fontWeight: 500, fontStyle: "italic" },
+      { src: interItalic, fontWeight: 600, fontStyle: "italic" },
+      { src: interItalic, fontWeight: 700, fontStyle: "italic" },
     ],
   });
 
