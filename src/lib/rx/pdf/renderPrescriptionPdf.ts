@@ -28,6 +28,7 @@
 import { renderToBuffer, Font } from "@react-pdf/renderer";
 import { createElement } from "react";
 import path from "path";
+import QRCode from "qrcode";
 import { PrescriptionPdf, type PrescriptionPdfData } from "./PrescriptionPdf";
 import { supabaseAdmin } from "@/lib/supabase-server";
 
@@ -95,64 +96,121 @@ function registerFontsOnce() {
 }
 
 // ---------------------------------------------------------------------
-// Signature resolution
+// Signature + stamp resolution
 //
-// The doctor.signature_image_url column stores the storage path (NOT a
-// URL). At Rx send time we download the bytes via the service-role
-// client and convert to a data: URL the PDF Image component can render.
+// The doctor.signature_image_url and doctor.stamp_image_url columns
+// each store a storage path (NOT a URL). At Rx send time we download
+// the bytes via the service-role client and convert to a data: URL the
+// PDF Image component can render directly without an outbound HTTPS
+// fetch at PDF-render time.
+//
+// The signature bucket and the stamp bucket are distinct because they
+// have different RLS/upload guards and different size caps (signatures
+// ~500 KB; stamps may end up larger if they include circular borders).
 // ---------------------------------------------------------------------
 const SIGNATURES_BUCKET = "doctor-signatures";
+const STAMPS_BUCKET = "doctor-stamps";
 
-function mimeForSignaturePath(storagePath: string): string {
+function mimeForImagePath(storagePath: string, what: string): string {
   const ext = storagePath.toLowerCase().split(".").pop() ?? "";
   if (ext === "png") return "image/png";
   if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
   if (ext === "webp") return "image/webp";
-  // Conservative fallback. React-PDF accepts PNG / JPG; if a signature
-  // was uploaded with a weird extension the upload guard should have
-  // rejected it, but we don't want this fn to silently produce a
+  // Conservative fallback. React-PDF accepts PNG / JPG / WebP; if a
+  // file was uploaded with a weird extension the upload guard should
+  // have rejected it, but we don't want this fn to silently produce a
   // broken data URL — call it out to the caller.
   throw new Error(
-    `Unsupported signature image extension on ${storagePath} — expected png/jpg/jpeg/webp.`,
+    `Unsupported ${what} image extension on ${storagePath} — expected png/jpg/jpeg/webp.`,
   );
 }
 
-export async function resolveSignatureToDataUrl(
+async function resolveBucketPathToDataUrl(
+  bucket: string,
   storagePath: string,
+  label: string,
 ): Promise<string> {
   const { data, error } = await supabaseAdmin.storage
-    .from(SIGNATURES_BUCKET)
+    .from(bucket)
     .download(storagePath);
   if (error || !data) {
     throw new Error(
-      `Could not download doctor signature from ${SIGNATURES_BUCKET}/${storagePath}: ${
+      `Could not download doctor ${label} from ${bucket}/${storagePath}: ${
         error?.message ?? "no data"
       }`,
     );
   }
   const arr = new Uint8Array(await data.arrayBuffer());
   const base64 = Buffer.from(arr).toString("base64");
-  return `data:${mimeForSignaturePath(storagePath)};base64,${base64}`;
+  return `data:${mimeForImagePath(storagePath, label)};base64,${base64}`;
+}
+
+export async function resolveSignatureToDataUrl(
+  storagePath: string,
+): Promise<string> {
+  return resolveBucketPathToDataUrl(SIGNATURES_BUCKET, storagePath, "signature");
+}
+
+export async function resolveStampToDataUrl(
+  storagePath: string,
+): Promise<string> {
+  return resolveBucketPathToDataUrl(STAMPS_BUCKET, storagePath, "stamp");
+}
+
+// ---------------------------------------------------------------------
+// QR generation
+//
+// The footer carries a verification QR. For v3 the QR points at the
+// Sanocare homepage; later phases may switch to a per-Rx verification
+// page. We generate the QR as a PNG data URL at render time so the
+// PDF stays fully self-contained (no outbound fetch at render time).
+//
+// Tuning notes:
+//   - errorCorrectionLevel 'M' (15% recovery) is the right balance for
+//     a printed/photographed prescription scan.
+//   - 240px is large enough to scan from a phone photo; the PDF box
+//     resizes it down to ~58pt anyway.
+//   - Dark colour matches the navy ink; light is paper-white so the
+//     QR reads cleanly on the cream background.
+// ---------------------------------------------------------------------
+async function generateVerificationQrDataUrl(): Promise<string> {
+  return QRCode.toDataURL("https://sanocare.in", {
+    errorCorrectionLevel: "M",
+    color: { dark: "#0A2670", light: "#FFFFFF" },
+    margin: 0,
+    width: 240,
+  });
 }
 
 // ---------------------------------------------------------------------
 // Main entry point
 //
-// signatureSource: 'placeholder' draws the underline; 'storagePath'
-// downloads from the doctor-signatures bucket and embeds. We accept the
-// storage path here (not a pre-resolved data URL) so all the byte
-// shuffling stays inside this module, and the server action just calls
-// renderPrescriptionPdf({ ..., signatureSource: { kind: 'storagePath',
-// path: doctor.signature_image_url } }).
+// signature / stamp: 'placeholder' draws the v3 dashed-ring (stamp)
+// or simple underline (signature); 'storagePath' downloads from the
+// respective bucket and embeds. We accept the storage path here (not
+// a pre-resolved data URL) so all the byte shuffling stays inside
+// this module, and the server action just calls
+// renderPrescriptionPdf({
+//   data, signature: { kind: 'storagePath', path: doctor.signature_image_url },
+//   stamp: doctor.stamp_image_url
+//     ? { kind: 'storagePath', path: doctor.stamp_image_url }
+//     : { kind: 'placeholder' },
+// }).
 // ---------------------------------------------------------------------
-export type RenderSignatureSource =
+export type RenderImageSource =
   | { kind: "placeholder" }
   | { kind: "storagePath"; path: string }
   | { kind: "dataUrl"; dataUrl: string };
 
+/** @deprecated kept for backwards compatibility; prefer RenderImageSource. */
+export type RenderSignatureSource = RenderImageSource;
+
 export async function renderPrescriptionPdf(args: {
   data: PrescriptionPdfData;
-  signature: RenderSignatureSource;
+  signature: RenderImageSource;
+  /** Optional stamp source. If omitted, the renderer assumes
+   *  'placeholder' (dashed clinic-seal ring per v3 F2). */
+  stamp?: RenderImageSource;
 }): Promise<Buffer> {
   registerFontsOnce();
 
@@ -167,10 +225,28 @@ export async function renderPrescriptionPdf(args: {
     signatureMode = "embedded";
   }
 
+  let stampMode: "placeholder" | "embedded" = "placeholder";
+  let stampDataUrl: string | null = null;
+  const stampSource = args.stamp ?? { kind: "placeholder" as const };
+
+  if (stampSource.kind === "storagePath") {
+    stampDataUrl = await resolveStampToDataUrl(stampSource.path);
+    stampMode = "embedded";
+  } else if (stampSource.kind === "dataUrl") {
+    stampDataUrl = stampSource.dataUrl;
+    stampMode = "embedded";
+  }
+
+  // QR is always generated (used on both draft previews and sent
+  // documents). Cheap: ~1 ms in Node for a sub-300px PNG data URL.
+  const qrDataUrl = args.data.qr_data_url ?? (await generateVerificationQrDataUrl());
+
   const element = createElement(PrescriptionPdf, {
-    data: args.data,
+    data: { ...args.data, qr_data_url: qrDataUrl },
     signatureMode,
     signatureDataUrl,
+    stampMode,
+    stampDataUrl,
   });
 
   // renderToBuffer expects a ReactElement<DocumentProps>. PrescriptionPdf

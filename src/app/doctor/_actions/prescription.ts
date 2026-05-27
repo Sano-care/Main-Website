@@ -159,7 +159,17 @@ type PrescriptionRow = {
   provisional_diagnosis: string | null;
   general_advice: string | null;
   follow_up_advice: string | null;
+  // M026: vitals
+  bp_sys: number | null;
+  bp_dia: number | null;
+  pulse_bpm: number | null;
+  spo2_pct: number | null;
+  temp_c: number | null;
+  height_cm: number | null;
 };
+const RX_SELECT_COLS =
+  "id, prescription_code, version, status, doctor_id, session_id, booking_id, superseded_by, patient_view_token, pdf_storage_path, sent_at, patient_name, patient_age, patient_sex, patient_weight_kg, chief_complaint, provisional_diagnosis, general_advice, follow_up_advice, bp_sys, bp_dia, pulse_bpm, spo2_pct, temp_c, height_cm";
+
 async function assertPrescriptionOwnership(prescriptionId: string): Promise<{
   doctor: Awaited<ReturnType<typeof getCurrentDoctor>>;
   rx: PrescriptionRow;
@@ -170,9 +180,7 @@ async function assertPrescriptionOwnership(prescriptionId: string): Promise<{
   const doctor = await getCurrentDoctor();
   const { data, error } = await supabaseAdmin
     .from("prescriptions")
-    .select(
-      "id, prescription_code, version, status, doctor_id, session_id, booking_id, superseded_by, patient_view_token, pdf_storage_path, sent_at, patient_name, patient_age, patient_sex, patient_weight_kg, chief_complaint, provisional_diagnosis, general_advice, follow_up_advice",
-    )
+    .select(RX_SELECT_COLS)
     .eq("id", prescriptionId)
     .maybeSingle();
   if (error) {
@@ -201,11 +209,15 @@ async function assertPrescriptionOwnership(prescriptionId: string): Promise<{
 async function loadBookingPatientSnapshot(bookingId: string): Promise<{
   patient_name: string;
   patient_phone: string | null;
+  /** customers.customer_code (SAN-C-XXXXX) — printed as "Patient ID" on the v3 Rx PDF. */
+  patient_code: string | null;
+  /** bookings.booking_code (SAN-B-XXXXX). */
+  booking_code: string | null;
 }> {
   const { data, error } = await supabaseAdmin
     .from("bookings")
     .select(
-      "id, patient_name, phone, customer:customers(full_name, phone)",
+      "id, booking_code, patient_name, phone, customer:customers(full_name, phone, customer_code)",
     )
     .eq("id", bookingId)
     .maybeSingle();
@@ -218,13 +230,101 @@ async function loadBookingPatientSnapshot(bookingId: string): Promise<{
   }
   // Prefer linked customer name (the master record) over the booking-row
   // copy. Same posture as the ops booking-detail header.
-  const customer = (data as { customer: { full_name?: string | null; phone?: string | null } | null }).customer;
+  const customer = (data as {
+    customer: {
+      full_name?: string | null;
+      phone?: string | null;
+      customer_code?: string | null;
+    } | null;
+  }).customer;
   const patientName = customer?.full_name ?? (data as { patient_name?: string | null }).patient_name ?? "Patient";
   const patientPhone = customer?.phone ?? (data as { phone?: string | null }).phone ?? null;
+  const patientCode = customer?.customer_code ?? null;
+  const bookingCode = (data as { booking_code?: string | null }).booking_code ?? null;
   return {
     patient_name: patientName,
     patient_phone: patientPhone,
+    patient_code: patientCode,
+    booking_code: bookingCode,
   };
+}
+
+// ---------------------------------------------------------------------
+// Consult-modality formatter
+//
+// consultation_sessions.modality is one of 'video' / 'audio' / 'in_person'
+// today. The Rx template prints it as "Video (Daily.co)" / "Audio (Daily.co)"
+// / "In-person visit". We render the transport hint in parentheses for
+// video/audio because the patient may need to know which platform they
+// used (relevant for refund / fraud disputes).
+// ---------------------------------------------------------------------
+async function loadConsultModeForSession(sessionId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from("consultation_sessions")
+    .select("modality")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const m = (data as { modality?: string | null }).modality;
+  if (m === "video") return "Video (Daily.co)";
+  if (m === "audio") return "Audio (Daily.co)";
+  if (m === "in_person") return "In-person visit";
+  return m ?? null;
+}
+
+// ---------------------------------------------------------------------
+// Lab tests + item loaders (v3)
+//
+// Lab tests live in the prescription_lab_tests table (M026). We load
+// them ordered by `ordinal` ascending. The composition for each item
+// comes via a join from prescription_items.medicine_sku into the
+// medicine_catalog (M025) — nullable, present only when the doctor
+// picked the drug from autocomplete rather than free-text.
+// ---------------------------------------------------------------------
+type RxItemWithCompositionRow = {
+  ordinal: number;
+  drug_name: string;
+  dose: string | null;
+  frequency: string | null;
+  duration: string | null;
+  instructions: string | null;
+  medicine: { composition: string | null } | null;
+};
+
+async function loadRxItemsForPdf(
+  rxId: string,
+): Promise<RxItemWithCompositionRow[]> {
+  const { data, error } = await supabaseAdmin
+    .from("prescription_items")
+    .select(
+      "ordinal, drug_name, dose, frequency, duration, instructions, medicine:medicine_catalog(composition)",
+    )
+    .eq("prescription_id", rxId)
+    .order("ordinal", { ascending: true });
+  if (error) {
+    throw new Error(`Could not load items: ${error.message}`);
+  }
+  return (data ?? []) as unknown as RxItemWithCompositionRow[];
+}
+
+type RxLabTestRow = {
+  ordinal: number;
+  test_name: string;
+  instructions: string | null;
+};
+
+async function loadRxLabTestsForPdf(rxId: string): Promise<RxLabTestRow[]> {
+  const { data, error } = await supabaseAdmin
+    .from("prescription_lab_tests")
+    .select("ordinal, test_name, instructions")
+    .eq("prescription_id", rxId)
+    .order("ordinal", { ascending: true });
+  if (error) {
+    // Not found is fine — older Rx may predate M026. Surface other errors.
+    if (error.code === "PGRST116") return [];
+    throw new Error(`Could not load lab tests: ${error.message}`);
+  }
+  return (data ?? []) as unknown as RxLabTestRow[];
 }
 
 // =====================================================================
@@ -319,6 +419,9 @@ type DraftItemInput = {
   frequency: string | null;
   duration: string | null;
   instructions: string | null;
+  /** Optional FK into medicine_catalog (M025/M026). When present the
+   *  composition is rendered under the drug name on the v3 PDF. */
+  medicine_sku: number | null;
 };
 
 function parseItemsJson(raw: string): DraftItemInput[] {
@@ -346,12 +449,59 @@ function parseItemsJson(raw: string): DraftItemInput[] {
       const t = v.trim();
       return t === "" ? null : t;
     };
+    let medicine_sku: number | null = null;
+    if (r.medicine_sku != null && r.medicine_sku !== "") {
+      const n = Number(r.medicine_sku);
+      if (Number.isFinite(n) && Number.isInteger(n) && n > 0) {
+        medicine_sku = n;
+      }
+    }
     return {
       drug_name: drug,
       dose: opt("dose"),
       frequency: opt("frequency"),
       duration: opt("duration"),
       instructions: opt("instructions"),
+      medicine_sku,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------
+// Lab-tests JSON parser
+//
+// Mirror of parseItemsJson for the v3 "Investigations Advised" block.
+// Free-text test names (Q4 from v3 sign-off — phase-2 can swap in a
+// catalog FK without breaking these rows).
+// ---------------------------------------------------------------------
+type DraftLabTestInput = {
+  test_name: string;
+  instructions: string | null;
+};
+
+function parseLabTestsJson(raw: string): DraftLabTestInput[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("Lab tests list is malformed (could not parse).");
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error("Lab tests list must be an array.");
+  }
+  return parsed.map((row, i): DraftLabTestInput => {
+    if (!row || typeof row !== "object") {
+      throw new Error(`Lab test ${i + 1}: must be an object.`);
+    }
+    const r = row as Record<string, unknown>;
+    const name = typeof r.test_name === "string" ? r.test_name.trim() : "";
+    if (!name) {
+      throw new Error(`Lab test ${i + 1}: test name is required.`);
+    }
+    const instrRaw = typeof r.instructions === "string" ? r.instructions.trim() : "";
+    return {
+      test_name: name,
+      instructions: instrRaw === "" ? null : instrRaw,
     };
   });
 }
@@ -383,8 +533,41 @@ export async function updatePrescriptionDraft(formData: FormData): Promise<void>
     throw new Error("Patient weight must be greater than 0 and less than 500 kg.");
   }
 
+  // M026 vitals (all optional). Range checks here mirror the CHECK
+  // constraints in M026 so a bad value fails server-side rather than
+  // throwing a 23514 from Postgres.
+  const bp_sys = intOrNull(formData, "bp_sys");
+  if (bp_sys != null && (bp_sys < 50 || bp_sys > 250)) {
+    throw new Error("Systolic BP must be between 50 and 250 mmHg.");
+  }
+  const bp_dia = intOrNull(formData, "bp_dia");
+  if (bp_dia != null && (bp_dia < 30 || bp_dia > 160)) {
+    throw new Error("Diastolic BP must be between 30 and 160 mmHg.");
+  }
+  const pulse_bpm = intOrNull(formData, "pulse_bpm");
+  if (pulse_bpm != null && (pulse_bpm < 30 || pulse_bpm > 220)) {
+    throw new Error("Pulse must be between 30 and 220 bpm.");
+  }
+  const spo2_pct = intOrNull(formData, "spo2_pct");
+  if (spo2_pct != null && (spo2_pct < 50 || spo2_pct > 100)) {
+    throw new Error("SpO2 must be between 50 and 100 %.");
+  }
+  const temp_c = numOrNull(formData, "temp_c");
+  if (temp_c != null && (temp_c < 30 || temp_c > 45)) {
+    throw new Error("Temperature must be between 30 and 45 °C.");
+  }
+  const height_cm = numOrNull(formData, "height_cm");
+  if (height_cm != null && (height_cm < 30 || height_cm > 250)) {
+    throw new Error("Height must be between 30 and 250 cm.");
+  }
+
   const itemsRaw = str(formData, "items_json") ?? "[]";
   const items = parseItemsJson(itemsRaw);
+
+  // lab_tests_json is optional — the legacy composer surface doesn't
+  // submit it; the v3 drawer surface does.
+  const labTestsRaw = str(formData, "lab_tests_json");
+  const labTests = labTestsRaw ? parseLabTestsJson(labTestsRaw) : null;
 
   // Update header fields.
   const { error: updateErr } = await supabaseAdmin
@@ -394,6 +577,12 @@ export async function updatePrescriptionDraft(formData: FormData): Promise<void>
       patient_age,
       patient_sex,
       patient_weight_kg,
+      bp_sys,
+      bp_dia,
+      pulse_bpm,
+      spo2_pct,
+      temp_c,
+      height_cm,
       chief_complaint: str(formData, "chief_complaint"),
       provisional_diagnosis: str(formData, "provisional_diagnosis"),
       general_advice: str(formData, "general_advice"),
@@ -424,12 +613,40 @@ export async function updatePrescriptionDraft(formData: FormData): Promise<void>
       frequency: it.frequency,
       duration: it.duration,
       instructions: it.instructions,
+      medicine_sku: it.medicine_sku,
     }));
     const { error: insertErr } = await supabaseAdmin
       .from("prescription_items")
       .insert(rows);
     if (insertErr) {
       throw new Error(`Could not save items: ${insertErr.message}`);
+    }
+  }
+
+  // Replace lab tests wholesale (same pattern as items). Skipped when
+  // lab_tests_json wasn't submitted — keeps the legacy composer route
+  // backwards-compatible.
+  if (labTests != null) {
+    const { error: labDelErr } = await supabaseAdmin
+      .from("prescription_lab_tests")
+      .delete()
+      .eq("prescription_id", rx.id);
+    if (labDelErr) {
+      throw new Error(`Could not clear lab tests: ${labDelErr.message}`);
+    }
+    if (labTests.length > 0) {
+      const rows = labTests.map((t, idx) => ({
+        prescription_id: rx.id,
+        ordinal: idx + 1,
+        test_name: t.test_name,
+        instructions: t.instructions,
+      }));
+      const { error: labInsErr } = await supabaseAdmin
+        .from("prescription_lab_tests")
+        .insert(rows);
+      if (labInsErr) {
+        throw new Error(`Could not save lab tests: ${labInsErr.message}`);
+      }
     }
   }
 
@@ -478,17 +695,19 @@ export async function sendPrescription(
       };
     }
 
-    // Re-load doctor with signature_image_url because getCurrentDoctor
-    // doesn't return it (avoiding bloat on every page load).
-    const { data: doctorSig, error: doctorSigErr } = await supabaseAdmin
+    // Re-load doctor with signature + stamp + issuing council because
+    // getCurrentDoctor doesn't return them (avoiding bloat on every
+    // page load). The stamp is optional (renders as a dashed-ring
+    // placeholder when null per F2 in the v3 brief).
+    const { data: doctorExt, error: doctorExtErr } = await supabaseAdmin
       .from("doctors")
-      .select("signature_image_url")
+      .select("signature_image_url, stamp_image_url, issuing_council")
       .eq("id", doctor.id)
       .maybeSingle();
-    if (doctorSigErr) {
-      return { ok: false, error: `Could not check signature: ${doctorSigErr.message}` };
+    if (doctorExtErr) {
+      return { ok: false, error: `Could not check signature: ${doctorExtErr.message}` };
     }
-    const signaturePath = (doctorSig as { signature_image_url: string | null } | null)?.signature_image_url;
+    const signaturePath = (doctorExt as { signature_image_url: string | null } | null)?.signature_image_url;
     if (!signaturePath) {
       return {
         ok: false,
@@ -496,19 +715,24 @@ export async function sendPrescription(
           "Your signature isn't on file yet — ask ops to upload it from your /ops/doctors profile before issuing prescriptions.",
       };
     }
+    const stampPath = (doctorExt as { stamp_image_url: string | null } | null)?.stamp_image_url ?? null;
+    const issuingCouncil = (doctorExt as { issuing_council: string | null } | null)?.issuing_council ?? null;
 
-    // Load items.
-    const { data: itemsRows, error: itemsErr } = await supabaseAdmin
-      .from("prescription_items")
-      .select("ordinal, drug_name, dose, frequency, duration, instructions")
-      .eq("prescription_id", rx.id)
-      .order("ordinal", { ascending: true });
-    if (itemsErr) {
-      return { ok: false, error: `Could not load items: ${itemsErr.message}` };
+    // Load items (with composition via the medicine_catalog FK) + lab tests.
+    let items: RxItemWithCompositionRow[];
+    let labTests: RxLabTestRow[];
+    try {
+      items = await loadRxItemsForPdf(rx.id);
+      labTests = await loadRxLabTestsForPdf(rx.id);
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "Could not load Rx body.",
+      };
     }
-    const items = itemsRows ?? [];
     const hasContent =
       items.length > 0 ||
+      labTests.length > 0 ||
       !!rx.chief_complaint ||
       !!rx.provisional_diagnosis ||
       !!rx.general_advice ||
@@ -517,16 +741,20 @@ export async function sendPrescription(
       return {
         ok: false,
         error:
-          "This prescription is empty — add at least one medication or some advice before sending.",
+          "This prescription is empty — add at least one medication, lab test, or advice before sending.",
       };
     }
 
-    // Patient phone (for WhatsApp delivery).
+    // Patient phone (for WhatsApp delivery) + patient_code + booking_code
+    // (for the v3 Patient ID and Booking ID strip).
     const patient = await loadBookingPatientSnapshot(rx.booking_id);
     if (!patient.patient_phone) {
       // Allow sending anyway — ops can deliver out-of-band.
       console.warn(`[sendPrescription] No patient phone for booking ${rx.booking_id}; WhatsApp send will be skipped.`);
     }
+
+    // Consult mode (for the v3 "Consult mode" identity strip).
+    const consultMode = await loadConsultModeForSession(rx.session_id);
 
     // ---- Render PDF ----
     const sentAtIso = new Date().toISOString();
@@ -537,22 +765,39 @@ export async function sendPrescription(
       doctor_full_name: doctor.full_name,
       doctor_qualification: doctor.qualification,
       doctor_registration_no: doctor.registration_no,
+      doctor_issuing_council: issuingCouncil,
       patient_name: rx.patient_name,
       patient_age: rx.patient_age,
       patient_sex: rx.patient_sex,
       patient_weight_kg: rx.patient_weight_kg,
+      patient_code: patient.patient_code,
+      booking_code: patient.booking_code,
+      consult_mode: consultMode,
+      bp_sys: rx.bp_sys,
+      bp_dia: rx.bp_dia,
+      pulse_bpm: rx.pulse_bpm,
+      spo2_pct: rx.spo2_pct,
+      temp_c: rx.temp_c,
+      height_cm: rx.height_cm,
       chief_complaint: rx.chief_complaint,
       provisional_diagnosis: rx.provisional_diagnosis,
       items: items.map((it) => ({
-        ordinal: (it as { ordinal: number }).ordinal,
-        drug_name: (it as { drug_name: string }).drug_name,
-        dose: (it as { dose: string | null }).dose,
-        frequency: (it as { frequency: string | null }).frequency,
-        duration: (it as { duration: string | null }).duration,
-        instructions: (it as { instructions: string | null }).instructions,
+        ordinal: it.ordinal,
+        drug_name: it.drug_name,
+        composition: it.medicine?.composition ?? null,
+        dose: it.dose,
+        frequency: it.frequency,
+        duration: it.duration,
+        instructions: it.instructions,
+      })),
+      lab_tests: labTests.map((t) => ({
+        ordinal: t.ordinal,
+        test_name: t.test_name,
+        instructions: t.instructions,
       })),
       general_advice: rx.general_advice,
       follow_up_advice: rx.follow_up_advice,
+      qr_data_url: null, // generated inside renderPrescriptionPdf
     };
 
     let pdfBuffer: Buffer;
@@ -560,6 +805,9 @@ export async function sendPrescription(
       pdfBuffer = await renderPrescriptionPdf({
         data: pdfData,
         signature: { kind: "storagePath", path: signaturePath },
+        stamp: stampPath
+          ? { kind: "storagePath", path: stampPath }
+          : { kind: "placeholder" },
       });
     } catch (e) {
       console.error("[sendPrescription] PDF render failed:", e);
@@ -726,9 +974,7 @@ export async function amendPrescription(
     while (head.superseded_by) {
       const { data: next, error } = await supabaseAdmin
         .from("prescriptions")
-        .select(
-          "id, prescription_code, version, status, doctor_id, session_id, booking_id, superseded_by, patient_view_token, pdf_storage_path, sent_at, patient_name, patient_age, patient_sex, patient_weight_kg, chief_complaint, provisional_diagnosis, general_advice, follow_up_advice",
-        )
+        .select(RX_SELECT_COLS)
         .eq("id", head.superseded_by)
         .maybeSingle();
       if (error || !next) {
@@ -753,7 +999,10 @@ export async function amendPrescription(
       };
     }
 
-    // Insert v(N+1) inheriting code from the head.
+    // Insert v(N+1) inheriting code from the head. We copy vitals,
+    // chief complaint, diagnosis, and advice fields so the amend draft
+    // starts as an editable mirror of the head; the doctor can then
+    // change whichever fields the correction touches.
     const newVersion = head.version + 1;
     const { data: inserted, error: insertErr } = await supabaseAdmin
       .from("prescriptions")
@@ -772,6 +1021,13 @@ export async function amendPrescription(
         provisional_diagnosis: head.provisional_diagnosis,
         general_advice: head.general_advice,
         follow_up_advice: head.follow_up_advice,
+        // M026 vitals — copy across so amend doesn't silently lose them.
+        bp_sys: head.bp_sys,
+        bp_dia: head.bp_dia,
+        pulse_bpm: head.pulse_bpm,
+        spo2_pct: head.spo2_pct,
+        temp_c: head.temp_c,
+        height_cm: head.height_cm,
         status: "draft",
       })
       .select("id")
@@ -786,10 +1042,12 @@ export async function amendPrescription(
       };
     }
 
-    // Deep-copy items.
+    const newRxId = (inserted as { id: string }).id;
+
+    // Deep-copy items (preserving medicine_sku so composition stays linked).
     const { data: parentItems, error: itemsErr } = await supabaseAdmin
       .from("prescription_items")
-      .select("ordinal, drug_name, dose, frequency, duration, instructions")
+      .select("ordinal, drug_name, dose, frequency, duration, instructions, medicine_sku")
       .eq("prescription_id", head.id)
       .order("ordinal", { ascending: true });
     if (itemsErr) {
@@ -798,13 +1056,14 @@ export async function amendPrescription(
       console.error("[amendPrescription] could not copy items:", itemsErr);
     } else if (parentItems && parentItems.length > 0) {
       const copyRows = parentItems.map((it) => ({
-        prescription_id: (inserted as { id: string }).id,
+        prescription_id: newRxId,
         ordinal: (it as { ordinal: number }).ordinal,
         drug_name: (it as { drug_name: string }).drug_name,
         dose: (it as { dose: string | null }).dose,
         frequency: (it as { frequency: string | null }).frequency,
         duration: (it as { duration: string | null }).duration,
         instructions: (it as { instructions: string | null }).instructions,
+        medicine_sku: (it as { medicine_sku: number | null }).medicine_sku ?? null,
       }));
       const { error: copyErr } = await supabaseAdmin
         .from("prescription_items")
@@ -814,13 +1073,36 @@ export async function amendPrescription(
       }
     }
 
+    // Deep-copy lab tests (M026).
+    const { data: parentLabTests, error: labErr } = await supabaseAdmin
+      .from("prescription_lab_tests")
+      .select("ordinal, test_name, instructions")
+      .eq("prescription_id", head.id)
+      .order("ordinal", { ascending: true });
+    if (labErr) {
+      console.error("[amendPrescription] could not copy lab tests:", labErr);
+    } else if (parentLabTests && parentLabTests.length > 0) {
+      const copyRows = parentLabTests.map((t) => ({
+        prescription_id: newRxId,
+        ordinal: (t as { ordinal: number }).ordinal,
+        test_name: (t as { test_name: string }).test_name,
+        instructions: (t as { instructions: string | null }).instructions,
+      }));
+      const { error: copyErr } = await supabaseAdmin
+        .from("prescription_lab_tests")
+        .insert(copyRows);
+      if (copyErr) {
+        console.error("[amendPrescription] lab-test copy insert failed:", copyErr);
+      }
+    }
+
     revalidatePath(`/doctor/sessions/${head.session_id}/prescribe`);
     revalidatePath(`/doctor/prescriptions`);
 
     return {
       ok: true,
       data: {
-        new_prescription_id: (inserted as { id: string }).id,
+        new_prescription_id: newRxId,
         new_version: newVersion,
       },
     };
