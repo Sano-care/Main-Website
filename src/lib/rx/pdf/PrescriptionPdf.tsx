@@ -132,6 +132,15 @@ export type PrescriptionPdfProps = {
    */
   stampMode: "placeholder" | "embedded";
   stampDataUrl?: string | null;
+  /**
+   * v4 horizontal Sanocare lockup (icon + wordmark). Rendered at the
+   * top of every page (well — only page 1 here, but the layout reads
+   * "page 1 has the brand mark; pages 2+ have the persistent footer").
+   * Passed in as a base64 data URL by renderPrescriptionPdf so the PDF
+   * is fully self-contained — no filesystem reads at render time.
+   * Required from v4 onwards.
+   */
+  lockupDataUrl: string;
 };
 
 // -------- palette -----------------------------------------------------
@@ -159,7 +168,12 @@ const styles = StyleSheet.create({
     color: PALETTE.ink,
     backgroundColor: PALETTE.paper,
     paddingTop: 56, // ≈ 20mm
-    paddingBottom: 56,
+    // v4: paddingBottom bumped from 56pt to 170pt so the inline content
+    // flow stops above the new persistent fixed footer (corp block +
+    // control strip + compliance footnote, ~140pt tall, anchored 28pt
+    // from page bottom). Without the bump, content would overlap the
+    // fixed footer on long prescriptions.
+    paddingBottom: 170,
     paddingLeft: 56,
     paddingRight: 56,
     lineHeight: 1.45,
@@ -186,7 +200,13 @@ const styles = StyleSheet.create({
     borderColor: PALETTE.rule,
   },
 
-  // ----- watermark (centered Sanocare mark at 4.5% opacity)
+  // ----- watermark (centered Sanocare mark, grayscale, ~2.5% opacity)
+  // v4: dropped from 4.5% blue to 2.5% dark-slate per founder feedback —
+  // the previous saturation made the kidney butterfly bleed through the
+  // medications table + advice content, hurting readability. Founder
+  // approved "even black & white would be fine" — we picked a near-
+  // black (#1E293B = slate-900) so it reads as paper texture, not a
+  // logo competing for attention.
   watermarkWrap: {
     position: "absolute",
     top: "30%",
@@ -195,7 +215,7 @@ const styles = StyleSheet.create({
     bottom: "30%",
     alignItems: "center",
     justifyContent: "center",
-    opacity: 0.045,
+    opacity: 0.025,
   },
 
   // ----- DRAFT watermark text (only on previews)
@@ -213,62 +233,20 @@ const styles = StyleSheet.create({
     letterSpacing: 6,
   },
 
-  // ----- LETTERHEAD
+  // ----- LETTERHEAD (v4: horizontal lockup PNG replaces text wordmark)
+  // The lockup PNG is 3349×1000 (aspect 3.349:1). At a height of 50pt
+  // (~17.6mm) the width works out to ~167pt — leaving the rest of the
+  // page padding for breathing room. Centered horizontally so the
+  // mark anchors the page visually; the doc-meta strip below provides
+  // the textual structure (ISSUED / DOCTOR'S PRESCRIPTION / NO.).
   letterhead: {
     alignItems: "center",
-    paddingBottom: 12,
+    paddingBottom: 8,
   },
-  clinicName: {
-    fontFamily: "CormorantGaramond",
-    fontSize: 26,
-    fontWeight: 700,
-    color: PALETTE.navy,
-    letterSpacing: 5,
-    textAlign: "center",
-  },
-  clinicSubtitle: {
-    fontFamily: "SourceSerif4",
-    fontSize: 9.5,
-    fontStyle: "italic",
-    color: PALETTE.inkSoft,
-    letterSpacing: 1.5,
-    marginTop: 4,
-    textAlign: "center",
-  },
-  identityStrip: {
-    fontFamily: "Inter",
-    fontSize: 7.5,
-    color: PALETTE.inkSoft,
-    letterSpacing: 0.8,
-    marginTop: 8,
-    textAlign: "center",
-  },
-  identityDivider: { color: PALETTE.rule },
-
-  // ----- decorative ornament (line · dot · diamond · dot · line)
-  ornamentRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 8,
-    gap: 10,
-  },
-  ornamentLine: {
-    height: 0.6,
-    width: 100,
-    backgroundColor: PALETTE.rule,
-  },
-  ornamentDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: PALETTE.navy,
-  },
-  ornamentDiamond: {
-    width: 6,
-    height: 6,
-    backgroundColor: PALETTE.navy,
-    transform: "rotate(45deg)",
+  lockupImage: {
+    height: 50, // ≈ 17.6mm — sits in the brief's 16–20mm window
+    width: 167.45, // aspect-locked: 50 * (3349/1000)
+    objectFit: "contain",
   },
 
   // ----- DOCUMENT META (top/bottom hairline rules; 3-col)
@@ -303,9 +281,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 600,
     color: PALETTE.navy,
-    letterSpacing: 4,
+    letterSpacing: 3,
     textAlign: "center",
-    flex: 1,
+    // v4: widened from flex:1 to flex:1.6 to accommodate the 3-word
+    // "DOCTOR'S PRESCRIPTION" heading (previously a single word).
+    // The flanking ISSUED / NO. cells keep flex:1 so the strip's
+    // visual centre stays centred.
+    flex: 1.6,
   },
 
   // ----- PARTY GRID (2-col bordered)
@@ -382,6 +364,12 @@ const styles = StyleSheet.create({
   },
 
   // ----- VITALS (6-cell grid)
+  // v4 fixes: tighten cells so the strip doesn't read as a stretched
+  // separate insert. Use the same outer border weight as the party
+  // grid above so the two stack visually. The heading uses the
+  // shared `sectionHeading` style (set elsewhere) so its letter-
+  // spacing matches CHIEF COMPLAINT / INVESTIGATIONS ADVISED /
+  // ADVICE & FOLLOW-UP — no separate vitals-heading style.
   vitalsRow: {
     flexDirection: "row",
     borderWidth: 0.5,
@@ -391,7 +379,7 @@ const styles = StyleSheet.create({
   },
   vitalCell: {
     flex: 1,
-    paddingVertical: 7,
+    paddingVertical: 5, // v4: was 7 — tightens the strip
     paddingHorizontal: 4,
     borderRightWidth: 0.4,
     borderRightColor: PALETTE.hair,
@@ -407,10 +395,10 @@ const styles = StyleSheet.create({
   },
   vitalValue: {
     fontFamily: "SourceSerif4",
-    fontSize: 12,
+    fontSize: 11, // v4: was 12 — keeps row height tight
     fontWeight: 600,
     color: PALETTE.ink,
-    marginTop: 3,
+    marginTop: 2,
   },
   vitalUnit: {
     fontFamily: "Inter",
@@ -588,10 +576,16 @@ const styles = StyleSheet.create({
   },
 
   // ----- SIGNATURE ROW
+  // v4: marginTop: "auto" pushes the signature to the bottom of the
+  // Page's flex column — so on a short Rx where clinical content
+  // ends mid-page, the signature still anchors at the bottom of the
+  // inline content area, immediately above the fixed footer. On a
+  // multi-page Rx the signature flows naturally at the end of the
+  // last page's content. Founder feedback #6.
   signatureRow: {
     flexDirection: "row",
     alignItems: "flex-end",
-    marginTop: 16,
+    marginTop: "auto",
     paddingTop: 10,
     borderTopWidth: 0.3,
     borderTopColor: PALETTE.rule,
@@ -686,11 +680,23 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 
-  // ----- FOOTER (corp left, QR right)
+  // ----- v4 PERSISTENT FOOTER (corp + QR + control strip + compliance)
+  // The whole footer is now one absolutely-positioned `fixed` View
+  // pinned to the bottom of every page (founder feedback #5 + #7d).
+  // Single-page prescriptions render in one page because the inline
+  // content flow doesn't push a footer block onto an empty page 2 —
+  // the fixed footer is always there from page 1 onwards.
+  pageFooter: {
+    position: "absolute",
+    left: 56,
+    right: 56,
+    bottom: 28,
+  },
+
+  // ----- FOOTER inner — corp left, QR right
   footer: {
     flexDirection: "row",
-    marginTop: 16,
-    paddingTop: 10,
+    paddingTop: 8,
     borderTopWidth: 1.5,
     borderTopColor: PALETTE.navy,
     gap: 24,
@@ -757,8 +763,8 @@ const styles = StyleSheet.create({
   // ----- CONTROL STRIP (Document ID / Page X of Y / Issued)
   controlStrip: {
     flexDirection: "row",
-    marginTop: 12,
-    paddingTop: 8,
+    marginTop: 6,
+    paddingTop: 6,
     borderTopWidth: 0.3,
     borderTopColor: PALETTE.hair,
   },
@@ -773,16 +779,18 @@ const styles = StyleSheet.create({
   controlRight: { textAlign: "right" },
 
   // ----- COMPLIANCE (NMC footnote)
+  // v4: shrunk margins so the whole footer block fits inside the
+  // fixed-bottom anchor without forcing huge paddingBottom on the Page.
   compliance: {
-    marginTop: 8,
-    paddingTop: 7,
+    marginTop: 5,
+    paddingTop: 5,
     borderTopWidth: 0.3,
     borderTopColor: PALETTE.hair,
     fontFamily: "SourceSerif4",
-    fontSize: 7.8,
+    fontSize: 7.4,
     fontStyle: "italic",
     color: PALETTE.inkMute,
-    lineHeight: 1.55,
+    lineHeight: 1.4,
   },
   complianceStrong: {
     color: PALETTE.inkSoft,
@@ -848,19 +856,25 @@ function fmtDoctorReg(d: PrescriptionPdfData): string | null {
 }
 
 // -------- watermark (Sanocare logo as inline SVG) ---------------------
-// Two kidney-shaped paths from public/logo.svg, rendered at 4.5% opacity
-// behind page content. Inlined here so the PDF stays self-contained and
-// the renderer doesn't need to fetch the SVG at render time.
+// Two kidney-shaped paths from public/logo.svg, rendered behind page
+// content at low opacity. Inlined here so the PDF stays self-contained
+// and the renderer doesn't need to fetch the SVG at render time.
+//
+// v4: fill colour swapped from PALETTE.blue (#2B81FF) to PALETTE.ink
+// (#0F172A, slate-950). At 2.5% opacity (set on the parent wrap) a
+// near-black tint reads as paper texture rather than a saturated logo
+// competing with the medication table for attention. Founder
+// explicitly approved "even black & white would be fine".
 function SanocareLogoMark() {
   return (
     <Svg viewBox="58 72 145 142" width={340} height={340}>
       <Path
         d="M64.25,131.47 C69.26,122.87 76.58,119.23 86.02,119.36 C89.85,119.41 93.7,119.44 97.49,119.04 C104.14,118.34 106.98,115.39 107.38,108.77 C107.69,103.79 107.35,98.78 107.69,93.81 C108.46,82.62 117.47,74.32 128.85,74.03 C140.55,73.74 150.61,82.09 152.05,93.12 C154.07,108.58 148.75,121.64 138.81,133.01 C127.51,145.95 114.34,156.54 98,162.48 C88.57,165.91 79.07,166.61 70.45,160.03 C61.71,153.37 59.56,143.53 64.25,131.47 Z"
-        fill={PALETTE.blue}
+        fill={PALETTE.ink}
       />
       <Path
         d="M147.6,202.53 C139.98,210.25 131.37,211.96 121.75,208.02 C112.36,204.18 108.35,196.78 107.9,186.86 C107.4,175.99 111.11,167.01 118.87,159.53 C129.04,149.71 139.15,139.81 149.32,129.98 C158.27,121.32 168.72,117.28 181.21,119.99 C192.18,122.37 199.57,132.16 198.97,143.34 C198.38,154.29 190.32,163.07 179.25,164.3 C174.3,164.85 169.27,164.55 164.29,164.78 C156.82,165.14 153.76,167.93 153.02,175.37 C152.52,180.34 152.94,185.43 152.06,190.31 C151.32,194.42 149.3,198.29 147.6,202.53 Z"
-        fill={PALETTE.blue}
+        fill={PALETTE.ink}
       />
     </Svg>
   );
@@ -874,6 +888,7 @@ export function PrescriptionPdf({
   signatureDataUrl,
   stampMode,
   stampDataUrl,
+  lockupDataUrl,
 }: PrescriptionPdfProps) {
   const isDraft = data.sent_at_iso == null;
   const patientLine = fmtPatientLine(data);
@@ -905,23 +920,11 @@ export function PrescriptionPdf({
         {/* DRAFT stamp (only on previews) */}
         {isDraft && <Text style={styles.draftStamp}>DRAFT</Text>}
 
-        {/* ============================ Letterhead ======================= */}
+        {/* ============================ Letterhead (v4 lockup) ============ */}
+        {/* eslint-disable-next-line jsx-a11y/alt-text */}
         <View style={styles.letterhead}>
-          <Text style={styles.clinicName}>SANOCARE</Text>
-          <Text style={styles.clinicSubtitle}>
-            Doctor Consultation · Telemedicine
-          </Text>
-          <Text style={styles.identityStrip}>
-            sanocare.in  <Text style={styles.identityDivider}>·</Text>  Hospital-grade
-            clinical care, delivered online
-          </Text>
-          <View style={styles.ornamentRow}>
-            <View style={styles.ornamentLine} />
-            <View style={styles.ornamentDot} />
-            <View style={styles.ornamentDiamond} />
-            <View style={styles.ornamentDot} />
-            <View style={styles.ornamentLine} />
-          </View>
+          {/* eslint-disable-next-line jsx-a11y/alt-text */}
+          <Image src={lockupDataUrl} style={styles.lockupImage} />
         </View>
 
         {/* ============================ Doc meta ========================= */}
@@ -930,7 +933,7 @@ export function PrescriptionPdf({
             <Text style={styles.docMetaKey}>ISSUED</Text>
             {fmtSentDate(data.sent_at_iso)}
           </Text>
-          <Text style={styles.docMetaCenter}>PRESCRIPTION</Text>
+          <Text style={styles.docMetaCenter}>DOCTOR&apos;S PRESCRIPTION</Text>
           <Text style={[styles.docMetaCell, { textAlign: "right" }]}>
             <Text style={styles.docMetaKey}>NO.</Text>
             {fmtDocumentId(data.prescription_code, data.version)}
@@ -1090,7 +1093,7 @@ export function PrescriptionPdf({
                   style={[styles.listRow, idx === 0 ? styles.listRowFirst : {}]}
                   wrap={false}
                 >
-                  <Text style={styles.listBullet}>❖</Text>
+                  <Text style={styles.listBullet}>•</Text>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.listText}>{t.test_name}</Text>
                     {t.instructions ? (
@@ -1117,7 +1120,7 @@ export function PrescriptionPdf({
                     ]}
                     wrap={false}
                   >
-                    <Text style={styles.listBullet}>❖</Text>
+                    <Text style={styles.listBullet}>•</Text>
                     <Text style={styles.listText}>{line}</Text>
                   </View>
                 ))}
@@ -1132,7 +1135,7 @@ export function PrescriptionPdf({
                     ]}
                     wrap={false}
                   >
-                    <Text style={styles.listBullet}>❖</Text>
+                    <Text style={styles.listBullet}>•</Text>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.listText}>{line}</Text>
                       {idx === 0 && adviceLines.length > 0 ? (
@@ -1188,66 +1191,70 @@ export function PrescriptionPdf({
           </View>
         </View>
 
-        {/* ============================ Footer (corp + QR) =============== */}
-        <View style={styles.footer} wrap={false}>
-          <View style={styles.corp}>
-            <Text style={styles.corpName}>
-              SANOCARE TECH INNOVATIONS PVT. LTD.
-            </Text>
-            <Text style={styles.corpLine}>
-              Online doctor consultations · Health records · Telemedicine
-            </Text>
-            <Text style={[styles.corpLine, { marginTop: 4 }]}>
-              <Text style={styles.corpKey}>WEB </Text>sanocare.in
-              <Text style={styles.corpKey}>   ·   EMAIL </Text>care@sanocare.in
-            </Text>
-            <Text style={styles.corpSocials}>
-              <Text style={styles.corpSocialLabel}>SOCIAL</Text>
-              @sanocare.in  ·  sanocare.in
-            </Text>
-          </View>
-
-          <View style={styles.qrCell}>
-            <View style={styles.qrFrame}>
-              {data.qr_data_url ? (
-                // eslint-disable-next-line jsx-a11y/alt-text
-                <Image src={data.qr_data_url} style={styles.qrImage} />
-              ) : null}
+        {/* ============================ Persistent footer ================= */}
+        {/* v4: single fixed bottom-pinned block containing corp info +
+            QR + CIN + Regd. Office + control strip + compliance. Renders
+            on every page (founder feedback #5 + #7d). Replaces the
+            three separate inline blocks the v3 template had. */}
+        <View style={styles.pageFooter} fixed>
+          <View style={styles.footer}>
+            <View style={styles.corp}>
+              <Text style={styles.corpName}>
+                SANOCARE TECH INNOVATIONS PVT. LTD.
+              </Text>
+              <Text style={styles.corpLine}>
+                Online doctor consultations · Health records · Telemedicine
+              </Text>
+              <Text style={[styles.corpLine, { marginTop: 3 }]}>
+                <Text style={styles.corpKey}>WEB </Text>sanocare.in
+                <Text style={styles.corpKey}>   ·   EMAIL </Text>care@sanocare.in
+                <Text style={styles.corpKey}>   ·   CIN </Text>U86904DL2025PTC446725
+              </Text>
+              <Text style={[styles.corpLine, { marginTop: 2 }]}>
+                <Text style={styles.corpKey}>REGD. OFFICE </Text>
+                1666/B2, 3rd Floor, Gali 2, Govindpuri Extension, Kalkaji, New Delhi 110019
+              </Text>
+              <Text style={styles.corpSocials}>
+                <Text style={styles.corpSocialLabel}>SOCIAL</Text>
+                @sanocare.in  ·  sanocare.in
+              </Text>
             </View>
-            <Text style={styles.qrCaption}>VERIFY AT{"\n"}SANOCARE.IN</Text>
+
+            <View style={styles.qrCell}>
+              <View style={styles.qrFrame}>
+                {data.qr_data_url ? (
+                  // eslint-disable-next-line jsx-a11y/alt-text
+                  <Image src={data.qr_data_url} style={styles.qrImage} />
+                ) : null}
+              </View>
+              <Text style={styles.qrCaption}>VERIFY AT{"\n"}SANOCARE.IN</Text>
+            </View>
           </View>
-        </View>
 
-        {/* ============================ Control strip ==================== */}
-        <View style={styles.controlStrip} fixed>
-          <Text style={styles.controlText}>
-            DOC {fmtDocumentId(data.prescription_code, data.version)}
-          </Text>
-          <Text
-            style={[styles.controlText, styles.controlCenter]}
-            render={({ pageNumber, totalPages }) =>
-              `PAGE ${pageNumber} OF ${totalPages}`
-            }
-          />
-          <Text style={[styles.controlText, styles.controlRight]}>
-            ISSUED {fmtSentDate(data.sent_at_iso)}
+          <View style={styles.controlStrip}>
+            <Text style={styles.controlText}>
+              DOC {fmtDocumentId(data.prescription_code, data.version)}
+            </Text>
+            <Text
+              style={[styles.controlText, styles.controlCenter]}
+              render={({ pageNumber, totalPages }) =>
+                `PAGE ${pageNumber} OF ${totalPages}`
+              }
+            />
+            <Text style={[styles.controlText, styles.controlRight]}>
+              ISSUED {fmtSentDate(data.sent_at_iso)}
+            </Text>
+          </View>
+
+          <Text style={styles.compliance}>
+            This is a digitally generated and authenticated prescription
+            issued under the{" "}
+            <Text style={styles.complianceStrong}>
+              Telemedicine Practice Guidelines, 2020
+            </Text>
+            {" "}(MoHFW / NMC, India). Verify authenticity at sanocare.in/rx.
           </Text>
         </View>
-
-        {/* ============================ Compliance ======================= */}
-        <Text style={styles.compliance}>
-          This is a digitally generated and authenticated prescription issued
-          under the{" "}
-          <Text style={styles.complianceStrong}>
-            Telemedicine Practice Guidelines, 2020
-          </Text>
-          {" "}(MoHFW / NMC, India). The information in this prescription is the
-          opinion of the registered medical practitioner identified above, based
-          on the clinical encounter conducted via{" "}
-          {data.consult_mode ?? "video consultation"}. Dispensing pharmacists
-          may verify the authenticity of this script using the prescription
-          number and patient identifier at sanocare.in.
-        </Text>
       </Page>
     </Document>
   );
