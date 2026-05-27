@@ -1,0 +1,29 @@
+name: Dry-render Rx
+on:
+  workflow_dispatch:
+    inputs:
+      rx_code:
+        description: 'Prescription code to dry-render'
+        default: 'SAN-RX-00001'
+        required: true
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Dry-render
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DRY_RUN: '1'
+        run: npx tsx scripts/dry_render_rx.ts ${{ inputs.rx_code }}
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dry-rx-${{ inputs.rx_code }}
+          path: /tmp/dry-rx-*.pdf
+          retention-days: 7
