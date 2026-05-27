@@ -42,6 +42,19 @@ export type DoctorRxItem = {
   frequency: string | null;
   duration: string | null;
   instructions: string | null;
+  /** Optional FK into medicine_catalog (M026). Set when the doctor
+   *  picked the drug from autocomplete. */
+  medicine_sku: number | null;
+  /** Composition pulled via the medicine_catalog join. Null for
+   *  free-text rows. */
+  composition: string | null;
+};
+
+export type DoctorRxLabTest = {
+  id: string;
+  ordinal: number;
+  test_name: string;
+  instructions: string | null;
 };
 
 export type DoctorRxDetail = {
@@ -56,6 +69,13 @@ export type DoctorRxDetail = {
   patient_age: number | null;
   patient_sex: "M" | "F" | "O" | "U" | null;
   patient_weight_kg: number | null;
+  // M026 vitals (all optional)
+  bp_sys: number | null;
+  bp_dia: number | null;
+  pulse_bpm: number | null;
+  spo2_pct: number | null;
+  temp_c: number | null;
+  height_cm: number | null;
   chief_complaint: string | null;
   provisional_diagnosis: string | null;
   general_advice: string | null;
@@ -69,6 +89,7 @@ export type DoctorRxDetail = {
   voided_at: string | null;
   void_reason: string | null;
   items: DoctorRxItem[];
+  lab_tests: DoctorRxLabTest[];
 };
 
 /**
@@ -82,7 +103,7 @@ export const getDraftForSession = cache(
     const { data, error } = await supabaseAdmin
       .from("prescriptions")
       .select(
-        "id, prescription_code, version, status, session_id, booking_id, superseded_by, patient_name, patient_age, patient_sex, patient_weight_kg, chief_complaint, provisional_diagnosis, general_advice, follow_up_advice, pdf_storage_path, patient_view_token, whatsapp_sent_at, whatsapp_message_id, created_at, sent_at, voided_at, void_reason",
+        "id, prescription_code, version, status, session_id, booking_id, superseded_by, patient_name, patient_age, patient_sex, patient_weight_kg, bp_sys, bp_dia, pulse_bpm, spo2_pct, temp_c, height_cm, chief_complaint, provisional_diagnosis, general_advice, follow_up_advice, pdf_storage_path, patient_view_token, whatsapp_sent_at, whatsapp_message_id, created_at, sent_at, voided_at, void_reason",
       )
       .eq("session_id", session_id)
       .eq("doctor_id", doctor.id)
@@ -97,7 +118,12 @@ export const getDraftForSession = cache(
     if (!data) return null;
 
     const items = await loadItems(data.id);
-    return { ...(data as Omit<DoctorRxDetail, "items">), items };
+    const lab_tests = await loadLabTests(data.id);
+    return {
+      ...(data as Omit<DoctorRxDetail, "items" | "lab_tests">),
+      items,
+      lab_tests,
+    };
   },
 );
 
@@ -141,7 +167,7 @@ export const getDoctorPrescriptionByCode = cache(
     let query = supabaseAdmin
       .from("prescriptions")
       .select(
-        "id, prescription_code, version, status, session_id, booking_id, superseded_by, patient_name, patient_age, patient_sex, patient_weight_kg, chief_complaint, provisional_diagnosis, general_advice, follow_up_advice, pdf_storage_path, patient_view_token, whatsapp_sent_at, whatsapp_message_id, created_at, sent_at, voided_at, void_reason",
+        "id, prescription_code, version, status, session_id, booking_id, superseded_by, patient_name, patient_age, patient_sex, patient_weight_kg, bp_sys, bp_dia, pulse_bpm, spo2_pct, temp_c, height_cm, chief_complaint, provisional_diagnosis, general_advice, follow_up_advice, pdf_storage_path, patient_view_token, whatsapp_sent_at, whatsapp_message_id, created_at, sent_at, voided_at, void_reason",
       )
       .eq("doctor_id", doctor.id)
       .eq("prescription_code", prescription_code);
@@ -157,7 +183,12 @@ export const getDoctorPrescriptionByCode = cache(
     }
     if (!data) notFound();
     const items = await loadItems(data.id);
-    return { ...(data as Omit<DoctorRxDetail, "items">), items };
+    const lab_tests = await loadLabTests(data.id);
+    return {
+      ...(data as Omit<DoctorRxDetail, "items" | "lab_tests">),
+      items,
+      lab_tests,
+    };
   },
 );
 
@@ -175,12 +206,51 @@ export function isAmendWindowOpen(sent_at: string | null): boolean {
 async function loadItems(rxId: string): Promise<DoctorRxItem[]> {
   const { data, error } = await supabaseAdmin
     .from("prescription_items")
-    .select("id, ordinal, drug_name, dose, frequency, duration, instructions")
+    .select(
+      "id, ordinal, drug_name, dose, frequency, duration, instructions, medicine_sku, medicine:medicine_catalog(composition)",
+    )
     .eq("prescription_id", rxId)
     .order("ordinal", { ascending: true });
   if (error) {
     console.error("[loadItems] supabase error:", error);
     throw new Error(`Could not load Rx items: ${error.message}`);
   }
-  return (data as DoctorRxItem[] | null) ?? [];
+  const rows = (data ?? []) as unknown as Array<{
+    id: string;
+    ordinal: number;
+    drug_name: string;
+    dose: string | null;
+    frequency: string | null;
+    duration: string | null;
+    instructions: string | null;
+    medicine_sku: number | null;
+    medicine: { composition: string | null } | null;
+  }>;
+  return rows.map((r) => ({
+    id: r.id,
+    ordinal: r.ordinal,
+    drug_name: r.drug_name,
+    dose: r.dose,
+    frequency: r.frequency,
+    duration: r.duration,
+    instructions: r.instructions,
+    medicine_sku: r.medicine_sku,
+    composition: r.medicine?.composition ?? null,
+  }));
+}
+
+async function loadLabTests(rxId: string): Promise<DoctorRxLabTest[]> {
+  const { data, error } = await supabaseAdmin
+    .from("prescription_lab_tests")
+    .select("id, ordinal, test_name, instructions")
+    .eq("prescription_id", rxId)
+    .order("ordinal", { ascending: true });
+  if (error) {
+    // PGRST116 = empty result; older Rx may also predate M026. Treat
+    // either case as "no lab tests" rather than throwing.
+    if (error.code === "PGRST116") return [];
+    console.error("[loadLabTests] supabase error:", error);
+    throw new Error(`Could not load Rx lab tests: ${error.message}`);
+  }
+  return (data as DoctorRxLabTest[] | null) ?? [];
 }

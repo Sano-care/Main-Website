@@ -134,6 +134,13 @@ export default async function PrescribePage({
             patient_age: draft.patient_age,
             patient_sex: draft.patient_sex,
             patient_weight_kg: draft.patient_weight_kg,
+            // M026 vitals (passed through; null when not yet set)
+            bp_sys: draft.bp_sys,
+            bp_dia: draft.bp_dia,
+            pulse_bpm: draft.pulse_bpm,
+            spo2_pct: draft.spo2_pct,
+            temp_c: draft.temp_c,
+            height_cm: draft.height_cm,
             chief_complaint: draft.chief_complaint,
             provisional_diagnosis: draft.provisional_diagnosis,
             general_advice: draft.general_advice,
@@ -145,6 +152,13 @@ export default async function PrescribePage({
               frequency: it.frequency,
               duration: it.duration,
               instructions: it.instructions,
+              medicine_sku: it.medicine_sku,
+              composition: it.composition,
+            })),
+            lab_tests: draft.lab_tests.map((t) => ({
+              ordinal: t.ordinal,
+              test_name: t.test_name,
+              instructions: t.instructions,
             })),
           }}
         />

@@ -43,6 +43,19 @@ type ItemRow = {
   frequency: string | null;
   duration: string | null;
   instructions: string | null;
+  /** Optional FK into medicine_catalog. Set when the doctor picks from
+   *  autocomplete; sent to the server so the join hydrates composition
+   *  on the rendered PDF. */
+  medicine_sku: number | null;
+  /** Live preview of the composition (read-only — sourced from the
+   *  autocomplete pick or hydrated from the existing FK on load). */
+  composition: string | null;
+};
+
+type LabRow = {
+  ordinal: number;
+  test_name: string;
+  instructions: string | null;
 };
 
 type ComposerInitial = {
@@ -52,11 +65,19 @@ type ComposerInitial = {
   patient_age: number | null;
   patient_sex: "M" | "F" | "O" | "U" | null;
   patient_weight_kg: number | null;
+  // M026 vitals
+  bp_sys: number | null;
+  bp_dia: number | null;
+  pulse_bpm: number | null;
+  spo2_pct: number | null;
+  temp_c: number | null;
+  height_cm: number | null;
   chief_complaint: string | null;
   provisional_diagnosis: string | null;
   general_advice: string | null;
   follow_up_advice: string | null;
   items: ItemRow[];
+  lab_tests: LabRow[];
 };
 
 type SendOk = { prescription_code: string; rx_url: string; whatsapp_sent: boolean };
@@ -88,10 +109,50 @@ export function PrescriptionComposer({
   const [generalAdvice, setGeneralAdvice] = useState(initial.general_advice ?? "");
   const [followUp, setFollowUp] = useState(initial.follow_up_advice ?? "");
 
+  // M026 vitals — strings so empty input stays empty (numeric coerce
+  // happens server-side in updatePrescriptionDraft).
+  const [bpSys, setBpSys] = useState<string>(
+    initial.bp_sys == null ? "" : String(initial.bp_sys),
+  );
+  const [bpDia, setBpDia] = useState<string>(
+    initial.bp_dia == null ? "" : String(initial.bp_dia),
+  );
+  const [pulse, setPulse] = useState<string>(
+    initial.pulse_bpm == null ? "" : String(initial.pulse_bpm),
+  );
+  const [spo2, setSpo2] = useState<string>(
+    initial.spo2_pct == null ? "" : String(initial.spo2_pct),
+  );
+  const [tempC, setTempC] = useState<string>(
+    initial.temp_c == null ? "" : String(initial.temp_c),
+  );
+  const [heightCm, setHeightCm] = useState<string>(
+    initial.height_cm == null ? "" : String(initial.height_cm),
+  );
+
   const [items, setItems] = useState<ItemRow[]>(
     initial.items.length > 0
       ? initial.items
-      : [{ ordinal: 1, drug_name: "", dose: "", frequency: "", duration: "", instructions: "" }],
+      : [
+          {
+            ordinal: 1,
+            drug_name: "",
+            dose: "",
+            frequency: "",
+            duration: "",
+            instructions: "",
+            medicine_sku: null,
+            composition: null,
+          },
+        ],
+  );
+
+  const [labs, setLabs] = useState<LabRow[]>(
+    initial.lab_tests.map((t, idx) => ({
+      ordinal: idx + 1,
+      test_name: t.test_name,
+      instructions: t.instructions,
+    })),
   );
 
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -108,6 +169,14 @@ export function PrescriptionComposer({
     fd.set("patient_age", patientAge);
     fd.set("patient_sex", patientSex);
     fd.set("patient_weight_kg", patientWeight);
+    // M026 vitals (only set when non-empty so the server treats blanks
+    // as "no value provided", not "0").
+    if (bpSys.trim()) fd.set("bp_sys", bpSys.trim());
+    if (bpDia.trim()) fd.set("bp_dia", bpDia.trim());
+    if (pulse.trim()) fd.set("pulse_bpm", pulse.trim());
+    if (spo2.trim()) fd.set("spo2_pct", spo2.trim());
+    if (tempC.trim()) fd.set("temp_c", tempC.trim());
+    if (heightCm.trim()) fd.set("height_cm", heightCm.trim());
     fd.set("chief_complaint", chiefComplaint);
     fd.set("provisional_diagnosis", diagnosis);
     fd.set("general_advice", generalAdvice);
@@ -120,9 +189,18 @@ export function PrescriptionComposer({
         frequency: it.frequency?.trim() ?? "",
         duration: it.duration?.trim() ?? "",
         instructions: it.instructions?.trim() ?? "",
+        medicine_sku: it.medicine_sku,
       }))
       .filter((it) => it.drug_name.length > 0);
     fd.set("items_json", JSON.stringify(cleanItems));
+    // Lab tests — wholesale replace (matches the drawer behaviour).
+    const cleanLabs = labs
+      .map((t) => ({
+        test_name: t.test_name.trim(),
+        instructions: t.instructions?.trim() || null,
+      }))
+      .filter((t) => t.test_name.length > 0);
+    fd.set("lab_tests_json", JSON.stringify(cleanLabs));
     return fd;
   }
 
@@ -174,6 +252,8 @@ export function PrescriptionComposer({
         frequency: "",
         duration: "",
         instructions: "",
+        medicine_sku: null,
+        composition: null,
       },
     ]);
   }
@@ -182,6 +262,35 @@ export function PrescriptionComposer({
   }
   function updateItem<K extends keyof ItemRow>(idx: number, key: K, value: ItemRow[K]) {
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [key]: value } : it)));
+  }
+  function onPickCatalog(idx: number, picked: MedicineSearchResult) {
+    setItems((prev) =>
+      prev.map((it, i) =>
+        i === idx
+          ? {
+              ...it,
+              drug_name: picked.brand_name,
+              dose: picked.strength ?? it.dose,
+              medicine_sku: picked.sku,
+              composition: picked.composition,
+            }
+          : it,
+      ),
+    );
+  }
+
+  // Lab-tests row management (mirrors the drawer composer).
+  function addLab() {
+    setLabs((prev) => [
+      ...prev,
+      { ordinal: prev.length + 1, test_name: "", instructions: null },
+    ]);
+  }
+  function removeLab(idx: number) {
+    setLabs((prev) => prev.filter((_, i) => i !== idx).map((t, i) => ({ ...t, ordinal: i + 1 })));
+  }
+  function updateLab<K extends keyof LabRow>(idx: number, key: K, value: LabRow[K]) {
+    setLabs((prev) => prev.map((t, i) => (i === idx ? { ...t, [key]: value } : t)));
   }
 
   // After a successful send, show the success surface instead of the
@@ -264,6 +373,57 @@ export function PrescriptionComposer({
         />
       </div>
 
+      {/* Vitals (M026 — 6 cells, all optional) */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-3">
+          Vitals
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <Field
+            label="BP systolic (mmHg)"
+            value={bpSys}
+            onChange={setBpSys}
+            type="number"
+            placeholder="120"
+          />
+          <Field
+            label="BP diastolic (mmHg)"
+            value={bpDia}
+            onChange={setBpDia}
+            type="number"
+            placeholder="80"
+          />
+          <Field
+            label="Pulse (bpm)"
+            value={pulse}
+            onChange={setPulse}
+            type="number"
+            placeholder="78"
+          />
+          <Field
+            label="SpO₂ (%)"
+            value={spo2}
+            onChange={setSpo2}
+            type="number"
+            placeholder="98"
+          />
+          <Field
+            label="Temp (°C)"
+            value={tempC}
+            onChange={setTempC}
+            type="number"
+            placeholder="37.0"
+          />
+          <Field
+            label="Height (cm)"
+            value={heightCm}
+            onChange={setHeightCm}
+            type="number"
+            placeholder="165"
+          />
+        </div>
+      </div>
+
       {/* Medications */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <div className="flex items-center justify-between mb-3">
@@ -291,31 +451,13 @@ export function PrescriptionComposer({
                   <DrugAutocomplete
                     value={it.drug_name}
                     onChange={(v) => updateItem(idx, "drug_name", v)}
-                    onPickCatalog={(picked) => {
-                      // Catalog hit: populate brand_name into drug_name
-                      // and the catalog strength into dose. Other
-                      // fields (frequency / duration / instructions)
-                      // stay as the doctor typed them; clinical
-                      // judgement lives there. Freetext typing is
-                      // still accepted — onChange above runs on every
-                      // keystroke; onPickCatalog fires only when a
-                      // dropdown item is selected.
-                      setItems((prev) =>
-                        prev.map((row, i) =>
-                          i === idx
-                            ? {
-                                ...row,
-                                drug_name: picked.brand_name,
-                                dose:
-                                  picked.strength && picked.strength.length > 0
-                                    ? picked.strength
-                                    : row.dose,
-                              }
-                            : row,
-                        ),
-                      );
-                    }}
+                    onPickCatalog={(picked) => onPickCatalog(idx, picked)}
                   />
+                  {it.composition && (
+                    <div className="text-[11px] italic text-slate-500 mt-1">
+                      {it.composition}
+                    </div>
+                  )}
                 </div>
                 <div className="sm:col-span-2">
                   <Field
@@ -358,6 +500,65 @@ export function PrescriptionComposer({
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Investigations Advised (M026 — free-text per Q4) */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
+            Investigations Advised
+          </div>
+          <button
+            type="button"
+            onClick={addLab}
+            className="inline-flex items-center gap-1.5 text-sm text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add test
+          </button>
+        </div>
+        {labs.length === 0 ? (
+          <div className="text-xs italic text-slate-500 px-1 py-2">
+            No investigations advised. Add a row to request one.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {labs.map((t, idx) => (
+              <div
+                key={idx}
+                className="grid grid-cols-12 gap-2 items-start rounded-lg border border-slate-200 p-3"
+              >
+                <div className="col-span-1 text-xs text-slate-500 font-mono pt-2">
+                  {idx + 1}.
+                </div>
+                <div className="col-span-11 grid grid-cols-1 sm:grid-cols-12 gap-2">
+                  <div className="sm:col-span-5">
+                    <Field
+                      label="Test"
+                      value={t.test_name}
+                      onChange={(v) => updateLab(idx, "test_name", v)}
+                      placeholder="CBC, Lipid panel, etc."
+                    />
+                  </div>
+                  <div className="sm:col-span-7">
+                    <Field
+                      label="Instructions"
+                      value={t.instructions ?? ""}
+                      onChange={(v) => updateLab(idx, "instructions", v)}
+                      placeholder="Fasting, morning sample, etc."
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeLab(idx)}
+                  className="col-span-12 inline-flex items-center justify-end text-xs text-rose-600 hover:text-rose-800"
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1" /> Remove test
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Advice */}
@@ -462,12 +663,14 @@ function Field({
   onChange,
   type = "text",
   required,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   type?: string;
   required?: boolean;
+  placeholder?: string;
 }) {
   return (
     <label className="block">
@@ -475,6 +678,7 @@ function Field({
       <input
         type={type}
         required={required}
+        placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         step={type === "number" ? "any" : undefined}
