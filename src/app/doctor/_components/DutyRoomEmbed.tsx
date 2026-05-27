@@ -9,7 +9,9 @@ import {
   Loader2,
   X,
   ShieldCheck,
+  FileText,
 } from "lucide-react";
+import { RxComposerDrawer } from "./RxComposerDrawer";
 
 /**
  * Doctor-side Daily Prebuilt embed.
@@ -48,6 +50,12 @@ export function DutyRoomEmbed({ url }: { url: string | null }) {
     roomUrl: string;
     meetingToken: string;
   } | null>(null);
+  // v3: in-call Rx drawer state. When open, the iframe wrapper shrinks
+  // to ~60% width (F1 sign-off) and the drawer mounts as a 40% flex
+  // sibling on the right. Daily Prebuilt re-flows on container resize
+  // without an explicit API call (verified on v6.1's patient
+  // fullscreen toggle).
+  const [rxDrawerOpen, setRxDrawerOpen] = useState(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<DailyFrameLike | null>(null);
@@ -264,56 +272,98 @@ export function DutyRoomEmbed({ url }: { url: string | null }) {
           Duty Room is open in the overlay…
         </div>
         <div className="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
-          <div className="relative w-full h-full max-w-6xl bg-slate-900 rounded-2xl overflow-hidden shadow-2xl">
-            <div ref={containerRef} className="absolute inset-0" />
-            {/* v6.1: Sanocare brand badge anchored top-left of the
-                iframe wrapper. pointer-events-none so Daily's UI
-                (mute, camera, leave) is never blocked. z-10 stacks
-                above the iframe but below modal-level chrome. The
-                Close button at top-3 right-3 sits at the same
-                z-level on the opposite corner — they never overlap.
-                Safe area: Daily's prejoin "Are you ready to join?"
-                lives middle-top, in-call header "Waiting for
-                others" lives middle-top, the bottom control bar
-                spans the bottom; top-left is clean. */}
-            <div className="absolute top-3 left-3 z-10 pointer-events-none inline-flex items-center gap-1.5 bg-white/90 backdrop-blur-sm rounded-md px-2.5 py-1.5 shadow-sm">
-              <Image
-                src="/logo.svg"
-                alt=""
-                width={20}
-                height={20}
-                className="w-5 h-5 sm:w-6 sm:h-6"
-                priority={false}
-              />
-              <span className="text-xs sm:text-sm font-semibold text-slate-900">
-                Sanocare
-              </span>
+          {/* v3 F1: the modal body is a horizontal flex container.
+              Iframe wrapper takes 60% when the Rx drawer is open,
+              100% otherwise. Daily Prebuilt re-flows on container
+              resize without an explicit API call (verified on v6.1's
+              patient fullscreen toggle — same mechanism).
+              max-w-7xl up from v6's max-w-6xl to keep the 60/40
+              split readable on 1366px-class displays. */}
+          <div className="relative w-full h-full max-w-7xl bg-slate-900 rounded-2xl overflow-hidden shadow-2xl flex">
+            {/* Iframe wrapper — left side */}
+            <div
+              className={
+                rxDrawerOpen
+                  ? "relative flex-1 min-w-0"
+                  : "relative w-full"
+              }
+            >
+              <div ref={containerRef} className="absolute inset-0" />
+              {/* v6.1: Sanocare brand badge anchored top-left of the
+                  iframe wrapper. pointer-events-none so Daily's UI
+                  (mute, camera, leave) is never blocked. z-10 stacks
+                  above the iframe but below modal-level chrome. The
+                  Close button at top-3 right-3 sits at the same
+                  z-level on the opposite corner — they never overlap.
+                  Safe area: Daily's prejoin "Are you ready to join?"
+                  lives middle-top, in-call header "Waiting for
+                  others" lives middle-top, the bottom control bar
+                  spans the bottom; top-left is clean. */}
+              <div className="absolute top-3 left-3 z-10 pointer-events-none inline-flex items-center gap-1.5 bg-white/90 backdrop-blur-sm rounded-md px-2.5 py-1.5 shadow-sm">
+                <Image
+                  src="/logo.svg"
+                  alt=""
+                  width={20}
+                  height={20}
+                  className="w-5 h-5 sm:w-6 sm:h-6"
+                  priority={false}
+                />
+                <span className="text-xs sm:text-sm font-semibold text-slate-900">
+                  Sanocare
+                </span>
+              </div>
+              {state === "starting" && (
+                // pointer-events-none is CRITICAL — without it, this
+                // overlay covers Daily's in-iframe Join button on the
+                // prejoin screen and the doctor can't proceed
+                // ('joined-meeting' never fires; everything wedges).
+                // With pointer-events-none, the dim is visual only;
+                // clicks pass through to Daily's prejoin Join control.
+                // Once Daily fires 'joined-meeting', the handler above
+                // flips state to "in-call", which conditionally removes
+                // this overlay via the surrounding state guard. The
+                // frame stays mounted across that transition because
+                // the mount effect depends on dailyArgs only (v4 fix).
+                <div className="absolute inset-0 flex items-center justify-center text-white text-sm gap-2 bg-slate-900/60 pointer-events-none">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Connecting to your Duty Room…
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={handleClose}
+                className="absolute top-3 right-3 z-10 inline-flex items-center gap-1.5 bg-slate-800/80 hover:bg-slate-700 text-white text-xs px-3 py-1.5 rounded-lg backdrop-blur"
+                aria-label="Close Duty Room"
+              >
+                <X className="w-3.5 h-3.5" /> Close
+              </button>
+
+              {/* v3: floating Rx composer FAB. Only renders once we're
+                  actually in-call (no prejoin distraction). Drawer is
+                  exclusive — when open the FAB hides; closing the drawer
+                  re-shows the FAB so doctor can reopen mid-consult. */}
+              {state === "in-call" && !rxDrawerOpen && (
+                <button
+                  type="button"
+                  onClick={() => setRxDrawerOpen(true)}
+                  aria-label="Open Rx composer"
+                  className="absolute bottom-6 right-6 z-[60] inline-flex items-center gap-2 bg-[#2B81FF] hover:bg-[#1E6BD6] text-white text-sm font-semibold px-4 py-3 rounded-full shadow-2xl ring-2 ring-white/30 transition-colors"
+                >
+                  <FileText className="w-5 h-5" />
+                  Compose Rx
+                </button>
+              )}
             </div>
-            {state === "starting" && (
-              // pointer-events-none is CRITICAL — without it, this
-              // overlay covers Daily's in-iframe Join button on the
-              // prejoin screen and the doctor can't proceed
-              // ('joined-meeting' never fires; everything wedges).
-              // With pointer-events-none, the dim is visual only;
-              // clicks pass through to Daily's prejoin Join control.
-              // Once Daily fires 'joined-meeting', the handler above
-              // flips state to "in-call", which conditionally removes
-              // this overlay via the surrounding state guard. The
-              // frame stays mounted across that transition because
-              // the mount effect depends on dailyArgs only (v4 fix).
-              <div className="absolute inset-0 flex items-center justify-center text-white text-sm gap-2 bg-slate-900/60 pointer-events-none">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Connecting to your Duty Room…
+
+            {/* Drawer — right 40%; flex-sibling so iframe re-flows. */}
+            {rxDrawerOpen && (
+              <div className="relative w-[40%] min-w-[420px] max-w-[560px] h-full">
+                <RxComposerDrawer
+                  open={rxDrawerOpen}
+                  onClose={() => setRxDrawerOpen(false)}
+                />
               </div>
             )}
-            <button
-              type="button"
-              onClick={handleClose}
-              className="absolute top-3 right-3 z-10 inline-flex items-center gap-1.5 bg-slate-800/80 hover:bg-slate-700 text-white text-xs px-3 py-1.5 rounded-lg backdrop-blur"
-              aria-label="Close Duty Room"
-            >
-              <X className="w-3.5 h-3.5" /> Close
-            </button>
           </div>
         </div>
       </>

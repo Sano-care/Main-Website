@@ -1191,3 +1191,255 @@ export async function voidPrescription(
     };
   }
 }
+
+// =====================================================================
+// v3 drawer-composer support actions
+//
+// These power the in-call Rx drawer (DutyRoomEmbed → RxComposerDrawer).
+// They differ from createDraftPrescription / updatePrescriptionDraft in
+// that they DO NOT redirect — they return data the client can render
+// inside the drawer modal.
+//
+// A1 enforcement: every action calls getCurrentDoctor() first and
+// re-asserts session/prescription ownership before any mutation.
+// =====================================================================
+
+export type ActiveRxSessionInfo = {
+  session_id: string;
+  booking_id: string;
+  booking_code: string | null;
+  patient_name: string;
+  patient_code: string | null;
+  joined_at: string; // ISO of when the patient last joined
+};
+
+/**
+ * Resolve the doctor's currently-active consult for the in-call Rx
+ * drawer. Per Q2 (v3 sign-off): "most-recent-waiting-with-joined_at"
+ * — we look for the patient who joined this doctor's Duty Room most
+ * recently, scoped to the last few hours so a stale yesterday-session
+ * doesn't surface.
+ *
+ * Returns null when no patient has joined in the recent window —
+ * the drawer shows a "No patient in consult yet" empty state.
+ */
+export async function findActiveRxSessionForDoctor(): Promise<ActiveRxSessionInfo | null> {
+  const doctor = await getCurrentDoctor();
+
+  // 8-hour recency window. A typical Sanocare consult is 15-30 min;
+  // an 8-hour bound rules out a session from yesterday morning that's
+  // still got 'in_call' status by mistake.
+  const eightHoursAgo = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await supabaseAdmin
+    .from("consultation_participants")
+    .select(
+      "joined_at, session:consultation_sessions!session_id(id, booking_id, doctor_id, scheduled_at, status)",
+    )
+    .eq("role", "patient")
+    .not("joined_at", "is", null)
+    .gte("joined_at", eightHoursAgo)
+    .order("joined_at", { ascending: false })
+    .limit(20);
+
+  if (error) {
+    throw new Error(`Could not resolve active session: ${error.message}`);
+  }
+
+  // Filter client-side for the doctor's sessions (the embed shape
+  // means we can't filter session.doctor_id directly in the .eq()
+  // call). 20 rows is enough headroom — a single doctor in an 8-hour
+  // window won't have more than 20 patient joins.
+  const rows = (data ?? []) as unknown as Array<{
+    joined_at: string;
+    session: {
+      id: string;
+      booking_id: string;
+      doctor_id: string;
+      scheduled_at: string;
+      status: string;
+    } | null;
+  }>;
+
+  const mine = rows.find((r) => r.session?.doctor_id === doctor.id);
+  if (!mine || !mine.session) return null;
+
+  // Resolve patient identity off the booking.
+  const patient = await loadBookingPatientSnapshot(mine.session.booking_id);
+
+  return {
+    session_id: mine.session.id,
+    booking_id: mine.session.booking_id,
+    booking_code: patient.booking_code,
+    patient_name: patient.patient_name,
+    patient_code: patient.patient_code,
+    joined_at: mine.joined_at,
+  };
+}
+
+// ---------------------------------------------------------------------
+// Drawer composer initial state
+//
+// The drawer needs a single round-trip on open: (a) the prescription_id
+// (created-or-reused for the active session), and (b) the current draft
+// state — header fields + vitals + items + lab tests — so the form
+// hydrates with whatever was last saved.
+// ---------------------------------------------------------------------
+export type DrawerComposerInitial = {
+  prescription_id: string;
+  prescription_code: string;
+  version: number;
+  patient_name: string;
+  patient_age: number | null;
+  patient_sex: "M" | "F" | "O" | "U" | null;
+  patient_weight_kg: number | null;
+  bp_sys: number | null;
+  bp_dia: number | null;
+  pulse_bpm: number | null;
+  spo2_pct: number | null;
+  temp_c: number | null;
+  height_cm: number | null;
+  chief_complaint: string | null;
+  provisional_diagnosis: string | null;
+  general_advice: string | null;
+  follow_up_advice: string | null;
+  items: Array<{
+    ordinal: number;
+    drug_name: string;
+    dose: string | null;
+    frequency: string | null;
+    duration: string | null;
+    instructions: string | null;
+    medicine_sku: number | null;
+    composition: string | null;
+  }>;
+  lab_tests: Array<{
+    ordinal: number;
+    test_name: string;
+    instructions: string | null;
+  }>;
+};
+
+/**
+ * Idempotent "open the drawer composer" entry point. Resolves or
+ * creates the draft for the given session (no redirect), then loads
+ * the current draft body and returns it for the drawer to hydrate.
+ */
+export async function ensureDraftForSession(
+  formData: FormData,
+): Promise<RxActionResult<DrawerComposerInitial>> {
+  const session_id = reqStr(formData, "session_id");
+  try {
+    const { doctor, session } = await assertSessionOwnership(session_id);
+
+    // Look for an existing open draft.
+    const { data: existing, error: existingErr } = await supabaseAdmin
+      .from("prescriptions")
+      .select("id")
+      .eq("session_id", session.id)
+      .eq("doctor_id", doctor.id)
+      .eq("status", "draft")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existingErr) {
+      return {
+        ok: false,
+        error: `Could not check existing drafts: ${existingErr.message}`,
+      };
+    }
+
+    let prescriptionId: string;
+    if (existing) {
+      prescriptionId = (existing as { id: string }).id;
+    } else {
+      const { data: codeData, error: codeErr } = await supabaseAdmin.rpc(
+        "next_code",
+        { p_type: "prescription" },
+      );
+      if (codeErr || !codeData) {
+        return {
+          ok: false,
+          error: `Could not allocate Rx code: ${codeErr?.message ?? "unknown"}`,
+        };
+      }
+      const prescriptionCode = String(codeData);
+      const patient = await loadBookingPatientSnapshot(session.booking_id);
+      const { data: inserted, error: insertErr } = await supabaseAdmin
+        .from("prescriptions")
+        .insert({
+          prescription_code: prescriptionCode,
+          version: 1,
+          session_id: session.id,
+          booking_id: session.booking_id,
+          doctor_id: doctor.id,
+          created_by_doctor_id: doctor.id,
+          patient_name: patient.patient_name,
+          status: "draft",
+        })
+        .select("id")
+        .single();
+      if (insertErr || !inserted) {
+        return {
+          ok: false,
+          error: `Could not create Rx draft: ${insertErr?.message ?? "unknown"}`,
+        };
+      }
+      prescriptionId = (inserted as { id: string }).id;
+    }
+
+    // Now load the current head + items + lab tests for hydration.
+    const { rx } = await assertPrescriptionOwnership(prescriptionId);
+    const items = await loadRxItemsForPdf(rx.id);
+    const labTests = await loadRxLabTestsForPdf(rx.id);
+
+    const initial: DrawerComposerInitial = {
+      prescription_id: rx.id,
+      prescription_code: rx.prescription_code,
+      version: rx.version,
+      patient_name: rx.patient_name,
+      patient_age: rx.patient_age,
+      patient_sex: rx.patient_sex,
+      patient_weight_kg: rx.patient_weight_kg,
+      bp_sys: rx.bp_sys,
+      bp_dia: rx.bp_dia,
+      pulse_bpm: rx.pulse_bpm,
+      spo2_pct: rx.spo2_pct,
+      temp_c: rx.temp_c,
+      height_cm: rx.height_cm,
+      chief_complaint: rx.chief_complaint,
+      provisional_diagnosis: rx.provisional_diagnosis,
+      general_advice: rx.general_advice,
+      follow_up_advice: rx.follow_up_advice,
+      items: items.map((it) => ({
+        ordinal: it.ordinal,
+        drug_name: it.drug_name,
+        dose: it.dose,
+        frequency: it.frequency,
+        duration: it.duration,
+        instructions: it.instructions,
+        // The legacy items table doesn't carry medicine_sku here
+        // because we read it through the medicine_catalog join. The
+        // FK itself is preserved on the DB row — the drawer simply
+        // doesn't re-derive it from this hydrated state. Subsequent
+        // save() calls preserve medicine_sku only for newly-picked
+        // items; legacy items round-trip without the FK rehydrated.
+        medicine_sku: null,
+        composition: it.medicine?.composition ?? null,
+      })),
+      lab_tests: labTests.map((t) => ({
+        ordinal: t.ordinal,
+        test_name: t.test_name,
+        instructions: t.instructions,
+      })),
+    };
+
+    return { ok: true, data: initial };
+  } catch (e) {
+    if (e && typeof e === "object" && "digest" in e) throw e;
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not open Rx composer.",
+    };
+  }
+}

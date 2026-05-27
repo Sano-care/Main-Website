@@ -25,13 +25,16 @@ import {
   ExternalLink,
   Copy,
   Loader2,
-  Pill,
 } from "lucide-react";
 import {
   updatePrescriptionDraft,
   sendPrescription,
   type RxActionResult,
 } from "../../../../_actions/prescription";
+import {
+  DrugAutocomplete,
+  type MedicineSearchResult,
+} from "@/components/rx/DrugAutocomplete";
 
 type ItemRow = {
   ordinal: number;
@@ -625,175 +628,6 @@ function SuccessSurface({
   );
 }
 
-// ---------------------------------------------------------------------
-// DrugAutocomplete (C2-Rx v7)
-//
-// Replaces the freetext Drug input on every line of the medications
-// table. Doctor types brand name OR composition keyword (e.g.
-// "omeprazole"), the component debounces (200ms) and queries
-// /api/doctor/medicines/search, then renders the top-20 matches as a
-// dropdown below the input. Each result shows three lines:
-//   Brand     — the medicine_catalog row's brand_name
-//   Form      — Tablet / Capsule / Syrup / etc.
-//   Composition — the active ingredients + per-ingredient strengths
-//
-// On pick: brand_name fills `drug_name`, the catalog `strength` (if
-// non-empty) fills `dose`. Other fields stay as typed.
-//
-// Freetext fallback: every keystroke fires `onChange(value)` so the
-// parent's drug_name stays in sync even when the doctor types
-// something not in the catalog. The autocomplete is purely a
-// suggestion layer — submission is never blocked by a no-match.
-// ---------------------------------------------------------------------
-type MedicineSearchResult = {
-  id: string;
-  sku: number | null;
-  brand_name: string;
-  strength: string | null;
-  form: string | null;
-  composition: string;
-};
-
-function DrugAutocomplete({
-  value,
-  onChange,
-  onPickCatalog,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  onPickCatalog: (picked: MedicineSearchResult) => void;
-}) {
-  const [results, setResults] = useState<MedicineSearchResult[]>([]);
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-  // Track the latest in-flight request so out-of-order responses
-  // don't overwrite a fresher result set (doctor types fast).
-  const reqIdRef = useRef(0);
-
-  // Debounced fetch. Only fires when value.length >= 2 (matches the
-  // API's MIN_QUERY_LEN); shorter queries clear the dropdown.
-  useEffect(() => {
-    const trimmed = value.trim();
-    if (trimmed.length < 2) {
-      setResults([]);
-      setLoading(false);
-      return;
-    }
-    const myReqId = ++reqIdRef.current;
-    setLoading(true);
-    const handle = setTimeout(async () => {
-      try {
-        const res = await fetch(
-          `/api/doctor/medicines/search?q=${encodeURIComponent(trimmed)}&limit=20`,
-          { cache: "no-store" },
-        );
-        const data = (await res.json().catch(() => ({}))) as {
-          results?: MedicineSearchResult[];
-        };
-        // Drop stale responses.
-        if (myReqId !== reqIdRef.current) return;
-        setResults(data.results ?? []);
-      } catch {
-        if (myReqId !== reqIdRef.current) return;
-        setResults([]);
-      } finally {
-        if (myReqId === reqIdRef.current) setLoading(false);
-      }
-    }, 200);
-    return () => clearTimeout(handle);
-  }, [value]);
-
-  // Close on click-outside. Standard pattern — listen on document,
-  // check whether the click target is inside our wrapper.
-  useEffect(() => {
-    if (!open) return;
-    function onClick(e: MouseEvent) {
-      if (!wrapperRef.current) return;
-      if (!wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [open]);
-
-  // Close on Escape.
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
-
-  return (
-    <div ref={wrapperRef} className="relative">
-      <label className="block">
-        <span className="block text-xs font-medium text-slate-700 mb-1">
-          Drug *
-        </span>
-        <input
-          type="text"
-          value={value}
-          required
-          onChange={(e) => {
-            onChange(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => {
-            if (value.trim().length >= 2) setOpen(true);
-          }}
-          // autocomplete=off so the browser's password-manager
-          // / form-autofill suggestions don't fight our dropdown.
-          autoComplete="off"
-          className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
-        />
-      </label>
-
-      {open && (results.length > 0 || loading) && (
-        <div className="absolute left-0 right-0 top-full mt-1 z-20 max-h-72 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg">
-          {loading && results.length === 0 && (
-            <div className="flex items-center gap-2 text-xs text-slate-500 px-3 py-2">
-              <Loader2 className="w-3 h-3 animate-spin" /> Searching catalog…
-            </div>
-          )}
-          {results.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => {
-                onPickCatalog(r);
-                setOpen(false);
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-100 last:border-b-0 focus:bg-slate-50 focus:outline-none"
-            >
-              <div className="flex items-start gap-2">
-                <Pill className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-slate-900 truncate">
-                    {r.brand_name}
-                    {r.strength ? (
-                      <span className="ml-1.5 text-xs font-normal text-slate-500">
-                        {r.strength}
-                      </span>
-                    ) : null}
-                  </div>
-                  {r.form && (
-                    <div className="text-[11px] text-slate-500">
-                      {r.form}
-                    </div>
-                  )}
-                  <div className="text-[11px] text-slate-600 truncate">
-                    {r.composition}
-                  </div>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+// DrugAutocomplete and the MedicineSearchResult type now live in the
+// shared module at @/components/rx/DrugAutocomplete — extracted in the
+// C2-Rx v3 build so the in-call drawer composer reuses the same UX.
