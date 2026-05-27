@@ -212,6 +212,41 @@ async function generateVerificationQrDataUrl(): Promise<string> {
 }
 
 // ---------------------------------------------------------------------
+// Brand lockup PNG
+//
+// v4 replaced the text wordmark + tagline on page 1 with the horizontal
+// Sanocare lockup (icon-left + "SANOCARE" wordmark). The PNG lives in
+// src/lib/rx/pdf/assets/ alongside the fonts (both included via the
+// outputFileTracingIncludes glob in next.config.ts) and is read once
+// per Node process — the asset doesn't change between renders so a
+// module-scoped lazy cache is cheap and correct.
+//
+// We hand the renderer a base64 data URL rather than a filesystem
+// path because @react-pdf's <Image src> fetches non-data sources at
+// render time, and serverless workers don't always have outbound
+// access to the local filesystem under all routing configurations.
+// Data URL = bytes embedded in the document, no fetch needed.
+// ---------------------------------------------------------------------
+let cachedLockupDataUrl: string | null = null;
+
+function loadLockupDataUrl(): string {
+  if (cachedLockupDataUrl) return cachedLockupDataUrl;
+  const lockupPath = path.join(
+    process.cwd(),
+    "src/lib/rx/pdf/assets/Sanocare_Lockup_HD_transparent.png",
+  );
+  // Sync read at first render — ~77 KB file, microsecond-scale on any
+  // disk. Reads on every subsequent render return the cached string.
+  // If the file is missing (deploy misconfig) we want the failure to
+  // surface loudly here, not silently render a missing-asset box.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fs = require("fs") as typeof import("fs");
+  const bytes = fs.readFileSync(lockupPath);
+  cachedLockupDataUrl = `data:image/png;base64,${bytes.toString("base64")}`;
+  return cachedLockupDataUrl;
+}
+
+// ---------------------------------------------------------------------
 // Main entry point
 //
 // signature / stamp: 'placeholder' draws the v3 dashed-ring (stamp)
@@ -270,12 +305,18 @@ export async function renderPrescriptionPdf(args: {
   // documents). Cheap: ~1 ms in Node for a sub-300px PNG data URL.
   const qrDataUrl = args.data.qr_data_url ?? (await generateVerificationQrDataUrl());
 
+  // Horizontal brand lockup — passed through as a data URL so the
+  // template can <Image src={lockupDataUrl}> without a filesystem path.
+  // Cached after first read; ~77 KB asset, read once per Node process.
+  const lockupDataUrl = loadLockupDataUrl();
+
   const element = createElement(PrescriptionPdf, {
     data: { ...args.data, qr_data_url: qrDataUrl },
     signatureMode,
     signatureDataUrl,
     stampMode,
     stampDataUrl,
+    lockupDataUrl,
   });
 
   // renderToBuffer expects a ReactElement<DocumentProps>. PrescriptionPdf
