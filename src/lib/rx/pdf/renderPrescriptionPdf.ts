@@ -5,11 +5,20 @@
 // Supabase storage bucket; the patient-view route (/rx/[token]) then
 // mints a short-lived signed URL on read.
 //
-// v5 renderer scope (post-v3/v4 rewrite — clean tabular sans-serif):
+// v5.1 renderer scope (post-v5 typography flip — Times Roman serif):
 //
-//   - Font registration: Inter only (variable TTF; weights 400/500/
-//     600/700/800). No italics. Cormorant Garamond + Source Serif 4
-//     were dropped in v5 — the layout is sans-serif throughout.
+//   - Font registration: NONE. v5.1 uses @react-pdf's built-in PDF
+//     standard fonts (Times-Roman, Times-Bold, Times-Italic,
+//     Times-BoldItalic) — no Font.register call, no TTF bundling,
+//     no outputFileTracingIncludes needed for fonts. Net effect:
+//     ~600 KB drop in the function bundle. Standard PDF fonts are
+//     embedded in every PDF viewer, so the output renders identically
+//     everywhere without us shipping the glyphs.
+//
+//   - Per @react-pdf's design, each weight is a separate family name:
+//     bold text uses `fontFamily: "Times-Bold"` (NOT
+//     `fontWeight: 700`). The PrescriptionPdf StyleSheet sets the
+//     default fontFamily on the Page and overrides per-style for bold.
 //
 //   - Signature handling: download the doctor's signature image bytes
 //     from the private doctor-signatures bucket via the service role
@@ -24,59 +33,36 @@
 //     of source), embedded directly in the component — no asset
 //     bundle, no fs read at render time.
 //
-// v5 dropped from v3/v4 (deliberate):
+// v5/v5.1 dropped from v3/v4 (deliberate):
 //
-//   - Cormorant Garamond + Source Serif 4 font bundles + italic VFs
-//   - QR generation (qrcode npm package uninstalled)
+//   - Inter-Variable.ttf bundle + Font.register (v5.1)
+//   - Cormorant Garamond + Source Serif 4 font bundles + italic VFs (v5)
+//   - QR generation (qrcode npm package uninstalled — v5)
 //   - Stamp resolution (doctor.stamp_image_url column kept in DB for
-//     future v6 but not rendered by v5)
-//   - Watermark SVG component
-//   - Cream paper background, inset double-rule frame, doc-meta strip
+//     future v6 but not rendered) (v5)
+//   - Watermark SVG component (v5)
+//   - Cream paper background, inset double-rule frame, doc-meta strip (v5)
 
 import { renderToBuffer, Font } from "@react-pdf/renderer";
 import { createElement } from "react";
-import path from "path";
 import { PrescriptionPdf, type PrescriptionPdfData } from "./PrescriptionPdf";
 import { supabaseAdmin } from "@/lib/supabase-server";
 
 // ---------------------------------------------------------------------
-// Font registration — runs once per Node process (module-load idempotent).
+// One-time hyphenation disable.
 //
-// Single family: Inter, variable TTF (wght axis). We register five
-// weight buckets — @react-pdf maps fontWeight on a Text/View style
-// to the corresponding axis position at render time, producing
-// rendered glyphs at 400/500/600/700/800 from a single file.
-//
-// The TTF lives alongside this module under ./fonts/; Next.js's
-// outputFileTracingIncludes (see next.config.ts) bundles it into
-// every function that can reach this code, so process.cwd()-relative
-// reads work in production.
+// v5.1 doesn't register any TTF fonts — Times Roman family ships as a
+// PDF standard font, available in every viewer. But we still need to
+// disable @react-pdf's default hyphenation callback, which would
+// otherwise reach for a hyphenation dictionary over the network on
+// long-word wrap. Idempotent on the @react-pdf side: setting the
+// callback again is a no-op.
 // ---------------------------------------------------------------------
-let fontsRegistered = false;
-function registerFontsOnce() {
-  if (fontsRegistered) return;
-
-  const fontsDir = path.join(process.cwd(), "src/lib/rx/pdf/fonts");
-  const inter = path.join(fontsDir, "Inter-Variable.ttf");
-
-  Font.register({
-    family: "Inter",
-    fonts: [
-      { src: inter, fontWeight: 400 },
-      { src: inter, fontWeight: 500 },
-      { src: inter, fontWeight: 600 },
-      { src: inter, fontWeight: 700 },
-      { src: inter, fontWeight: 800 },
-    ],
-  });
-
-  // @react-pdf/renderer tries hyphenation when wrapping long words and
-  // calls out to a hyphenation engine that fetches dictionaries over
-  // the network — disable it; we don't need it and don't want runtime
-  // outbound calls from the renderer.
+let hyphenationDisabled = false;
+function disableHyphenationOnce() {
+  if (hyphenationDisabled) return;
   Font.registerHyphenationCallback((word) => [word]);
-
-  fontsRegistered = true;
+  hyphenationDisabled = true;
 }
 
 // ---------------------------------------------------------------------
@@ -147,7 +133,7 @@ export async function renderPrescriptionPdf(args: {
   data: PrescriptionPdfData;
   signature: RenderImageSource;
 }): Promise<Buffer> {
-  registerFontsOnce();
+  disableHyphenationOnce();
 
   let signatureMode: "placeholder" | "embedded" = "placeholder";
   let signatureDataUrl: string | null = null;

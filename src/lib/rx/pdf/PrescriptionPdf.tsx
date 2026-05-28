@@ -8,8 +8,12 @@
 //   - the doctor-side preview during composition, with
 //     signatureMode='placeholder'
 //
-// v5 design language (locked per founder's "Mrs Sonia Gupta" reference):
-//   - Inter only (sans-serif). No italics anywhere.
+// v5.1 design language (founder's typography flip from v5):
+//   - Times Roman serif throughout, via @react-pdf's built-in PDF
+//     standard fonts (Times-Roman / Times-Bold / Times-Italic /
+//     Times-BoldItalic). NO Font.register, NO bundled TTFs. Each
+//     weight is a separate family per @react-pdf's design — bold
+//     text uses `fontFamily: "Times-Bold"`, not `fontWeight: 700`.
 //   - White paper, no cream, no watermark, no inset frame.
 //   - Single 0.6pt black border wraps content; section dividers 0.6pt
 //     black; internal grid hair-rules 0.4-0.5pt at #94A3B8.
@@ -29,10 +33,12 @@
 //   Dietary & Lifestyle Advice (two-col with signature block right) →
 //   footer band (icon | corp + CIN | icon)
 //
-// The footer band uses marginTop:"auto" so it anchors to the bottom
-// of the content area on single-page Rx (the common case). On a
-// multi-page Rx it flows naturally after the last section. v5 is
-// expected to be single-page by default.
+// Footer band is rendered as a `fixed` page-level element with
+// position:'absolute' so it pins to the bottom of every page. The
+// Page's paddingBottom reserves space (130pt) so inline content
+// stops short of the footer. v5.1 wraps the medication rows and the
+// final advice + signature block with wrap={false} so neither
+// fragments across a page break.
 
 import { Document, Page, Text, View, StyleSheet, Image, Svg, Path } from "@react-pdf/renderer";
 
@@ -156,15 +162,20 @@ const PALETTE = {
 
 const styles = StyleSheet.create({
   page: {
-    fontFamily: "Inter",
+    fontFamily: "Times-Roman", // PDF standard font — no registration
     fontSize: 10,
     color: PALETTE.ink,
     backgroundColor: PALETTE.paper,
-    padding: 34, // 12mm all sides
+    paddingTop: 34,    // 12mm top
+    paddingLeft: 34,   // 12mm left
+    paddingRight: 34,  // 12mm right
+    paddingBottom: 130, // reserves space for the page-pinned footer band
     lineHeight: 1.4,
   },
   docBorder: {
-    flex: 1,
+    // v5.1: no flex:1 — the docBorder sizes to its content so the
+    // bottom border sits just below the last section. The footer
+    // lives outside this box now (page-pinned via the `fixed` prop).
     flexDirection: "column",
     borderWidth: 0.6,
     borderColor: PALETTE.border,
@@ -186,8 +197,8 @@ const styles = StyleSheet.create({
     gap: 5.7, // 2mm
   },
   headerBrand: {
-    fontSize: 15.5,
-    fontWeight: 700,
+    fontSize: 13, // v5.1: 15.5 → 13
+    fontFamily: "Times-Bold",
     color: PALETTE.brand,
     letterSpacing: 0.5,
   },
@@ -196,11 +207,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   headerTitle: {
-    fontSize: 17.5,
-    fontWeight: 700,
+    fontSize: 14, // v5.1: 17.5 → 14
+    fontFamily: "Times-Bold",
     color: PALETTE.ink,
     letterSpacing: 0.5,
     textAlign: "center",
+    // @react-pdf supports CSS-like whiteSpace; keep "Medical
+    // Prescription" on one line regardless of the centre column's
+    // computed width.
+    whiteSpace: "nowrap",
   },
   headerRight: {
     flex: 1,
@@ -208,15 +223,15 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   headerRxLabel: {
-    fontSize: 8,
+    fontSize: 7, // v5.1: 8 → 7
     color: PALETTE.inkMute,
-    fontWeight: 600,
+    fontFamily: "Times-Bold",
     letterSpacing: 1.4,
   },
   headerRxCode: {
-    fontSize: 12.5,
+    fontSize: 10, // v5.1: 12.5 → 10
     color: PALETTE.ink,
-    fontWeight: 700,
+    fontFamily: "Times-Bold",
     marginTop: 1.5,
   },
 
@@ -242,24 +257,23 @@ const styles = StyleSheet.create({
   },
   metaLabel: {
     width: 108, // 38mm
-    fontWeight: 600,
+    fontFamily: "Times-Bold",
     color: PALETTE.ink,
   },
   metaValue: {
     flex: 1,
-    fontWeight: 400,
     color: PALETTE.ink,
   },
 
   // ----- SECTION -----
   section: {
-    paddingVertical: 8.5, // 3mm
+    paddingVertical: 5.7, // v5.1: 3mm → 2mm
     paddingHorizontal: 14, // 5mm
     borderBottomWidth: 0.6,
     borderBottomColor: PALETTE.border,
   },
   sectionHeading: {
-    fontWeight: 700,
+    fontFamily: "Times-Bold",
     color: PALETTE.ink,
     fontSize: 10.5,
     marginBottom: 4.3, // 1.5mm
@@ -284,7 +298,7 @@ const styles = StyleSheet.create({
   },
   vCellLeft: {
     width: 102, // 36mm
-    paddingVertical: 5.7, // 2mm
+    paddingVertical: 4.3, // v5.1: 2mm → 1.5mm (tightens vitals row)
     paddingHorizontal: 14, // 5mm
     borderRightWidth: 0.6,
     borderRightColor: PALETTE.border,
@@ -292,7 +306,7 @@ const styles = StyleSheet.create({
   },
   vCell: {
     flex: 1,
-    paddingVertical: 5.7,
+    paddingVertical: 4.3, // v5.1: 2mm → 1.5mm (tightens vitals row)
     paddingHorizontal: 8.5,
     borderRightWidth: 0.5,
     borderRightColor: PALETTE.hair,
@@ -302,18 +316,17 @@ const styles = StyleSheet.create({
     borderRightWidth: 0,
   },
   vitalsHeadLabel: {
-    fontWeight: 700,
+    fontFamily: "Times-Bold",
     fontSize: 9.5,
     color: PALETTE.ink,
   },
   vitalsHeadDate: {
-    fontWeight: 400,
     fontSize: 9,
     color: PALETTE.inkMute,
     marginTop: 1.4,
   },
   vitalName: {
-    fontWeight: 600,
+    fontFamily: "Times-Bold",
     fontSize: 8.5,
     color: PALETTE.inkSoft,
     letterSpacing: 0.4,
@@ -329,7 +342,7 @@ const styles = StyleSheet.create({
 
   // ----- DIAGNOSIS STRONG PREFIX -----
   diagnosisStrong: {
-    fontWeight: 700,
+    fontFamily: "Times-Bold",
     color: PALETTE.ink,
   },
 
@@ -344,7 +357,7 @@ const styles = StyleSheet.create({
   },
   medsHeadCell: {
     fontSize: 9,
-    fontWeight: 700,
+    fontFamily: "Times-Bold",
     color: PALETTE.inkSoft,
     letterSpacing: 0.3,
     paddingVertical: 4.3, // 1.5mm
@@ -369,7 +382,7 @@ const styles = StyleSheet.create({
   colFreq: { width: 62 },
   colDur: { width: 68 }, // 24mm
   colNotes: { width: 108 }, // 38mm
-  drugName: { fontWeight: 700, color: PALETTE.ink },
+  drugName: { fontFamily: "Times-Bold", color: PALETTE.ink },
   drugComposition: { color: PALETTE.inkSoft, fontSize: 9, marginTop: 1 },
   cellDash: { color: PALETTE.inkMute, textAlign: "center" },
   medsEmpty: {
@@ -417,7 +430,7 @@ const styles = StyleSheet.create({
     fontSize: 8,
   },
   doctorName: {
-    fontWeight: 700,
+    fontFamily: "Times-Bold",
     color: PALETTE.ink,
     fontSize: 10,
   },
@@ -431,8 +444,14 @@ const styles = StyleSheet.create({
   },
 
   // ----- FOOTER BAND -----
+  // v5.1: footer is page-pinned via React-PDF's `fixed` prop +
+  // absolute positioning. Sits at the bottom of every page; the Page's
+  // paddingBottom (130) reserves the inline space above it.
   footerBand: {
-    marginTop: "auto", // anchor to bottom on single-page Rx
+    position: "absolute",
+    bottom: 12,
+    left: 12,
+    right: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 14, // 5mm
@@ -441,7 +460,6 @@ const styles = StyleSheet.create({
     borderWidth: 0.6,
     borderColor: PALETTE.border,
     borderRadius: 3, // 1mm
-    margin: 14, // 5mm spacing from docBorder edges
   },
   footerCenter: {
     flex: 1,
@@ -450,7 +468,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   footerCompany: {
-    fontWeight: 700,
+    fontFamily: "Times-Bold",
     color: PALETTE.brand,
     fontSize: 10,
     letterSpacing: 0.3,
@@ -464,7 +482,7 @@ const styles = StyleSheet.create({
   },
   footerWhatsapp: {
     color: PALETTE.coral,
-    fontWeight: 600,
+    fontFamily: "Times-Bold",
     fontSize: 9.5,
     marginTop: 1.4,
     textAlign: "center",
@@ -479,9 +497,9 @@ const styles = StyleSheet.create({
 
 // -------- inline butterfly SVG ----------------------------------------
 // Two kidney-shaped paths from public/logo.svg, scaled via the size
-// prop. Used 3× per page: header (18mm) + footer left (16mm) + footer
-// right (16mm). Inlined here so the PDF stays self-contained with no
-// outbound asset fetch.
+// prop. Used 3× per page: header (~13mm — v5.1 shrink) + footer left
+// (~16mm) + footer right (~16mm). Inlined here so the PDF stays
+// self-contained with no outbound asset fetch.
 
 function SanocareIcon({ size }: { size: number }) {
   return (
@@ -593,7 +611,8 @@ export function PrescriptionPdf({
           {/* ============================ Header band ====================== */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
-              <SanocareIcon size={51} />
+              {/* v5.1: icon 18mm → 13mm */}
+              <SanocareIcon size={37} />
               <Text style={styles.headerBrand}>SANOCARE</Text>
             </View>
             <View style={styles.headerCenter}>
@@ -828,8 +847,10 @@ export function PrescriptionPdf({
             </View>
           </View>
 
-          {/* ===================== Dietary & Lifestyle Advice + Signature == */}
-          <View style={styles.section}>
+          {/* ===================== Dietary & Lifestyle Advice + Signature ==
+              v5.1: wrap={false} keeps the advice list + signature block
+              + doctor name + reg-no on one page (no mid-section break). */}
+          <View style={styles.section} wrap={false}>
             <Text style={styles.sectionHeading}>Dietary &amp; Lifestyle Advice</Text>
             <View style={styles.adviceRow}>
               <View style={styles.adviceLeft}>
@@ -866,27 +887,32 @@ export function PrescriptionPdf({
             </View>
           </View>
 
-          {/* ============================ Footer band ====================== */}
-          <View style={styles.footerBand}>
-            <SanocareIcon size={45} />
-            <View style={styles.footerCenter}>
-              <Text style={styles.footerCompany}>
-                SANOCARE TECH INNOVATIONS PRIVATE LIMITED
-              </Text>
-              <Text style={styles.footerContact}>
-                eMail: contact@sanocare.in   Website: www.sanocare.in
-              </Text>
-              <Text style={styles.footerWhatsapp}>
-                FOR APPOINTMENT CALL / WHATSAPP: +91 9760059900
-              </Text>
-              <Text style={styles.footerCin}>
-                CIN Number: U86904DL2025PTC446725
-              </Text>
-            </View>
-            <SanocareIcon size={45} />
-          </View>
-
         </View>
+
+        {/* ============================ Footer band (page-pinned) =========
+            v5.1: rendered as a Page-level sibling of docBorder, with the
+            `fixed` prop so React-PDF repeats it on every page if content
+            overflows. position:'absolute' + bottom:12 in styles pins it
+            to the bottom edge. */}
+        <View style={styles.footerBand} fixed>
+          <SanocareIcon size={45} />
+          <View style={styles.footerCenter}>
+            <Text style={styles.footerCompany}>
+              SANOCARE TECH INNOVATIONS PRIVATE LIMITED
+            </Text>
+            <Text style={styles.footerContact}>
+              eMail: contact@sanocare.in   Website: www.sanocare.in
+            </Text>
+            <Text style={styles.footerWhatsapp}>
+              FOR APPOINTMENT CALL / WHATSAPP: +91 9760059900
+            </Text>
+            <Text style={styles.footerCin}>
+              CIN Number: U86904DL2025PTC446725
+            </Text>
+          </View>
+          <SanocareIcon size={45} />
+        </View>
+
       </Page>
     </Document>
   );
