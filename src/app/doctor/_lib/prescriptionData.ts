@@ -91,7 +91,12 @@ export type DoctorRxDetail = {
   temp_c: number | null;
   height_cm: number | null;
   chief_complaint: string | null;
+  /** v5: free-text duration shown under Presenting Complaints
+   *  (e.g. "X 2 days"). */
+  presenting_complaints_duration: string | null;
   provisional_diagnosis: string | null;
+  /** v5: free-text past medical history block. */
+  past_medical_history: string | null;
   general_advice: string | null;
   follow_up_advice: string | null;
   pdf_storage_path: string | null;
@@ -117,7 +122,7 @@ export const getDraftForSession = cache(
     const { data, error } = await supabaseAdmin
       .from("prescriptions")
       .select(
-        "id, prescription_code, version, status, session_id, booking_id, superseded_by, patient_name, patient_age, patient_sex, patient_weight_kg, bp_sys, bp_dia, pulse_bpm, spo2_pct, temp_c, height_cm, chief_complaint, provisional_diagnosis, general_advice, follow_up_advice, pdf_storage_path, patient_view_token, whatsapp_sent_at, whatsapp_message_id, created_at, sent_at, voided_at, void_reason",
+        "id, prescription_code, version, status, session_id, booking_id, superseded_by, patient_name, patient_age, patient_sex, patient_weight_kg, bp_sys, bp_dia, pulse_bpm, spo2_pct, temp_c, height_cm, chief_complaint, presenting_complaints_duration, provisional_diagnosis, past_medical_history, general_advice, follow_up_advice, pdf_storage_path, patient_view_token, whatsapp_sent_at, whatsapp_message_id, created_at, sent_at, voided_at, void_reason",
       )
       .eq("session_id", session_id)
       .eq("doctor_id", doctor.id)
@@ -181,7 +186,7 @@ export const getDoctorPrescriptionByCode = cache(
     let query = supabaseAdmin
       .from("prescriptions")
       .select(
-        "id, prescription_code, version, status, session_id, booking_id, superseded_by, patient_name, patient_age, patient_sex, patient_weight_kg, bp_sys, bp_dia, pulse_bpm, spo2_pct, temp_c, height_cm, chief_complaint, provisional_diagnosis, general_advice, follow_up_advice, pdf_storage_path, patient_view_token, whatsapp_sent_at, whatsapp_message_id, created_at, sent_at, voided_at, void_reason",
+        "id, prescription_code, version, status, session_id, booking_id, superseded_by, patient_name, patient_age, patient_sex, patient_weight_kg, bp_sys, bp_dia, pulse_bpm, spo2_pct, temp_c, height_cm, chief_complaint, presenting_complaints_duration, provisional_diagnosis, past_medical_history, general_advice, follow_up_advice, pdf_storage_path, patient_view_token, whatsapp_sent_at, whatsapp_message_id, created_at, sent_at, voided_at, void_reason",
       )
       .eq("doctor_id", doctor.id)
       .eq("prescription_code", prescription_code);

@@ -142,7 +142,9 @@ export default async function PrescribePage({
             temp_c: draft.temp_c,
             height_cm: draft.height_cm,
             chief_complaint: draft.chief_complaint,
+            presenting_complaints_duration: draft.presenting_complaints_duration,
             provisional_diagnosis: draft.provisional_diagnosis,
+            past_medical_history: draft.past_medical_history,
             general_advice: draft.general_advice,
             follow_up_advice: draft.follow_up_advice,
             items: draft.items.map((it) => ({

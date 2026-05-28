@@ -35,7 +35,11 @@ type RxRow = {
   patient_sex: "M" | "F" | "O" | "U" | null;
   patient_weight_kg: number | null;
   chief_complaint: string | null;
+  /** v5: free-text duration shown under Presenting Complaints. */
+  presenting_complaints_duration: string | null;
   provisional_diagnosis: string | null;
+  /** v5: free-text past medical history block. */
+  past_medical_history: string | null;
   general_advice: string | null;
   follow_up_advice: string | null;
   pdf_storage_path: string | null;
@@ -77,7 +81,7 @@ export default async function OpsRxDetail({
   let query = supabase
     .from("prescriptions")
     .select(
-      "id, prescription_code, version, status, doctor_id, session_id, booking_id, superseded_by, patient_name, patient_age, patient_sex, patient_weight_kg, chief_complaint, provisional_diagnosis, general_advice, follow_up_advice, pdf_storage_path, patient_view_token, whatsapp_sent_at, whatsapp_message_id, created_at, sent_at, voided_at, void_reason, doctor:doctors!doctor_id(doctor_code, full_name, registration_no), booking:bookings(booking_code)",
+      "id, prescription_code, version, status, doctor_id, session_id, booking_id, superseded_by, patient_name, patient_age, patient_sex, patient_weight_kg, chief_complaint, presenting_complaints_duration, provisional_diagnosis, past_medical_history, general_advice, follow_up_advice, pdf_storage_path, patient_view_token, whatsapp_sent_at, whatsapp_message_id, created_at, sent_at, voided_at, void_reason, doctor:doctors!doctor_id(doctor_code, full_name, registration_no), booking:bookings(booking_code)",
     )
     .eq("prescription_code", rx_code);
   if (version != null) query = query.eq("version", version);
@@ -221,12 +225,19 @@ export default async function OpsRxDetail({
         </DetailCard>
       </div>
 
-      <Block label="Chief complaint" value={rx.chief_complaint} />
-      <Block label="Provisional diagnosis" value={rx.provisional_diagnosis} />
+      {/* v5 label renames + 2 new blocks (PMH + duration). */}
+      <Block label="Presenting Complaints" value={rx.chief_complaint} />
+      {rx.presenting_complaints_duration && (
+        <Block label="Duration" value={rx.presenting_complaints_duration} />
+      )}
+      <Block label="Diagnosis" value={rx.provisional_diagnosis} />
+      {rx.past_medical_history && (
+        <Block label="Past Medical History" value={rx.past_medical_history} />
+      )}
 
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden mb-4">
         <div className="px-6 py-3 border-b border-slate-100 text-[11px] font-mono uppercase tracking-wider text-slate-500">
-          Medications ({items.length})
+          Medication ({items.length})
         </div>
         {items.length === 0 ? (
           <div className="px-6 py-4 text-sm text-slate-400 italic">
@@ -260,7 +271,8 @@ export default async function OpsRxDetail({
         )}
       </div>
 
-      <Block label="General advice" value={rx.general_advice} />
+      {/* v5: Dietary & Lifestyle Advice (renamed from Advice & Follow-up) */}
+      <Block label="Dietary & Lifestyle Advice" value={rx.general_advice} />
       <Block label="Follow-up" value={rx.follow_up_advice} />
 
       {chain.length > 1 && (

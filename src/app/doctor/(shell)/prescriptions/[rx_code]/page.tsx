@@ -163,12 +163,19 @@ export default async function DoctorRxDetail({
         </DetailCard>
       </div>
 
-      <Block label="Chief complaint" value={rx.chief_complaint} />
-      <Block label="Provisional diagnosis" value={rx.provisional_diagnosis} />
+      {/* v5 label renames + 2 new blocks (PMH + duration). */}
+      <Block label="Presenting Complaints" value={rx.chief_complaint} />
+      {rx.presenting_complaints_duration && (
+        <Block label="Duration" value={rx.presenting_complaints_duration} />
+      )}
+      <Block label="Diagnosis" value={rx.provisional_diagnosis} />
+      {rx.past_medical_history && (
+        <Block label="Past Medical History" value={rx.past_medical_history} />
+      )}
 
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden mb-4">
         <div className="px-6 py-3 border-b border-slate-100 text-[11px] font-mono uppercase tracking-wider text-slate-500">
-          Medications
+          Medication
         </div>
         {rx.items.length === 0 ? (
           <div className="px-6 py-4 text-sm text-slate-400 italic">
@@ -202,7 +209,8 @@ export default async function DoctorRxDetail({
         )}
       </div>
 
-      <Block label="General advice" value={rx.general_advice} />
+      {/* v5: Dietary & Lifestyle Advice (renamed from Advice & Follow-up) */}
+      <Block label="Dietary & Lifestyle Advice" value={rx.general_advice} />
       <Block label="Follow-up" value={rx.follow_up_advice} />
 
       {/* Chain navigator (only when more than one version exists) */}
