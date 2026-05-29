@@ -82,7 +82,11 @@ type ComposerInitial = {
   temp_c: number | null;
   height_cm: number | null;
   chief_complaint: string | null;
+  /** v5: free-text duration shown under Presenting Complaints. */
+  presenting_complaints_duration: string | null;
   provisional_diagnosis: string | null;
+  /** v5: free-text past medical history block. */
+  past_medical_history: string | null;
   general_advice: string | null;
   follow_up_advice: string | null;
   items: ItemRow[];
@@ -129,7 +133,17 @@ export function PrescriptionComposer({
   const [chiefComplaint, setChiefComplaint] = useState(
     initial.chief_complaint ?? "",
   );
+  // v5 free-text duration (e.g. "X 2 days") shown beneath Presenting
+  // Complaints. DB col: prescriptions.presenting_complaints_duration.
+  const [presentingDuration, setPresentingDuration] = useState(
+    initial.presenting_complaints_duration ?? "",
+  );
   const [diagnosis, setDiagnosis] = useState(initial.provisional_diagnosis ?? "");
+  // v5 Past Medical History block above the medication table.
+  // DB col: prescriptions.past_medical_history.
+  const [pastMedicalHistory, setPastMedicalHistory] = useState(
+    initial.past_medical_history ?? "",
+  );
   const [generalAdvice, setGeneralAdvice] = useState(initial.general_advice ?? "");
   const [followUp, setFollowUp] = useState(initial.follow_up_advice ?? "");
 
@@ -206,7 +220,9 @@ export function PrescriptionComposer({
     if (tempC.trim()) fd.set("temp_c", tempC.trim());
     if (heightCm.trim()) fd.set("height_cm", heightCm.trim());
     fd.set("chief_complaint", chiefComplaint);
+    fd.set("presenting_complaints_duration", presentingDuration);
     fd.set("provisional_diagnosis", diagnosis);
+    fd.set("past_medical_history", pastMedicalHistory);
     fd.set("general_advice", generalAdvice);
     fd.set("follow_up_advice", followUp);
     // Submit non-empty items only; ordinals are renumbered by the server.
@@ -423,16 +439,29 @@ export function PrescriptionComposer({
           </div>
         </div>
 
+        {/* v5 label renames + 2 new fields */}
         <Textarea
-          label="Chief complaint"
+          label="Presenting Complaints"
           value={chiefComplaint}
           onChange={setChiefComplaint}
           rows={2}
         />
+        <Field
+          label="Duration"
+          value={presentingDuration}
+          onChange={setPresentingDuration}
+          placeholder="X 2 days"
+        />
         <Textarea
-          label="Provisional diagnosis"
+          label="Diagnosis"
           value={diagnosis}
           onChange={setDiagnosis}
+          rows={2}
+        />
+        <Textarea
+          label="Past Medical History"
+          value={pastMedicalHistory}
+          onChange={setPastMedicalHistory}
           rows={2}
         />
       </div>
@@ -488,11 +517,11 @@ export function PrescriptionComposer({
         </div>
       </div>
 
-      {/* Medications */}
+      {/* Medication (v5: singular per locked mockup) */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <div className="flex items-center justify-between mb-3">
           <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
-            Medications
+            Medication
           </div>
           <button
             type="button"
@@ -566,11 +595,11 @@ export function PrescriptionComposer({
         </div>
       </div>
 
-      {/* Investigations Advised (M026 — free-text per Q4) */}
+      {/* Investigation (v5: singular per locked mockup) */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <div className="flex items-center justify-between mb-3">
           <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
-            Investigations Advised
+            Investigation
           </div>
           <button
             type="button"
@@ -644,10 +673,13 @@ export function PrescriptionComposer({
         )}
       </div>
 
-      {/* Advice */}
+      {/* Dietary & Lifestyle Advice (v5 rename of Advice & Follow-up) */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
+        <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
+          Dietary &amp; Lifestyle Advice
+        </div>
         <Textarea
-          label="General advice"
+          label="Advice"
           value={generalAdvice}
           onChange={setGeneralAdvice}
           rows={3}

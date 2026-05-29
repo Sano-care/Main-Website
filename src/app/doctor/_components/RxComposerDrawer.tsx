@@ -155,7 +155,13 @@ export function RxComposerDrawer({ open, onClose }: RxComposerDrawerProps) {
   const [tempC, setTempC] = useState<string>("");
   const [heightCm, setHeightCm] = useState<string>("");
   const [chiefComplaint, setChiefComplaint] = useState("");
+  // v5: free-text duration shown under Presenting Complaints
+  // (e.g. "X 2 days"). DB col: prescriptions.presenting_complaints_duration.
+  const [presentingDuration, setPresentingDuration] = useState("");
   const [diagnosis, setDiagnosis] = useState("");
+  // v5: Past Medical History block above the medication table.
+  // DB col: prescriptions.past_medical_history.
+  const [pastMedicalHistory, setPastMedicalHistory] = useState("");
   const [advice, setAdvice] = useState("");
   const [followUp, setFollowUp] = useState("");
   const [items, setItems] = useState<ItemRow[]>([emptyItem(1)]);
@@ -210,7 +216,9 @@ export function RxComposerDrawer({ open, onClose }: RxComposerDrawerProps) {
         setTempC(init.temp_c == null ? "" : String(init.temp_c));
         setHeightCm(init.height_cm == null ? "" : String(init.height_cm));
         setChiefComplaint(init.chief_complaint ?? "");
+        setPresentingDuration(init.presenting_complaints_duration ?? "");
         setDiagnosis(init.provisional_diagnosis ?? "");
+        setPastMedicalHistory(init.past_medical_history ?? "");
         setAdvice(init.general_advice ?? "");
         setFollowUp(init.follow_up_advice ?? "");
         setItems(
@@ -355,7 +363,11 @@ export function RxComposerDrawer({ open, onClose }: RxComposerDrawerProps) {
     if (tempC.trim()) fd.set("temp_c", tempC.trim());
     if (heightCm.trim()) fd.set("height_cm", heightCm.trim());
     if (chiefComplaint.trim()) fd.set("chief_complaint", chiefComplaint);
+    if (presentingDuration.trim())
+      fd.set("presenting_complaints_duration", presentingDuration);
     if (diagnosis.trim()) fd.set("provisional_diagnosis", diagnosis);
+    if (pastMedicalHistory.trim())
+      fd.set("past_medical_history", pastMedicalHistory);
     if (advice.trim()) fd.set("general_advice", advice);
     if (followUp.trim()) fd.set("follow_up_advice", followUp);
     // Serialise items + labs as JSON.
@@ -400,7 +412,9 @@ export function RxComposerDrawer({ open, onClose }: RxComposerDrawerProps) {
     tempC,
     heightCm,
     chiefComplaint,
+    presentingDuration,
     diagnosis,
+    pastMedicalHistory,
     advice,
     followUp,
     items,
@@ -626,9 +640,9 @@ export function RxComposerDrawer({ open, onClose }: RxComposerDrawerProps) {
               </div>
             </Section>
 
-            {/* Clinical */}
+            {/* Clinical — v5 label renames + 2 new fields */}
             <Section title="Clinical">
-              <FormField label="Chief complaint">
+              <FormField label="Presenting Complaints">
                 <textarea
                   value={chiefComplaint}
                   onChange={(e) => setChiefComplaint(e.target.value)}
@@ -636,7 +650,15 @@ export function RxComposerDrawer({ open, onClose }: RxComposerDrawerProps) {
                   className={inputCls()}
                 />
               </FormField>
-              <FormField label="Provisional diagnosis">
+              <FormField label="Duration">
+                <input
+                  value={presentingDuration}
+                  onChange={(e) => setPresentingDuration(e.target.value)}
+                  placeholder="X 2 days"
+                  className={inputCls()}
+                />
+              </FormField>
+              <FormField label="Diagnosis">
                 <textarea
                   value={diagnosis}
                   onChange={(e) => setDiagnosis(e.target.value)}
@@ -644,11 +666,19 @@ export function RxComposerDrawer({ open, onClose }: RxComposerDrawerProps) {
                   className={inputCls()}
                 />
               </FormField>
+              <FormField label="Past Medical History">
+                <textarea
+                  value={pastMedicalHistory}
+                  onChange={(e) => setPastMedicalHistory(e.target.value)}
+                  rows={2}
+                  className={inputCls()}
+                />
+              </FormField>
             </Section>
 
-            {/* Medications */}
+            {/* Medication (v5: singular per locked mockup) */}
             <Section
-              title="Medications"
+              title="Medication"
               right={
                 <button
                   type="button"
@@ -738,9 +768,9 @@ export function RxComposerDrawer({ open, onClose }: RxComposerDrawerProps) {
               ))}
             </Section>
 
-            {/* Lab tests */}
+            {/* Investigation (v5: singular per locked mockup) */}
             <Section
-              title="Investigations Advised"
+              title="Investigation"
               right={
                 <button
                   type="button"
@@ -815,9 +845,9 @@ export function RxComposerDrawer({ open, onClose }: RxComposerDrawerProps) {
               )}
             </Section>
 
-            {/* Advice / Follow-up */}
-            <Section title="Advice &amp; Follow-up">
-              <FormField label="General advice (one bullet per line)">
+            {/* Dietary & Lifestyle Advice (v5 rename of Advice & Follow-up) */}
+            <Section title="Dietary &amp; Lifestyle Advice">
+              <FormField label="Advice (one bullet per line)">
                 <textarea
                   value={advice}
                   onChange={(e) => setAdvice(e.target.value)}

@@ -105,11 +105,22 @@ import type {
 // ---------------------------------------------------------------------
 // Helpers
 
-function fmtConsultMode(modality: string | null | undefined): string | null {
-  if (modality === "video") return "Video (Daily.co)";
-  if (modality === "audio") return "Audio (Daily.co)";
-  if (modality === "in_person") return "In-person visit";
-  return modality ?? null;
+/**
+ * Mirror of deriveSponsorLabel() in src/app/doctor/_actions/prescription.ts.
+ * v5 renderer needs a sponsor_label string for the patient-info table;
+ * if the booking row's column is null we fall back to the same heuristic
+ * used at send time.
+ */
+function deriveSponsorLabel(
+  explicit: string | null | undefined,
+  payment_status: string | null | undefined,
+  amount_paid: number | null | undefined,
+): string {
+  if (explicit && explicit.trim() !== "") return explicit;
+  const amt = amount_paid ?? 0;
+  if (payment_status === "CAPTURED" && amt > 0) return `Self Pay ₹${amt}`;
+  if (amt === 0) return "Test";
+  return "Self Pay";
 }
 
 async function main() {
@@ -122,7 +133,7 @@ async function main() {
   const { data: chain, error: chainErr } = await supabase
     .from("prescriptions")
     .select(
-      "id, prescription_code, version, status, doctor_id, session_id, booking_id, patient_view_token, pdf_storage_path, sent_at, patient_name, patient_age, patient_sex, patient_weight_kg, chief_complaint, provisional_diagnosis, general_advice, follow_up_advice, bp_sys, bp_dia, pulse_bpm, spo2_pct, temp_c, height_cm",
+      "id, prescription_code, version, status, doctor_id, session_id, booking_id, patient_view_token, pdf_storage_path, sent_at, patient_name, patient_age, patient_sex, patient_weight_kg, chief_complaint, provisional_diagnosis, general_advice, follow_up_advice, bp_sys, bp_dia, pulse_bpm, spo2_pct, temp_c, height_cm, past_medical_history, presenting_complaints_duration",
     )
     .eq("prescription_code", rxCode)
     .order("version", { ascending: false });
@@ -163,6 +174,8 @@ async function main() {
     spo2_pct: number | null;
     temp_c: number | null;
     height_cm: number | null;
+    past_medical_history: string | null;
+    presenting_complaints_duration: string | null;
   };
 
   if (head.status === "draft") {
@@ -188,10 +201,12 @@ async function main() {
   );
 
   // ---- Doctor lookup ----
+  // v5 dropped stamp rendering — only signature_image_url is needed.
+  // doctors.stamp_image_url column kept in DB for future v6 (Task #17).
   const { data: doctorRow, error: doctorErr } = await supabase
     .from("doctors")
     .select(
-      "id, full_name, qualification, registration_no, issuing_council, signature_image_url, stamp_image_url",
+      "id, full_name, qualification, registration_no, issuing_council, signature_image_url",
     )
     .eq("id", head.doctor_id)
     .maybeSingle();
@@ -206,7 +221,6 @@ async function main() {
     registration_no: string | null;
     issuing_council: string | null;
     signature_image_url: string | null;
-    stamp_image_url: string | null;
   };
   if (!doctor.signature_image_url) {
     console.error(
@@ -253,11 +267,11 @@ async function main() {
     instructions: string | null;
   }>;
 
-  // ---- Booking → customer (Patient ID + booking_code) ----
+  // ---- Booking → customer + v5 booking-snapshot fields ----
   const { data: bookingData, error: bookingErr } = await supabase
     .from("bookings")
     .select(
-      "id, booking_code, patient_name, customer:customers(full_name, customer_code)",
+      "id, booking_code, patient_name, booked_through, sponsor_label, payment_status, amount, customer:customers(full_name, customer_code)",
     )
     .eq("id", head.booking_id)
     .maybeSingle();
@@ -274,20 +288,24 @@ async function main() {
     id: string;
     booking_code: string | null;
     patient_name: string | null;
+    booked_through: string | null;
+    sponsor_label: string | null;
+    payment_status: string | null;
+    amount: number | null;
     customer: { full_name: string | null; customer_code: string | null } | null;
   };
 
-  // ---- Session modality ----
-  const { data: sessionData, error: sessionErr } = await supabase
-    .from("consultation_sessions")
-    .select("modality")
-    .eq("id", head.session_id)
-    .maybeSingle();
-  if (sessionErr) {
-    console.error(`Could not load session ${head.session_id}: ${sessionErr.message}`);
-    process.exit(1);
-  }
-  const consultMode = fmtConsultMode((sessionData as { modality?: string | null } | null)?.modality);
+  // v5 dropped consult_mode from the rendered PDF — session lookup
+  // removed entirely (no other field on consultation_sessions matters
+  // for re-rendering).
+
+  // v5 booking-snapshot fields for the patient-info table.
+  const bookedThrough = booking.booked_through ?? "Website";
+  const sponsorLabel = deriveSponsorLabel(
+    booking.sponsor_label,
+    booking.payment_status,
+    booking.amount,
+  );
 
   // ---- Build PrescriptionPdfData ----
   const pdfData: PrescriptionPdfData = {
@@ -304,7 +322,8 @@ async function main() {
     patient_weight_kg: head.patient_weight_kg,
     patient_code: booking.customer?.customer_code ?? null,
     booking_code: booking.booking_code,
-    consult_mode: consultMode,
+    booked_through: bookedThrough,
+    sponsor_label: sponsorLabel,
     bp_sys: head.bp_sys,
     bp_dia: head.bp_dia,
     pulse_bpm: head.pulse_bpm,
@@ -312,7 +331,9 @@ async function main() {
     temp_c: head.temp_c,
     height_cm: head.height_cm,
     chief_complaint: head.chief_complaint,
+    presenting_complaints_duration: head.presenting_complaints_duration,
     provisional_diagnosis: head.provisional_diagnosis,
+    past_medical_history: head.past_medical_history,
     items: items.map((it) => ({
       ordinal: it.ordinal,
       drug_name: it.drug_name,
@@ -329,7 +350,6 @@ async function main() {
     })),
     general_advice: head.general_advice,
     follow_up_advice: head.follow_up_advice,
-    qr_data_url: null, // renderer generates server-side
   };
 
   console.log(`[reissue_rx] Rendering PDF for ${doctor.full_name}'s ${head.prescription_code} v${head.version}...`);
@@ -339,9 +359,6 @@ async function main() {
     pdfBuffer = await renderPrescriptionPdf({
       data: pdfData,
       signature: { kind: "storagePath", path: doctor.signature_image_url },
-      stamp: doctor.stamp_image_url
-        ? { kind: "storagePath", path: doctor.stamp_image_url }
-        : { kind: "placeholder" },
     });
   } catch (e) {
     console.error(`PDF render failed: ${e instanceof Error ? e.message : String(e)}`);

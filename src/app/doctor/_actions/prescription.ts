@@ -166,9 +166,12 @@ type PrescriptionRow = {
   spo2_pct: number | null;
   temp_c: number | null;
   height_cm: number | null;
+  // M028: v5 clinical fields
+  past_medical_history: string | null;
+  presenting_complaints_duration: string | null;
 };
 const RX_SELECT_COLS =
-  "id, prescription_code, version, status, doctor_id, session_id, booking_id, superseded_by, patient_view_token, pdf_storage_path, sent_at, patient_name, patient_age, patient_sex, patient_weight_kg, chief_complaint, provisional_diagnosis, general_advice, follow_up_advice, bp_sys, bp_dia, pulse_bpm, spo2_pct, temp_c, height_cm";
+  "id, prescription_code, version, status, doctor_id, session_id, booking_id, superseded_by, patient_view_token, pdf_storage_path, sent_at, patient_name, patient_age, patient_sex, patient_weight_kg, chief_complaint, provisional_diagnosis, general_advice, follow_up_advice, bp_sys, bp_dia, pulse_bpm, spo2_pct, temp_c, height_cm, past_medical_history, presenting_complaints_duration";
 
 async function assertPrescriptionOwnership(prescriptionId: string): Promise<{
   doctor: Awaited<ReturnType<typeof getCurrentDoctor>>;
@@ -209,15 +212,26 @@ async function assertPrescriptionOwnership(prescriptionId: string): Promise<{
 async function loadBookingPatientSnapshot(bookingId: string): Promise<{
   patient_name: string;
   patient_phone: string | null;
-  /** customers.customer_code (SAN-C-XXXXX) — printed as "Patient ID" on the v3 Rx PDF. */
+  /** customers.customer_code (SAN-C-XXXXX) — printed as "Patient ID" on the v5 Rx PDF. */
   patient_code: string | null;
   /** bookings.booking_code (SAN-B-XXXXX). */
   booking_code: string | null;
+  /** v5: bookings.booked_through (channel). Defaulted to "Website"
+   *  by the caller when null. */
+  booked_through: string | null;
+  /** v5: bookings.sponsor_label. Caller derives from payment_status
+   *  + amount when null (see deriveSponsorLabel). */
+  sponsor_label: string | null;
+  /** Used by deriveSponsorLabel as a fallback. */
+  payment_status: string | null;
+  /** Used by deriveSponsorLabel for the "Self Pay ₹X" fallback.
+   *  Maps to bookings.amount (numeric, rupees). */
+  amount: number | null;
 }> {
   const { data, error } = await supabaseAdmin
     .from("bookings")
     .select(
-      "id, booking_code, patient_name, phone, customer:customers(full_name, phone, customer_code)",
+      "id, booking_code, patient_name, phone, booked_through, sponsor_label, payment_status, amount, customer:customers(full_name, phone, customer_code)",
     )
     .eq("id", bookingId)
     .maybeSingle();
@@ -241,36 +255,49 @@ async function loadBookingPatientSnapshot(bookingId: string): Promise<{
   const patientPhone = customer?.phone ?? (data as { phone?: string | null }).phone ?? null;
   const patientCode = customer?.customer_code ?? null;
   const bookingCode = (data as { booking_code?: string | null }).booking_code ?? null;
+  const booking = data as {
+    booked_through?: string | null;
+    sponsor_label?: string | null;
+    payment_status?: string | null;
+    amount?: number | null;
+  };
   return {
     patient_name: patientName,
     patient_phone: patientPhone,
     patient_code: patientCode,
     booking_code: bookingCode,
+    booked_through: booking.booked_through ?? null,
+    sponsor_label: booking.sponsor_label ?? null,
+    payment_status: booking.payment_status ?? null,
+    amount: booking.amount ?? null,
   };
 }
 
-// ---------------------------------------------------------------------
-// Consult-modality formatter
-//
-// consultation_sessions.modality is one of 'video' / 'audio' / 'in_person'
-// today. The Rx template prints it as "Video (Daily.co)" / "Audio (Daily.co)"
-// / "In-person visit". We render the transport hint in parentheses for
-// video/audio because the patient may need to know which platform they
-// used (relevant for refund / fraud disputes).
-// ---------------------------------------------------------------------
-async function loadConsultModeForSession(sessionId: string): Promise<string | null> {
-  const { data, error } = await supabaseAdmin
-    .from("consultation_sessions")
-    .select("modality")
-    .eq("id", sessionId)
-    .maybeSingle();
-  if (error || !data) return null;
-  const m = (data as { modality?: string | null }).modality;
-  if (m === "video") return "Video (Daily.co)";
-  if (m === "audio") return "Audio (Daily.co)";
-  if (m === "in_person") return "In-person visit";
-  return m ?? null;
+/**
+ * v5 sponsor-label derivation. Falls back from explicit
+ * bookings.sponsor_label → derived from payment_status + amount_paid.
+ * Snapshot rule from the brief §3:
+ *   - CAPTURED + amount > 0   → "Self Pay ₹{amount}"
+ *   - amount = 0              → "Test"
+ *   - else                    → "Self Pay"
+ */
+function deriveSponsorLabel(
+  explicit: string | null,
+  payment_status: string | null,
+  amount_paid: number | null,
+): string {
+  if (explicit && explicit.trim() !== "") return explicit;
+  const amt = amount_paid ?? 0;
+  if (payment_status === "CAPTURED" && amt > 0) {
+    return `Self Pay ₹${amt}`;
+  }
+  if (amt === 0) return "Test";
+  return "Self Pay";
 }
+
+// (v5: loadConsultModeForSession removed — consult_mode is no longer
+// rendered in the Rx PDF. The header service-type is locked to
+// "Medical Prescription" regardless of modality, per v5 brief §3.)
 
 /**
  * Loads consultation_sessions.scheduled_at as an ISO string for the
@@ -680,6 +707,9 @@ export async function updatePrescriptionDraft(formData: FormData): Promise<void>
       provisional_diagnosis: str(formData, "provisional_diagnosis"),
       general_advice: str(formData, "general_advice"),
       follow_up_advice: str(formData, "follow_up_advice"),
+      // M028 v5 fields — both optional free-text.
+      past_medical_history: str(formData, "past_medical_history"),
+      presenting_complaints_duration: str(formData, "presenting_complaints_duration"),
     })
     .eq("id", rx.id);
   if (updateErr) {
@@ -789,10 +819,11 @@ export async function sendPrescription(
       };
     }
 
-    // Re-load doctor with signature + stamp + issuing council because
+    // Re-load doctor with signature + issuing council because
     // getCurrentDoctor doesn't return them (avoiding bloat on every
-    // page load). The stamp is optional (renders as a dashed-ring
-    // placeholder when null per F2 in the v3 brief).
+    // page load). v5 doesn't render the stamp (stamp_image_url is
+    // still selected for forward-compat with a future v6 reintroducing
+    // it; v5 template ignores the value).
     const { data: doctorExt, error: doctorExtErr } = await supabaseAdmin
       .from("doctors")
       .select("signature_image_url, stamp_image_url, issuing_council")
@@ -809,7 +840,6 @@ export async function sendPrescription(
           "Your signature isn't on file yet — ask ops to upload it from your /ops/doctors profile before issuing prescriptions.",
       };
     }
-    const stampPath = (doctorExt as { stamp_image_url: string | null } | null)?.stamp_image_url ?? null;
     const issuingCouncil = (doctorExt as { issuing_council: string | null } | null)?.issuing_council ?? null;
 
     // Load items (with composition via the medicine_catalog FK) + lab tests.
@@ -840,15 +870,24 @@ export async function sendPrescription(
     }
 
     // Patient phone (for WhatsApp delivery) + patient_code + booking_code
-    // (for the v3 Patient ID and Booking ID strip).
+    // (for the v5 patient info table) + booked_through + sponsor
+    // payment fields (v5 new — populated from the booking row, with
+    // fallbacks applied below).
     const patient = await loadBookingPatientSnapshot(rx.booking_id);
     if (!patient.patient_phone) {
       // Allow sending anyway — ops can deliver out-of-band.
       console.warn(`[sendPrescription] No patient phone for booking ${rx.booking_id}; WhatsApp send will be skipped.`);
     }
 
-    // Consult mode (for the v3 "Consult mode" identity strip).
-    const consultMode = await loadConsultModeForSession(rx.session_id);
+    // v5 snapshot defaults: if the booking row's booked_through is
+    // null we default to "Website"; sponsor_label falls back to the
+    // payment-status derivation per the v5 brief §3.
+    const bookedThrough = patient.booked_through ?? "Website";
+    const sponsorLabel = deriveSponsorLabel(
+      patient.sponsor_label,
+      patient.payment_status,
+      patient.amount,
+    );
 
     // ---- Render PDF ----
     const sentAtIso = new Date().toISOString();
@@ -866,7 +905,8 @@ export async function sendPrescription(
       patient_weight_kg: rx.patient_weight_kg,
       patient_code: patient.patient_code,
       booking_code: patient.booking_code,
-      consult_mode: consultMode,
+      booked_through: bookedThrough,
+      sponsor_label: sponsorLabel,
       bp_sys: rx.bp_sys,
       bp_dia: rx.bp_dia,
       pulse_bpm: rx.pulse_bpm,
@@ -874,7 +914,9 @@ export async function sendPrescription(
       temp_c: rx.temp_c,
       height_cm: rx.height_cm,
       chief_complaint: rx.chief_complaint,
+      presenting_complaints_duration: rx.presenting_complaints_duration,
       provisional_diagnosis: rx.provisional_diagnosis,
+      past_medical_history: rx.past_medical_history,
       items: items.map((it) => ({
         ordinal: it.ordinal,
         drug_name: it.drug_name,
@@ -891,7 +933,6 @@ export async function sendPrescription(
       })),
       general_advice: rx.general_advice,
       follow_up_advice: rx.follow_up_advice,
-      qr_data_url: null, // generated inside renderPrescriptionPdf
     };
 
     let pdfBuffer: Buffer;
@@ -899,9 +940,6 @@ export async function sendPrescription(
       pdfBuffer = await renderPrescriptionPdf({
         data: pdfData,
         signature: { kind: "storagePath", path: signaturePath },
-        stamp: stampPath
-          ? { kind: "storagePath", path: stampPath }
-          : { kind: "placeholder" },
       });
     } catch (e) {
       console.error("[sendPrescription] PDF render failed:", e);
@@ -1131,6 +1169,9 @@ export async function amendPrescription(
         spo2_pct: head.spo2_pct,
         temp_c: head.temp_c,
         height_cm: head.height_cm,
+        // M028 v5 fields — copy across too.
+        past_medical_history: head.past_medical_history,
+        presenting_complaints_duration: head.presenting_complaints_duration,
         status: "draft",
       })
       .select("id")
@@ -1404,7 +1445,12 @@ export type DrawerComposerInitial = {
   temp_c: number | null;
   height_cm: number | null;
   chief_complaint: string | null;
+  /** M028 v5: free-text duration of the presenting complaints (e.g.
+   *  "X 2 days") — rendered below the chief complaint in the PDF. */
+  presenting_complaints_duration: string | null;
   provisional_diagnosis: string | null;
+  /** M028 v5: free-text past medical history block. */
+  past_medical_history: string | null;
   general_advice: string | null;
   follow_up_advice: string | null;
   items: Array<{
@@ -1527,7 +1573,9 @@ export async function ensureDraftForSession(
       temp_c: rx.temp_c,
       height_cm: rx.height_cm,
       chief_complaint: rx.chief_complaint,
+      presenting_complaints_duration: rx.presenting_complaints_duration,
       provisional_diagnosis: rx.provisional_diagnosis,
+      past_medical_history: rx.past_medical_history,
       general_advice: rx.general_advice,
       follow_up_advice: rx.follow_up_advice,
       items: items.map((it) => ({
