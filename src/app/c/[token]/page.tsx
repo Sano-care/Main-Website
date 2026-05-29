@@ -31,6 +31,10 @@ interface ParticipantWithSession {
   scheduled_at: string;
   duty_room_url_snapshot: string | null;
   teleconsult_consent: boolean | null;
+  /** C2-V Task #43, M029: drives the patient-side waiting-room →
+   *  Daily transition. Null = patient sits in Sanocare waiting room;
+   *  non-null = doctor has admitted, mount Daily. */
+  doctor_admitted_at: string | null;
   doctor_id: string;
   doctor_code: string;
   doctor_full_name: string;
@@ -69,7 +73,8 @@ async function fetchParticipantByToken(
     supabaseAdmin
       .from("consultation_sessions")
       .select(
-        "id, status, modality, scheduled_at, duty_room_url_snapshot, teleconsult_consent, doctor_id",
+        // M029: doctor_admitted_at gates the patient's Daily mount.
+        "id, status, modality, scheduled_at, duty_room_url_snapshot, teleconsult_consent, doctor_admitted_at, doctor_id",
       )
       .eq("id", participant.session_id)
       .maybeSingle(),
@@ -101,6 +106,9 @@ async function fetchParticipantByToken(
     scheduled_at: session.scheduled_at,
     duty_room_url_snapshot: session.duty_room_url_snapshot,
     teleconsult_consent: session.teleconsult_consent,
+    doctor_admitted_at:
+      (session as { doctor_admitted_at?: string | null })
+        .doctor_admitted_at ?? null,
     doctor_id: doctor.id,
     doctor_code: doctor.doctor_code,
     doctor_full_name: doctor.full_name,
@@ -194,6 +202,12 @@ export default async function PatientJoinPage({
               roomUrl={roomUrl}
               patientName={data.customer_full_name}
               alreadyConsented={data.teleconsult_consent === true}
+              sessionId={data.session_id}
+              joinedAt={data.joined_at}
+              admittedAt={data.doctor_admitted_at}
+              doctorFullName={data.doctor_full_name}
+              doctorQualification={data.doctor_qualification}
+              scheduledAt={data.scheduled_at}
             />
           </div>
 
@@ -222,6 +236,12 @@ function StateBody({
   roomUrl,
   patientName,
   alreadyConsented,
+  sessionId,
+  joinedAt,
+  admittedAt,
+  doctorFullName,
+  doctorQualification,
+  scheduledAt,
 }: {
   token: string;
   status: SessionStatus;
@@ -229,6 +249,12 @@ function StateBody({
   roomUrl: string | null;
   patientName: string | null;
   alreadyConsented: boolean;
+  sessionId: string;
+  joinedAt: string | null;
+  admittedAt: string | null;
+  doctorFullName: string;
+  doctorQualification: string | null;
+  scheduledAt: string;
 }) {
   if (status === "cancelled") {
     return (
@@ -271,6 +297,12 @@ function StateBody({
       token={token}
       patientName={patientName}
       alreadyConsented={alreadyConsented}
+      sessionId={sessionId}
+      initialJoinedAt={joinedAt}
+      initialAdmittedAt={admittedAt}
+      doctorFullName={doctorFullName}
+      doctorQualification={doctorQualification}
+      scheduledAt={scheduledAt}
     />
   );
 }

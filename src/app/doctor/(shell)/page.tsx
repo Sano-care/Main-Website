@@ -6,6 +6,7 @@ import { DoctorFiguresGrid } from "../_components/DoctorFiguresGrid";
 import { DoctorLedgerTable } from "../_components/DoctorLedgerTable";
 import { DutyRoomEmbed } from "../_components/DutyRoomEmbed";
 import { DoctorWaitingQueue } from "../_components/DoctorWaitingQueue";
+import { PatientReadyCard } from "../_components/PatientReadyCard";
 
 export const metadata: Metadata = {
   title: "Doctor home · Sanocare",
@@ -73,6 +74,35 @@ export default async function DoctorHomePage() {
           <div className="text-xs text-slate-500 mt-1">{doctor.qualification}</div>
         )}
       </div>
+
+      {/* ============================== Patient Ready cards (C2-V admit gate) ==============================
+          One card per session where the patient has hit /c/[token] AND
+          the doctor hasn't admitted yet. The cards realtime/poll their
+          own state — they self-hide the instant doctor_admitted_at
+          flips non-null. Server-side initial filter: joined && !admitted.
+          The card components then re-check live and won't surface
+          stale cards if the queue snapshot is mid-flight. */}
+      {queue
+        .filter(
+          (s) =>
+            s.patient_clicked_link_at != null &&
+            s.doctor_admitted_at == null,
+        )
+        .map((s) => (
+          <PatientReadyCard
+            key={s.id}
+            sessionId={s.id}
+            initialJoinedAt={s.patient_clicked_link_at}
+            initialAdmittedAt={s.doctor_admitted_at}
+            patientName={s.patient_name}
+            customerCode={s.customer_code}
+            dateOfBirth={s.customer_date_of_birth}
+            gender={s.customer_gender}
+            bookingCode={s.booking_code}
+            presentingComplaint={s.specific_ailment}
+            priorRxCount={s.prior_rx_count}
+          />
+        ))}
 
       {/* ============================== Waiting room queue (C2) ============================== */}
       <DoctorWaitingQueue

@@ -18,6 +18,34 @@ export type DoctorWaitingSession = {
   patient_name: string | null;
   patient_clicked_link_at: string | null;
   teleconsult_consent: boolean | null;
+  // ---- C2-V admit-gate (M029, Task #43) ----
+  /** consultation_sessions.doctor_admitted_at — null until the doctor
+   *  clicks Admit on the Patient Ready card. Drives both the patient's
+   *  waiting-room→Daily transition and the doctor-side card visibility
+   *  (the card vanishes once admittedAt is set). */
+  doctor_admitted_at: string | null;
+  /** customers.id — needed so the realtime hook can poll the per-token
+   *  admit-state endpoint, and so the Patient Ready card can render
+   *  prior-Rx context. */
+  customer_id: string | null;
+  /** customers.customer_code (SAN-C-NNNNN). Shown on the Ready card. */
+  customer_code: string | null;
+  /** customers.date_of_birth — Patient Ready card computes
+   *  "32 yrs" from this at render. */
+  customer_date_of_birth: string | null;
+  /** customers.gender — M/F/O/U or null. */
+  customer_gender: string | null;
+  /** bookings.specific_ailment — the presenting complaint the patient
+   *  filed when they booked. Drives the "Presenting complaint" line on
+   *  the Patient Ready card. */
+  specific_ailment: string | null;
+  /** bookings.booking_code (SAN-B-NNNNN). Shown on the Ready card. */
+  booking_code: string | null;
+  /** count of prior Rx for this customer (status in sent/superseded).
+   *  Renders as "None" when 0, "N previous" otherwise. The full chips
+   *  are out of scope for v1; this minimal count satisfies the brief's
+   *  "Previous consults: None" line without a JOIN explosion. */
+  prior_rx_count: number;
 };
 
 /**
@@ -140,7 +168,9 @@ export const getDoctorWaitingQueue = cache(
     const { data: sessions, error: sessionsErr } = await supabaseAdmin
       .from("consultation_sessions")
       .select(
-        "id, booking_id, modality, status, scheduled_at, teleconsult_consent",
+        // M029: doctor_admitted_at drives the Patient Ready card
+        // visibility and the patient-side state-machine transition.
+        "id, booking_id, modality, status, scheduled_at, teleconsult_consent, doctor_admitted_at",
       )
       .eq("doctor_id", doctor.id)
       .in("status", ["scheduled", "waiting", "in_progress"])
@@ -185,34 +215,120 @@ export const getDoctorWaitingQueue = cache(
       }
     }
 
-    // Resolve customer names in one batched query as well.
+    // Resolve customers in one batched query. M029: card needs full
+    // bio (name + dob + gender + customer_code), not just the display
+    // name.
     const customerIds = [...partsBySession.values()]
       .map((p) => p.customer_id)
       .filter((id): id is string => !!id);
-    const namesById = new Map<string, string>();
+    type CustomerRow = {
+      id: string;
+      full_name: string | null;
+      date_of_birth: string | null;
+      gender: string | null;
+      customer_code: string | null;
+    };
+    const customersById = new Map<string, CustomerRow>();
     if (customerIds.length > 0) {
       const { data: customers } = await supabaseAdmin
         .from("customers")
-        .select("id, full_name")
+        .select("id, full_name, date_of_birth, gender, customer_code")
         .in("id", customerIds);
-      for (const c of customers ?? []) {
-        namesById.set(c.id, c.full_name);
+      for (const c of (customers ?? []) as CustomerRow[]) {
+        customersById.set(c.id, c);
+      }
+    }
+
+    // Resolve booking-side context (specific_ailment + booking_code)
+    // in one batched query. specific_ailment becomes the Presenting
+    // Complaint line on the Patient Ready card.
+    const bookingIds = rows.map((s) => s.booking_id);
+    type BookingRow = {
+      id: string;
+      specific_ailment: string | null;
+      booking_code: string | null;
+    };
+    const bookingsById = new Map<string, BookingRow>();
+    if (bookingIds.length > 0) {
+      const { data: bookings } = await supabaseAdmin
+        .from("bookings")
+        .select("id, specific_ailment, booking_code")
+        .in("id", bookingIds);
+      for (const b of (bookings ?? []) as BookingRow[]) {
+        bookingsById.set(b.id, b);
+      }
+    }
+
+    // Prior-Rx count per customer: how many sent/superseded
+    // prescriptions exist for the patient. Renders as "None" or
+    // "N previous" on the card. prescriptions has no customer_id —
+    // we resolve via bookings.customer_id in two batched queries
+    // and filter the current queue's bookings client-side (avoids
+    // PostgREST's not-in syntax for an inline UUID list).
+    const priorRxByCustomer = new Map<string, number>();
+    if (customerIds.length > 0) {
+      const currentBookingIdSet = new Set(bookingIds);
+      // 1. All bookings for the patient(s) in the queue.
+      const { data: allBookings } = await supabaseAdmin
+        .from("bookings")
+        .select("id, customer_id")
+        .in("customer_id", customerIds);
+      const customerByBookingId = new Map<string, string>();
+      for (const b of (allBookings ?? []) as {
+        id: string;
+        customer_id: string | null;
+      }[]) {
+        if (!b.customer_id) continue;
+        // Exclude the current queue's bookings — those are the
+        // active consults, not "prior" ones.
+        if (currentBookingIdSet.has(b.id)) continue;
+        customerByBookingId.set(b.id, b.customer_id);
+      }
+      // 2. Prescriptions on those bookings, status in sent/superseded.
+      if (customerByBookingId.size > 0) {
+        const priorBookingIds = [...customerByBookingId.keys()];
+        const { data: rxRows } = await supabaseAdmin
+          .from("prescriptions")
+          .select("booking_id")
+          .in("booking_id", priorBookingIds)
+          .in("status", ["sent", "superseded"]);
+        for (const r of (rxRows ?? []) as { booking_id: string | null }[]) {
+          if (!r.booking_id) continue;
+          const cust = customerByBookingId.get(r.booking_id);
+          if (!cust) continue;
+          priorRxByCustomer.set(
+            cust,
+            (priorRxByCustomer.get(cust) ?? 0) + 1,
+          );
+        }
       }
     }
 
     return rows.map((s) => {
       const part = partsBySession.get(s.id);
+      const cust = part?.customer_id
+        ? customersById.get(part.customer_id) ?? null
+        : null;
+      const bk = bookingsById.get(s.booking_id) ?? null;
       return {
         id: s.id,
         booking_id: s.booking_id,
         modality: s.modality as DoctorWaitingSession["modality"],
         status: s.status as DoctorWaitingSession["status"],
         scheduled_at: s.scheduled_at,
-        patient_name: part?.customer_id
-          ? namesById.get(part.customer_id) ?? null
-          : null,
+        patient_name: cust?.full_name ?? null,
         patient_clicked_link_at: part?.joined_at ?? null,
         teleconsult_consent: s.teleconsult_consent,
+        doctor_admitted_at: s.doctor_admitted_at ?? null,
+        customer_id: part?.customer_id ?? null,
+        customer_code: cust?.customer_code ?? null,
+        customer_date_of_birth: cust?.date_of_birth ?? null,
+        customer_gender: cust?.gender ?? null,
+        specific_ailment: bk?.specific_ailment ?? null,
+        booking_code: bk?.booking_code ?? null,
+        prior_rx_count: part?.customer_id
+          ? priorRxByCustomer.get(part.customer_id) ?? 0
+          : 0,
       };
     });
   },
