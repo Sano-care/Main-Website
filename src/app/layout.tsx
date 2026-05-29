@@ -1,8 +1,23 @@
 import type { Metadata } from "next";
 import { Inter, IBM_Plex_Mono } from "next/font/google";
+import { GoogleTagManager } from "@next/third-parties/google";
 import { CmsPreloadProvider } from "@/components/providers/CmsPreloadProvider";
 import { getCmsPreloadSnapshot } from "@/services/cms/CmsContentServerService";
 import "./globals.css";
+
+// GTM container ID. Public client-side identifier — safe to commit
+// (not a secret, the value is visible in every page's <script> tag
+// anyway). The container is currently empty: GTM_T6K94WMC loads on
+// every pageview but no GA4 / Meta / other tags fire inside it yet,
+// so no tracking happens until marketing publishes inside the GTM UI.
+//
+// DPDP gating note: a consent banner (Consent Mode v2) MUST land
+// before any tracking tag inside the container goes live —
+// otherwise we collect analytics without explicit consent, which is
+// a DPDP Act 2023 exposure. The banner is a separate ticket
+// (Task #42 in the founder's progress list); this PR is just the
+// loader.
+const GTM_CONTAINER_ID = "GTM-T6K94WMC";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -142,6 +157,14 @@ export default async function RootLayout({
 
   return (
     <html lang="en">
+      {/* GoogleTagManager injects the <head> script + <body> noscript
+          iframe automatically. Placed at the top level so it covers
+          every route (marketing, /ops, /doctor, patient flows). The
+          /ops + /doctor routes are robots-noindex'd so analytics
+          metrics from those views don't pollute marketing dashboards
+          once tags are configured — handled at marketing-config time,
+          not here. */}
+      <GoogleTagManager gtmId={GTM_CONTAINER_ID} />
       <head>
         <link rel="icon" href="/logo.svg" type="image/svg+xml" />
         <meta name="theme-color" content="#2B81FF" />
