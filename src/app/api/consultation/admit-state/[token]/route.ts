@@ -8,22 +8,25 @@ export const runtime = "nodejs";
  * GET /api/consultation/admit-state/[token]
  *
  * Polling backstop for the patient's useSessionAdmitState hook on
- * /c/[token]. Returns the current { joinedAt, admittedAt } for the
- * session this token resolves to. Called every 5s by PatientJoinClient
- * while the patient is sitting in the Sanocare-native waiting room;
- * once admittedAt flips non-null, the client transitions into the
- * Daily mount flow.
+ * /c/[token]. Returns the current { joinedAt, admittedAt, endedAt }
+ * for the session this token resolves to. Called every 5s by
+ * PatientJoinClient to drive transitions:
+ *
+ *   admittedAt: null → non-null  →  mount Daily
+ *   admittedAt: non-null → null  →  unmount Daily, re-show waiting
+ *                                    (doctor clicked Send to Waiting)
+ *   endedAt:    null → non-null  →  unmount Daily, show post-consult
+ *                                    (doctor clicked Mark Attended)
  *
  * Token IS the auth — same posture as POST /api/consultation/join/
  * [token] and the /c/[token] page render. No Supabase auth session.
  *
  * Returns:
- *   200 { joinedAt: string | null, admittedAt: string | null }
+ *   200 { joinedAt, admittedAt, endedAt: string | null }
  *   400 { error }   — bad token format / not found
  *   410 { error }   — token expired
  *
- * Read-only. The route never writes — admit can only come from the
- * doctor side via POST /api/doctor/admit-patient.
+ * Read-only. The route never writes.
  */
 export async function GET(
   _req: Request,
@@ -71,7 +74,7 @@ export async function GET(
 
   const { data: sessionRow, error: sessionErr } = await supabaseAdmin
     .from("consultation_sessions")
-    .select("doctor_admitted_at")
+    .select("doctor_admitted_at, ended_at")
     .eq("id", participant.session_id)
     .maybeSingle();
   if (sessionErr) {
@@ -85,11 +88,15 @@ export async function GET(
     );
   }
 
+  const sess = sessionRow as {
+    doctor_admitted_at: string | null;
+    ended_at: string | null;
+  } | null;
+
   return NextResponse.json({
     joinedAt:
       (participant as { joined_at: string | null }).joined_at ?? null,
-    admittedAt:
-      (sessionRow as { doctor_admitted_at: string | null } | null)
-        ?.doctor_admitted_at ?? null,
+    admittedAt: sess?.doctor_admitted_at ?? null,
+    endedAt: sess?.ended_at ?? null,
   });
 }

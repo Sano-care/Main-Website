@@ -53,8 +53,14 @@ import { supabase } from "@/lib/supabase";
 export type SessionAdmitState = {
   /** consultation_participants.joined_at for the patient row. */
   joinedAt: string | null;
-  /** consultation_sessions.doctor_admitted_at. */
+  /** consultation_sessions.doctor_admitted_at. Can flip non-null →
+   *  null when the doctor clicks Send to Waiting; the patient client
+   *  uses the direction of the transition to mount/unmount Daily. */
   admittedAt: string | null;
+  /** consultation_sessions.ended_at — stamped by POST
+   *  /api/doctor/mark-attended. Once non-null, the patient transitions
+   *  to the Sanocare post-consult screen and Daily unmounts. */
+  endedAt: string | null;
 };
 
 export type UseSessionAdmitStateArgs = {
@@ -112,7 +118,8 @@ export function useSessionAdmitState(args: UseSessionAdmitStateArgs): SessionAdm
           // re-render on every poll when the timestamps haven't moved.
           if (
             prev.joinedAt === next.joinedAt &&
-            prev.admittedAt === next.admittedAt
+            prev.admittedAt === next.admittedAt &&
+            prev.endedAt === next.endedAt
           ) {
             return prev;
           }
@@ -161,10 +168,17 @@ export function useSessionAdmitState(args: UseSessionAdmitStateArgs): SessionAdm
         },
         (payload) => {
           if (cancelled) return;
-          const next = payload.new as { doctor_admitted_at: string | null };
+          const next = payload.new as {
+            doctor_admitted_at: string | null;
+            ended_at: string | null;
+          };
+          // Use the payload values directly — null is a legitimate
+          // value here (e.g., Send to Waiting clears
+          // doctor_admitted_at), so we cannot fall back to prev.
           setState((prev) => ({
             ...prev,
-            admittedAt: next.doctor_admitted_at ?? prev.admittedAt,
+            admittedAt: next.doctor_admitted_at,
+            endedAt: next.ended_at,
           }));
         },
       )

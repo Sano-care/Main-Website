@@ -6,7 +6,6 @@ import { DoctorFiguresGrid } from "../_components/DoctorFiguresGrid";
 import { DoctorLedgerTable } from "../_components/DoctorLedgerTable";
 import { DutyRoomEmbed } from "../_components/DutyRoomEmbed";
 import { DoctorWaitingQueue } from "../_components/DoctorWaitingQueue";
-import { PatientReadyCard } from "../_components/PatientReadyCard";
 
 export const metadata: Metadata = {
   title: "Doctor home · Sanocare",
@@ -75,44 +74,13 @@ export default async function DoctorHomePage() {
         )}
       </div>
 
-      {/* ============================== Patient Ready cards (C2-V admit gate) ==============================
-          One card per session where the patient has hit /c/[token] AND
-          the doctor hasn't admitted yet. The cards realtime/poll their
-          own state — they self-hide the instant doctor_admitted_at
-          flips non-null. Server-side initial filter:
-            joined && !admitted && joined-within-last-24h.
-          The 24h floor (PR #22 QA bug 1) kills stale state from
-          earlier test runs that never got admitted/completed —
-          without it, week-old joined_at rows surfaced as
-          "Waiting: 5724:46". A real patient who's been waiting more
-          than 24h would have other problems; the cap is safe. */}
-      {(() => {
-        const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
-        const nowMs = Date.now();
-        return queue
-          .filter((s) => {
-            if (s.patient_clicked_link_at == null) return false;
-            if (s.doctor_admitted_at != null) return false;
-            const joinedMs = new Date(s.patient_clicked_link_at).getTime();
-            if (!Number.isFinite(joinedMs)) return false;
-            return nowMs - joinedMs <= STALE_AFTER_MS;
-          })
-          .map((s) => (
-            <PatientReadyCard
-              key={s.id}
-              sessionId={s.id}
-              initialJoinedAt={s.patient_clicked_link_at}
-              initialAdmittedAt={s.doctor_admitted_at}
-              patientName={s.patient_name}
-              customerCode={s.customer_code}
-              dateOfBirth={s.customer_date_of_birth}
-              gender={s.customer_gender}
-              bookingCode={s.booking_code}
-              presentingComplaint={s.specific_ailment}
-              priorRxCount={s.prior_rx_count}
-            />
-          ));
-      })()}
+      {/* C2-V admit gate (Task #43) lives as a floating LobbyPanel
+          inside DutyRoomEmbed below — not as a standalone queue card.
+          The standalone-card version was the wrong UX (founder redirect
+          2026-05-29): real doctors run a clinic-lobby model where
+          reception is OUTSIDE the consult room and the doctor calls
+          patients in / sends them back from within. The LobbyPanel
+          renders as a FAB + slide-in panel inside the embed wrapper. */}
 
       {/* ============================== Waiting room queue (C2) ============================== */}
       <DoctorWaitingQueue

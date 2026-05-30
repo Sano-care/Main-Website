@@ -64,6 +64,7 @@ export function PatientJoinClient({
   sessionId,
   initialJoinedAt,
   initialAdmittedAt,
+  initialEndedAt,
   doctorFullName,
   doctorQualification,
   scheduledAt,
@@ -82,6 +83,11 @@ export function PatientJoinClient({
    *  refreshed), we skip the waiting-room state and go straight to
    *  joining. */
   initialAdmittedAt: string | null;
+  /** SSR-loaded consultation_sessions.ended_at. If already non-null
+   *  at page load, the patient lands directly on the post-consult
+   *  screen — they re-tapped the WhatsApp link after the consult
+   *  was wrapped. */
+  initialEndedAt: string | null;
   doctorFullName: string;
   doctorQualification: string | null;
   scheduledAt: string;
@@ -99,6 +105,14 @@ export function PatientJoinClient({
   // The patient-side polling endpoint is token-gated (the join token
   // IS the auth). The hook attempts a postgres_changes sub in parallel
   // (best-effort under current RLS) and always runs the 5s poll.
+  //
+  // Three signals drive transitions (PR #22 redirect — clinic-lobby
+  // model with Send to Waiting + Mark Attended):
+  //   admittedAt: null → non-null    →  mount Daily (waiting → joining)
+  //   admittedAt: non-null → null    →  unmount Daily, re-show waiting
+  //                                     (doctor clicked Send to Waiting)
+  //   endedAt:    null → non-null    →  unmount Daily, show post-consult
+  //                                     (doctor clicked Mark Attended)
   const fetchAdmitState = useCallback(async () => {
     const res = await fetch(`/api/consultation/admit-state/${token}`, {
       method: "GET",
@@ -109,32 +123,20 @@ export function PatientJoinClient({
     const data = (await res.json()) as {
       joinedAt: string | null;
       admittedAt: string | null;
+      endedAt: string | null;
     };
     return data;
   }, [token]);
 
-  const { admittedAt } = useSessionAdmitState({
+  const { admittedAt, endedAt } = useSessionAdmitState({
     sessionId,
     initial: {
       joinedAt: initialJoinedAt,
       admittedAt: initialAdmittedAt,
+      endedAt: initialEndedAt,
     },
     fetchState: fetchAdmitState,
   });
-
-  // When the doctor admits, drive the patient out of waiting-room into
-  // joining. We do NOT touch consent / in-call / ended / error — those
-  // are terminal-ish states the patient already moved past.
-  useEffect(() => {
-    if (!admittedAt) return;
-    if (state === "waiting-room") {
-      void mintAndJoin();
-    }
-    // mintAndJoin is intentionally not in deps — it captures latest
-    // state via the closure. We only want this effect to fire when
-    // admittedAt or the state landing in waiting-room changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [admittedAt, state]);
 
   // Pre-resolved Daily join args, populated by the POST response and
   // consumed by the useEffect that mounts the iframe.
@@ -383,8 +385,12 @@ export function PatientJoinClient({
 
   /** Called from the admit-detection useEffect when admittedAt flips
    *  non-null while we're in waiting-room. Uses cached args if
-   *  present; otherwise fetches fresh. */
-  const mintAndJoin = async () => {
+   *  present; otherwise fetches fresh.
+   *
+   *  Returns void; setDailyArgs triggers the existing Daily mount
+   *  effect (dependency on dailyArgs only — see the long comment
+   *  above that effect for why we don't depend on state). */
+  const mintAndJoin = useCallback(async () => {
     setState("joining");
     if (cachedDailyArgs) {
       setDailyArgs(cachedDailyArgs);
@@ -395,7 +401,41 @@ export function PatientJoinClient({
       setCachedDailyArgs(args);
       setDailyArgs(args);
     }
-  };
+  }, [cachedDailyArgs, fetchJoinArgs]);
+
+  // ===== Admit-state reactions =====
+  //
+  // (1) admittedAt becomes non-null while waiting → mount Daily.
+  // (2) admittedAt becomes null while joining/in-call → unmount Daily
+  //     and re-show the Sanocare waiting screen (doctor clicked Send
+  //     to Waiting). The dailyArgs=null trigger lets the existing
+  //     mount effect's cleanup destroy the frame.
+  // (3) endedAt becomes non-null → unmount Daily and show the
+  //     post-consult screen (doctor clicked Mark Attended). Takes
+  //     precedence over admit transitions.
+  useEffect(() => {
+    // Mark Attended path — takes precedence.
+    if (endedAt && state !== "ended" && state !== "error") {
+      setDailyArgs(null);
+      setState("ended");
+      return;
+    }
+    // Send to Waiting path — admit cleared while in active call.
+    if (
+      !admittedAt &&
+      (state === "joining" || state === "in-call")
+    ) {
+      setDailyArgs(null);
+      setState("waiting-room");
+      return;
+    }
+    // Admit lands path — patient was waiting, now goes to joining.
+    if (admittedAt && state === "waiting-room") {
+      void mintAndJoin();
+    }
+    // mintAndJoin is memoised; safe to depend on. state included
+    // because the guards above branch on it.
+  }, [admittedAt, endedAt, state, mintAndJoin]);
 
   /** Cancel from waiting room — route to / with a session-storage flag
    *  so the home page can surface a toast. No booking-state mutation
@@ -535,6 +575,12 @@ export function PatientJoinClient({
           timeStyle: "short",
         })
       : null;
+    // "Send to Waiting" re-entry: the patient was already in-call and
+    // the doctor pushed them back. cachedDailyArgs being non-null is
+    // the signature — we minted the token on the consent submit and
+    // it's still held. Brief-hold copy reduces the "did the call
+    // crash?" anxiety.
+    const isBriefHold = cachedDailyArgs != null;
     return (
       <div className="space-y-5">
         <div className="rounded-2xl bg-gradient-to-br from-sky-50 to-blue-50 border border-sky-200 px-6 py-7 text-center">
@@ -556,12 +602,16 @@ export function PatientJoinClient({
             </div>
           )}
           <div className="text-sm text-slate-700 mt-4">
-            Dr {doctorFullName.split(" ")[0]} will admit you shortly.
+            {isBriefHold
+              ? `Dr ${doctorFullName.split(" ")[0]} stepped out for a moment. They'll bring you back in shortly.`
+              : `Dr ${doctorFullName.split(" ")[0]} will admit you shortly.`}
           </div>
           <div className="text-xs text-slate-500 mt-1">
-            Average wait time 2–3 minutes.
+            {isBriefHold
+              ? "Please keep this tab open — your call will resume automatically."
+              : "Average wait time 2–3 minutes."}
           </div>
-          {scheduledLabel && (
+          {scheduledLabel && !isBriefHold && (
             <div className="text-[11px] font-mono text-slate-500 mt-4 inline-flex items-center gap-1.5">
               <Clock className="w-3 h-3" />
               {scheduledLabel}
@@ -596,27 +646,43 @@ export function PatientJoinClient({
   }
 
   if (state === "ended") {
+    // Two ways we landed here:
+    //   (a) Doctor clicked Mark Attended → endedAt is non-null. The
+    //       consult is formally over; "Re-join" is misleading and we
+    //       hide it (the doctor's Mark Attended is intentional).
+    //   (b) Patient hit Leave inside Daily → endedAt is still null,
+    //       just a soft client-side state. "Re-join the call" reopens
+    //       the path (mints a fresh token, lands in waiting-room,
+    //       admit-state polling will resume).
+    const formallyAttended = endedAt != null;
     return (
       <div className="space-y-4">
         <div className="rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-900 p-4">
           <div className="flex items-start gap-2">
             <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
             <div>
-              <div className="font-semibold mb-1">Consultation ended.</div>
+              <div className="font-semibold mb-1">
+                {formallyAttended
+                  ? "Consultation complete."
+                  : "Consultation ended."}
+              </div>
               <div className="text-sm">
-                Your doctor&apos;s notes and prescription (if any) are with
-                ops — you&apos;ll get them on WhatsApp shortly.
+                {formallyAttended
+                  ? `Dr ${doctorFullName.split(" ")[0]} has marked your consultation attended. Your prescription (if any) will arrive on WhatsApp shortly. You can close this tab.`
+                  : "Your doctor's notes and prescription (if any) are with ops — you'll get them on WhatsApp shortly."}
               </div>
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={handleRetry}
-          className="text-sm text-text-secondary hover:text-primary"
-        >
-          Re-join the call
-        </button>
+        {!formallyAttended && (
+          <button
+            type="button"
+            onClick={handleRetry}
+            className="text-sm text-text-secondary hover:text-primary"
+          >
+            Re-join the call
+          </button>
+        )}
       </div>
     );
   }

@@ -35,6 +35,11 @@ interface ParticipantWithSession {
    *  Daily transition. Null = patient sits in Sanocare waiting room;
    *  non-null = doctor has admitted, mount Daily. */
   doctor_admitted_at: string | null;
+  /** Set by POST /api/doctor/mark-attended. Once non-null, the patient
+   *  lands on the post-consult screen and Daily unmounts. SSR-loaded
+   *  so a re-tap after wrap goes directly to that screen instead of
+   *  flickering through waiting-room. */
+  ended_at: string | null;
   doctor_id: string;
   doctor_code: string;
   doctor_full_name: string;
@@ -74,7 +79,8 @@ async function fetchParticipantByToken(
       .from("consultation_sessions")
       .select(
         // M029: doctor_admitted_at gates the patient's Daily mount.
-        "id, status, modality, scheduled_at, duty_room_url_snapshot, teleconsult_consent, doctor_admitted_at, doctor_id",
+        // PR #22 redirect: ended_at signals Mark Attended → post-consult.
+        "id, status, modality, scheduled_at, duty_room_url_snapshot, teleconsult_consent, doctor_admitted_at, ended_at, doctor_id",
       )
       .eq("id", participant.session_id)
       .maybeSingle(),
@@ -109,6 +115,8 @@ async function fetchParticipantByToken(
     doctor_admitted_at:
       (session as { doctor_admitted_at?: string | null })
         .doctor_admitted_at ?? null,
+    ended_at:
+      (session as { ended_at?: string | null }).ended_at ?? null,
     doctor_id: doctor.id,
     doctor_code: doctor.doctor_code,
     doctor_full_name: doctor.full_name,
@@ -205,6 +213,7 @@ export default async function PatientJoinPage({
               sessionId={data.session_id}
               joinedAt={data.joined_at}
               admittedAt={data.doctor_admitted_at}
+              endedAt={data.ended_at}
               doctorFullName={data.doctor_full_name}
               doctorQualification={data.doctor_qualification}
               scheduledAt={data.scheduled_at}
@@ -239,6 +248,7 @@ function StateBody({
   sessionId,
   joinedAt,
   admittedAt,
+  endedAt,
   doctorFullName,
   doctorQualification,
   scheduledAt,
@@ -252,6 +262,7 @@ function StateBody({
   sessionId: string;
   joinedAt: string | null;
   admittedAt: string | null;
+  endedAt: string | null;
   doctorFullName: string;
   doctorQualification: string | null;
   scheduledAt: string;
@@ -300,6 +311,7 @@ function StateBody({
       sessionId={sessionId}
       initialJoinedAt={joinedAt}
       initialAdmittedAt={admittedAt}
+      initialEndedAt={endedAt}
       doctorFullName={doctorFullName}
       doctorQualification={doctorQualification}
       scheduledAt={scheduledAt}

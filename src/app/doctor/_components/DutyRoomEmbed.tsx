@@ -12,6 +12,7 @@ import {
   FileText,
 } from "lucide-react";
 import { RxComposerDrawer } from "./RxComposerDrawer";
+import { LobbyPanel } from "./LobbyPanel";
 
 /**
  * Doctor-side Daily Prebuilt embed.
@@ -271,6 +272,11 @@ export function DutyRoomEmbed({ url }: { url: string | null }) {
           <Loader2 className="w-5 h-5 animate-spin" />
           Duty Room is open in the overlay…
         </div>
+        {/* Clinic-lobby control (PR #22 redirect) — bottom-right FAB +
+            slide-in panel. Always visible while a Duty Room exists.
+            Rendered inside the overlay so its z-[70] FAB sits above
+            the overlay (z-50) and the Rx FAB (z-[60]). */}
+        <LobbyPanel />
         <div className="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
           {/* v3 F1: the modal body is a horizontal flex container.
               Iframe wrapper takes 60% when the Rx drawer is open,
@@ -373,52 +379,60 @@ export function DutyRoomEmbed({ url }: { url: string | null }) {
   // ===== End-of-call interstitial =====
   if (state === "ended") {
     return (
-      <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5">
-        <div className="flex items-start gap-3">
-          <ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <div className="text-sm font-semibold text-slate-900">
-              Duty Room closed.
+      <>
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-slate-900">
+                Duty Room closed.
+              </div>
+              <div className="text-xs text-slate-600 mt-1">
+                Ops will close out the booking and post your earning. Re-open
+                the room any time to take the next consult.
+              </div>
             </div>
-            <div className="text-xs text-slate-600 mt-1">
-              Ops will close out the booking and post your earning. Re-open
-              the room any time to take the next consult.
-            </div>
+            <button
+              type="button"
+              onClick={handleOpen}
+              className="inline-flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg"
+            >
+              <Video className="w-3.5 h-3.5" /> Re-open
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleOpen}
-            className="inline-flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg"
-          >
-            <Video className="w-3.5 h-3.5" /> Re-open
-          </button>
         </div>
-      </div>
+        {/* Clinic-lobby control — see comment on the in-call branch. */}
+        <LobbyPanel />
+      </>
     );
   }
 
   // ===== 2. Idle (button) + error surface =====
   return (
-    <div className="mb-6 space-y-3">
-      <button
-        type="button"
-        onClick={handleOpen}
-        className="inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold px-6 py-3 rounded-2xl transition-colors w-full sm:w-auto"
-      >
-        <Video className="w-5 h-5" />
-        Open Duty Room
-        <ExternalLink className="w-4 h-4 opacity-70" />
-      </button>
-      {error && (
-        <div className="flex items-start gap-2 text-rose-700 text-sm bg-rose-50 border border-rose-200 rounded-lg p-3">
-          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          {error}
-        </div>
-      )}
-      <p className="text-[11px] text-slate-500">
-        Your Duty Room opens inside Sanocare — no app to install. Patients
-        knock; you admit them one at a time.
-      </p>
-    </div>
+    <>
+      <div className="mb-6 space-y-3">
+        <button
+          type="button"
+          onClick={handleOpen}
+          className="inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold px-6 py-3 rounded-2xl transition-colors w-full sm:w-auto"
+        >
+          <Video className="w-5 h-5" />
+          Open Duty Room
+          <ExternalLink className="w-4 h-4 opacity-70" />
+        </button>
+        {error && (
+          <div className="flex items-start gap-2 text-rose-700 text-sm bg-rose-50 border border-rose-200 rounded-lg p-3">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            {error}
+          </div>
+        )}
+        <p className="text-[11px] text-slate-500">
+          Your Duty Room opens inside Sanocare — no app to install. Patients
+          knock; you admit them one at a time.
+        </p>
+      </div>
+      {/* Clinic-lobby control — see comment on the in-call branch. */}
+      <LobbyPanel />
+    </>
   );
 }
