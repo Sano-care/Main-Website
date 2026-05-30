@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   // case is actually useful for ops triage.
   const { data: sessionRow, error: sessionErr } = await supabaseAdmin
     .from("consultation_sessions")
-    .select("id, doctor_id, status, doctor_admitted_at")
+    .select("id, doctor_id, status, doctor_admitted_at, first_admitted_at")
     .eq("id", sessionId)
     .maybeSingle();
   if (sessionErr) {
@@ -97,10 +97,20 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // M031: first_admitted_at is the immutable HISTORICAL admit
+  // timestamp (vs. doctor_admitted_at which is the LIVE flag, cleared
+  // by Send to Waiting). Set once on first admit via COALESCE
+  // semantics (we only write if currently null).
   const nowIso = new Date().toISOString();
+  const updatePayload: Record<string, unknown> = {
+    doctor_admitted_at: nowIso,
+  };
+  if (!sessionRow.first_admitted_at) {
+    updatePayload.first_admitted_at = nowIso;
+  }
   const { data: updateRows, error: updateErr } = await supabaseAdmin
     .from("consultation_sessions")
-    .update({ doctor_admitted_at: nowIso })
+    .update(updatePayload)
     .eq("id", sessionId)
     .is("doctor_admitted_at", null) // belt + braces; eq matches the lookup
     .select("doctor_admitted_at");

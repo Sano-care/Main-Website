@@ -31,6 +31,9 @@ interface ParticipantWithSession {
   scheduled_at: string;
   duty_room_url_snapshot: string | null;
   teleconsult_consent: boolean | null;
+  /** bookings.booking_code via consultation_sessions.booking_id —
+   *  user-facing identifier (SAN-B-NNNNN) shown in the page header. */
+  booking_code: string | null;
   /** C2-V Task #43, M029: drives the patient-side waiting-room →
    *  Daily transition. Null = patient sits in Sanocare waiting room;
    *  non-null = doctor has admitted, mount Daily. */
@@ -40,6 +43,11 @@ interface ParticipantWithSession {
    *  so a re-tap after wrap goes directly to that screen instead of
    *  flickering through waiting-room. */
   ended_at: string | null;
+  /** Derived from consultation_sessions.first_admitted_at IS NOT NULL
+   *  (M031). Drives the patient waiting-screen copy split — true
+   *  switches to "Dr stepped out for a moment" (brief-hold);
+   *  false keeps the initial "Dr will admit you shortly". */
+  was_ever_admitted: boolean;
   doctor_id: string;
   doctor_code: string;
   doctor_full_name: string;
@@ -80,7 +88,8 @@ async function fetchParticipantByToken(
       .select(
         // M029: doctor_admitted_at gates the patient's Daily mount.
         // PR #22 redirect: ended_at signals Mark Attended → post-consult.
-        "id, status, modality, scheduled_at, duty_room_url_snapshot, teleconsult_consent, doctor_admitted_at, ended_at, doctor_id",
+        // M031: first_admitted_at powers the brief-hold copy split.
+        "id, booking_id, status, modality, scheduled_at, duty_room_url_snapshot, teleconsult_consent, doctor_admitted_at, ended_at, first_admitted_at, doctor_id",
       )
       .eq("id", participant.session_id)
       .maybeSingle(),
@@ -94,11 +103,20 @@ async function fetchParticipantByToken(
   ]);
   if (!session) return null;
 
-  const { data: doctor } = await supabaseAdmin
-    .from("doctors")
-    .select("id, doctor_code, full_name, qualification, duty_room_join_url")
-    .eq("id", session.doctor_id)
-    .maybeSingle();
+  // Doctor + booking lookups in parallel — both fan-out from the
+  // already-loaded session row.
+  const [{ data: doctor }, { data: booking }] = await Promise.all([
+    supabaseAdmin
+      .from("doctors")
+      .select("id, doctor_code, full_name, qualification, duty_room_join_url")
+      .eq("id", session.doctor_id)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("bookings")
+      .select("booking_code")
+      .eq("id", (session as { booking_id: string }).booking_id)
+      .maybeSingle(),
+  ]);
   if (!doctor) return null;
 
   return {
@@ -117,6 +135,12 @@ async function fetchParticipantByToken(
         .doctor_admitted_at ?? null,
     ended_at:
       (session as { ended_at?: string | null }).ended_at ?? null,
+    was_ever_admitted:
+      (session as { first_admitted_at?: string | null })
+        .first_admitted_at != null,
+    booking_code:
+      (booking as { booking_code?: string | null } | null)?.booking_code ??
+      null,
     doctor_id: doctor.id,
     doctor_code: doctor.doctor_code,
     doctor_full_name: doctor.full_name,
@@ -174,7 +198,10 @@ export default async function PatientJoinPage({
               your consultation is ready.
             </h1>
             <p className="text-sm text-text-secondary mt-1">
-              Booking #{data.session_id.slice(0, 8)} ·{" "}
+              {data.booking_code
+                ? <>Booking <span className="font-mono">{data.booking_code}</span></>
+                : <>Booking #{data.session_id.slice(0, 8)}</>}
+              {" "}·{" "}
               {new Date(data.scheduled_at).toLocaleString("en-IN", {
                 dateStyle: "medium",
                 timeStyle: "short",
@@ -214,6 +241,7 @@ export default async function PatientJoinPage({
               joinedAt={data.joined_at}
               admittedAt={data.doctor_admitted_at}
               endedAt={data.ended_at}
+              wasEverAdmitted={data.was_ever_admitted}
               doctorFullName={data.doctor_full_name}
               doctorQualification={data.doctor_qualification}
               scheduledAt={data.scheduled_at}
@@ -249,6 +277,7 @@ function StateBody({
   joinedAt,
   admittedAt,
   endedAt,
+  wasEverAdmitted,
   doctorFullName,
   doctorQualification,
   scheduledAt,
@@ -263,6 +292,7 @@ function StateBody({
   joinedAt: string | null;
   admittedAt: string | null;
   endedAt: string | null;
+  wasEverAdmitted: boolean;
   doctorFullName: string;
   doctorQualification: string | null;
   scheduledAt: string;
@@ -312,6 +342,7 @@ function StateBody({
       initialJoinedAt={joinedAt}
       initialAdmittedAt={admittedAt}
       initialEndedAt={endedAt}
+      initialWasEverAdmitted={wasEverAdmitted}
       doctorFullName={doctorFullName}
       doctorQualification={doctorQualification}
       scheduledAt={scheduledAt}

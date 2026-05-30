@@ -65,6 +65,7 @@ export function PatientJoinClient({
   initialJoinedAt,
   initialAdmittedAt,
   initialEndedAt,
+  initialWasEverAdmitted,
   doctorFullName,
   doctorQualification,
   scheduledAt,
@@ -88,6 +89,10 @@ export function PatientJoinClient({
    *  screen — they re-tapped the WhatsApp link after the consult
    *  was wrapped. */
   initialEndedAt: string | null;
+  /** SSR-derived from consultation_sessions.first_admitted_at IS NOT
+   *  NULL (M031). Drives the brief-hold vs initial-wait copy split
+   *  on the waiting screen. */
+  initialWasEverAdmitted: boolean;
   doctorFullName: string;
   doctorQualification: string | null;
   scheduledAt: string;
@@ -124,16 +129,18 @@ export function PatientJoinClient({
       joinedAt: string | null;
       admittedAt: string | null;
       endedAt: string | null;
+      wasEverAdmitted: boolean;
     };
     return data;
   }, [token]);
 
-  const { admittedAt, endedAt } = useSessionAdmitState({
+  const { admittedAt, endedAt, wasEverAdmitted } = useSessionAdmitState({
     sessionId,
     initial: {
       joinedAt: initialJoinedAt,
       admittedAt: initialAdmittedAt,
       endedAt: initialEndedAt,
+      wasEverAdmitted: initialWasEverAdmitted,
     },
     fetchState: fetchAdmitState,
   });
@@ -576,11 +583,13 @@ export function PatientJoinClient({
         })
       : null;
     // "Send to Waiting" re-entry: the patient was already in-call and
-    // the doctor pushed them back. cachedDailyArgs being non-null is
-    // the signature — we minted the token on the consent submit and
-    // it's still held. Brief-hold copy reduces the "did the call
-    // crash?" anxiety.
-    const isBriefHold = cachedDailyArgs != null;
+    // the doctor pushed them back. M031: wasEverAdmitted is the
+    // server-derived signal (true iff consultation_sessions.
+    // first_admitted_at IS NOT NULL) — survives page refresh and
+    // device switch, unlike the previous cachedDailyArgs-presence
+    // heuristic which fired immediately after consent because the
+    // token mint runs upfront.
+    const isBriefHold = wasEverAdmitted;
     return (
       <div className="space-y-5">
         <div className="rounded-2xl bg-gradient-to-br from-sky-50 to-blue-50 border border-sky-200 px-6 py-7 text-center">

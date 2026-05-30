@@ -74,7 +74,7 @@ export async function GET(
 
   const { data: sessionRow, error: sessionErr } = await supabaseAdmin
     .from("consultation_sessions")
-    .select("doctor_admitted_at, ended_at")
+    .select("doctor_admitted_at, ended_at, first_admitted_at")
     .eq("id", participant.session_id)
     .maybeSingle();
   if (sessionErr) {
@@ -91,6 +91,7 @@ export async function GET(
   const sess = sessionRow as {
     doctor_admitted_at: string | null;
     ended_at: string | null;
+    first_admitted_at: string | null;
   } | null;
 
   return NextResponse.json({
@@ -98,5 +99,12 @@ export async function GET(
       (participant as { joined_at: string | null }).joined_at ?? null,
     admittedAt: sess?.doctor_admitted_at ?? null,
     endedAt: sess?.ended_at ?? null,
+    // M031: wasEverAdmitted is the audit-derived signal that powers
+    // the PatientJoinClient waiting-screen copy split (initial-wait
+    // vs brief-hold). first_admitted_at IS NOT NULL means the doctor
+    // has admitted this session at least once historically; the
+    // current null/non-null state of doctor_admitted_at tells us
+    // whether they're currently admitted.
+    wasEverAdmitted: sess?.first_admitted_at != null,
   });
 }

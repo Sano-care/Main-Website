@@ -61,6 +61,14 @@ export type SessionAdmitState = {
    *  /api/doctor/mark-attended. Once non-null, the patient transitions
    *  to the Sanocare post-consult screen and Daily unmounts. */
   endedAt: string | null;
+  /** Derived from consultation_sessions.first_admitted_at IS NOT NULL
+   *  (M031). True iff the doctor has admitted this session AT LEAST
+   *  ONCE historically — regardless of whether they're currently
+   *  admitted (admittedAt) or in a Send-to-Waiting hold (admittedAt
+   *  null but wasEverAdmitted true). Powers the patient waiting-
+   *  screen copy split: false → "Dr will admit you shortly"; true →
+   *  "Dr stepped out for a moment". */
+  wasEverAdmitted: boolean;
 };
 
 export type UseSessionAdmitStateArgs = {
@@ -119,7 +127,8 @@ export function useSessionAdmitState(args: UseSessionAdmitStateArgs): SessionAdm
           if (
             prev.joinedAt === next.joinedAt &&
             prev.admittedAt === next.admittedAt &&
-            prev.endedAt === next.endedAt
+            prev.endedAt === next.endedAt &&
+            prev.wasEverAdmitted === next.wasEverAdmitted
           ) {
             return prev;
           }
@@ -171,6 +180,7 @@ export function useSessionAdmitState(args: UseSessionAdmitStateArgs): SessionAdm
           const next = payload.new as {
             doctor_admitted_at: string | null;
             ended_at: string | null;
+            first_admitted_at: string | null;
           };
           // Use the payload values directly — null is a legitimate
           // value here (e.g., Send to Waiting clears
@@ -179,6 +189,12 @@ export function useSessionAdmitState(args: UseSessionAdmitStateArgs): SessionAdm
             ...prev,
             admittedAt: next.doctor_admitted_at,
             endedAt: next.ended_at,
+            // wasEverAdmitted only flips false → true (M031 column is
+            // immutable once set). If the payload omits the field
+            // — narrow schemas, partial replication — fall back to
+            // prev to avoid spuriously flipping back to false.
+            wasEverAdmitted:
+              next.first_admitted_at != null || prev.wasEverAdmitted,
           }));
         },
       )
