@@ -172,18 +172,34 @@ export async function POST(
       );
     }
   }
+  // PR #22 QA fix: refresh joined_at on EVERY hit (drives the doctor's
+  // live wait counter — stale 95-hour test-day values surfaced as
+  // "Waiting: 5724:46" pre-patch). M030 added first_joined_at to
+  // preserve the original-join audit timestamp: stamp it lazily once,
+  // immutable thereafter via COALESCE.
+  //
+  // Row-level: we do this as a single UPDATE rather than two reads +
+  // a write, so a high-frequency re-tap (patient refresh-loop) can't
+  // race the COALESCE. The DB sees one statement with both fields.
+  const partUpdate: Record<string, unknown> = { joined_at: nowIso };
   if (!participant.joined_at) {
-    const { error: partUpdateErr } = await supabaseAdmin
-      .from("consultation_participants")
-      .update({ joined_at: nowIso })
-      .eq("id", participant.id);
-    if (partUpdateErr) {
-      // Non-fatal — consent is the load-bearing record. Proceed.
-      console.warn(
-        "[consult-join] participant joined_at update failed (non-fatal):",
-        partUpdateErr,
-      );
-    }
+    // First-ever hit: stamp first_joined_at to now() too. For older
+    // participants (pre-M030) that already have joined_at set but
+    // first_joined_at null, we deliberately do NOT backfill — the
+    // "first" semantically refers to the first time WE WERE TRACKING
+    // it, and pre-M030 we weren't.
+    partUpdate.first_joined_at = nowIso;
+  }
+  const { error: partUpdateErr } = await supabaseAdmin
+    .from("consultation_participants")
+    .update(partUpdate)
+    .eq("id", participant.id);
+  if (partUpdateErr) {
+    // Non-fatal — consent is the load-bearing record. Proceed.
+    console.warn(
+      "[consult-join] participant joined_at update failed (non-fatal):",
+      partUpdateErr,
+    );
   }
 
   // Mint a 90-minute non-owner Daily meeting token. Long enough for a

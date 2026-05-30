@@ -239,20 +239,26 @@ export const getDoctorWaitingQueue = cache(
       }
     }
 
-    // Resolve booking-side context (specific_ailment + booking_code)
-    // in one batched query. specific_ailment becomes the Presenting
-    // Complaint line on the Patient Ready card.
+    // Resolve booking-side context (specific_ailment + booking_code +
+    // patient_name) in one batched query. specific_ailment becomes
+    // the Presenting Complaint line on the Patient Ready card;
+    // patient_name is the fallback when consultation_participants.
+    // customer_id is NULL (legacy bookings that pre-date the
+    // customers FK — PR #22 QA bug 2: SAN-B-00051 surfaced as
+    // literal "Patient" because customer_id was null even though
+    // bookings.patient_name was set).
     const bookingIds = rows.map((s) => s.booking_id);
     type BookingRow = {
       id: string;
       specific_ailment: string | null;
       booking_code: string | null;
+      patient_name: string | null;
     };
     const bookingsById = new Map<string, BookingRow>();
     if (bookingIds.length > 0) {
       const { data: bookings } = await supabaseAdmin
         .from("bookings")
-        .select("id, specific_ailment, booking_code")
+        .select("id, specific_ailment, booking_code, patient_name")
         .in("id", bookingIds);
       for (const b of (bookings ?? []) as BookingRow[]) {
         bookingsById.set(b.id, b);
@@ -316,12 +322,18 @@ export const getDoctorWaitingQueue = cache(
         modality: s.modality as DoctorWaitingSession["modality"],
         status: s.status as DoctorWaitingSession["status"],
         scheduled_at: s.scheduled_at,
-        patient_name: cust?.full_name ?? null,
+        // PR #22 QA bug 2 fix: fallback chain
+        //   customer.full_name → booking.patient_name → null
+        // Card renders "Patient" if both are null.
+        patient_name: cust?.full_name ?? bk?.patient_name ?? null,
         patient_clicked_link_at: part?.joined_at ?? null,
         teleconsult_consent: s.teleconsult_consent,
         doctor_admitted_at: s.doctor_admitted_at ?? null,
         customer_id: part?.customer_id ?? null,
         customer_code: cust?.customer_code ?? null,
+        // Age/gender have no booking-side fallback — neither column
+        // exists on the bookings table. When customer is missing, the
+        // card simply omits the age/gender bio line.
         customer_date_of_birth: cust?.date_of_birth ?? null,
         customer_gender: cust?.gender ?? null,
         specific_ailment: bk?.specific_ailment ?? null,
