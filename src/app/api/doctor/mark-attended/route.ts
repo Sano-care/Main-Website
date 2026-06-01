@@ -93,10 +93,48 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // M032 / Q8 gate: refuse to write ended_at unless a prescriptions
+  // row exists for this session with BOTH chief_complaint AND
+  // provisional_diagnosis populated (non-empty after trim). The
+  // LobbyPanel disables the button on this same flag client-side,
+  // but server enforcement is the load-bearing check — a client
+  // could bypass via curl.
+  const { data: rxRows } = await supabaseAdmin
+    .from("prescriptions")
+    .select("chief_complaint, provisional_diagnosis")
+    .eq("session_id", sessionId);
+  const gateOpen = (rxRows ?? []).some((r: {
+    chief_complaint: string | null;
+    provisional_diagnosis: string | null;
+  }) => {
+    const cc = (r.chief_complaint ?? "").trim();
+    const pd = (r.provisional_diagnosis ?? "").trim();
+    return cc !== "" && pd !== "";
+  });
+  if (!gateOpen) {
+    return NextResponse.json(
+      {
+        error:
+          "Save or send a prescription with chief complaint and diagnosis before marking attended.",
+      },
+      { status: 400 },
+    );
+  }
+
+  // M032: write attendance_status + audit columns alongside ended_at.
+  // attendance_status is the formal two-state Q2 signal; ended_at
+  // stays as the existing "doctor closed the session" timestamp
+  // (kept for backwards compatibility with PR #22's patient-side hook
+  // that watches it for the post-consult screen).
   const nowIso = new Date().toISOString();
   const { data: updateRows, error: updateErr } = await supabaseAdmin
     .from("consultation_sessions")
-    .update({ ended_at: nowIso })
+    .update({
+      ended_at: nowIso,
+      attendance_status: "attended",
+      attendance_marked_at: nowIso,
+      attendance_marked_by: session.doctor_id,
+    })
     .eq("id", sessionId)
     .is("ended_at", null)
     .select("ended_at");

@@ -507,31 +507,104 @@ export async function linkPartner(formData: FormData) {
   revalidateBooking(bookingId);
 }
 
+// =====================================================================
+// Ops Framework Phase 1 (M032) — resource assignment actions
+// =====================================================================
+//
+// Three actions share the same shape: read the booking, validate the
+// service_category allows this resource type, validate the target
+// resource exists + is active, UPDATE with both the resource id and the
+// (assigned_at, assigned_by) audit columns. Empty target unassigns.
+//
+// Service-category gating (founder brief table, mapped to canonical
+// SERVICE_CATEGORIES from bookingStatus.ts):
+//   - assignDoctor:     teleconsult, homecare, chronic
+//   - assignParamedic:  homecare, chronic
+//   - assignPartner:    diagnostics
+//
+// The brief used informal labels "nursing" (mapped to chronic) and
+// "pathology" (mapped to diagnostics) — those are not canonical
+// values. The constant maps below are the single source of truth; if
+// SERVICE_CATEGORIES is extended later, update them here.
+//
+// On the doctor side: Finding 4 from the M032 Step 0 — bookings.doctor_id
+// is pre-existing and is the doctor-assignment column (no
+// assigned_doctor_id was added). The (assigned_at, assigned_by) audit
+// columns ARE new from M032 and apply to all three assignment kinds.
+//
+// On the partner side: bookings.partner_id (pre-existing) carries the
+// legacy "linked organization" concept (used by linkCustomer/linkPartner
+// for lab bookings, etc.). bookings.assigned_partner_id (new in M032)
+// is the formal "ops assigned this partner for this booking's service"
+// concept. They are intentionally separate; assignPartner writes the
+// new column, linkPartner continues to write the legacy one.
+
+const ASSIGN_DOCTOR_ALLOWED_CATEGORIES = new Set([
+  "teleconsult",
+  "homecare",
+  "chronic",
+]);
+const ASSIGN_PARAMEDIC_ALLOWED_CATEGORIES = new Set([
+  "homecare",
+  "chronic",
+]);
+const ASSIGN_PARTNER_ALLOWED_CATEGORIES = new Set(["diagnostics"]);
+
 /**
- * Assign a doctor to a booking (M4). Any ops user — admin or agent —
- * can call this; it's an UPDATE on bookings under the existing M2 booking
- * RLS (which allows authenticated ops UPDATE). The earning posts to the
- * doctor ledger only later, when the booking is marked COMPLETED — that
- * transition is handled by the trg_bookings_doctor_earnings trigger
- * installed in M019, not by this action.
+ * Read the booking's service_category for the assignment validators.
+ * Throws if booking missing — caller chains revalidate after success.
+ */
+async function readServiceCategory(
+  supabase: Awaited<ReturnType<typeof createOpsRSCClient>>,
+  bookingId: string,
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("service_category")
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (error) throw new Error(`Could not read booking: ${error.message}`);
+  if (!data) throw new Error(`Booking not found: ${bookingId}`);
+  return (data as { service_category: string | null }).service_category ?? "";
+}
+
+/**
+ * Assign a doctor to a booking. M032 wires the (assigned_at,
+ * assigned_by) audit columns alongside the pre-existing doctor_id.
  *
- * Accepts the doctor's UUID. An empty/missing value unassigns
- * (doctor_id → null).
+ * Any ops user — admin or agent — can call this; UPDATE on bookings
+ * goes through the M2 booking RLS (allows authenticated ops UPDATE).
+ *
+ * The doctor earning posts to the ledger only on the COMPLETED
+ * transition via trg_bookings_doctor_earnings (M019), not here.
+ *
+ * Accepts the doctor's UUID; empty/missing value unassigns (doctor_id
+ * → null) AND clears the audit columns (unassign is a fresh start).
+ *
+ * Idempotency: re-assigning the same doctor refreshes assigned_at
+ * to "now" (intentional — surface to ops that the assignment was
+ * re-confirmed).
  */
 export async function assignDoctor(formData: FormData) {
-  await getCurrentOpsUser(); // any ops user
+  const opsUser = await getCurrentOpsUser();
   const bookingId = getRequired(formData, "booking_id");
+  const supabase = await createOpsRSCClient();
 
   const target = getString(formData, "doctor_id");
   let doctor_id: string | null = null;
+
   if (target) {
     if (!UUID_RE.test(target)) {
       throw new Error("Invalid doctor id.");
     }
-    // Re-fetch to confirm the doctor exists + is active. RLS-readable to
-    // any ops user. Re-fetching prevents a stale client from assigning a
-    // doctor that was deactivated since the page was rendered.
-    const supabase = await createOpsRSCClient();
+    // M032 gate: service_category must allow a doctor.
+    const category = await readServiceCategory(supabase, bookingId);
+    if (!ASSIGN_DOCTOR_ALLOWED_CATEGORIES.has(category)) {
+      throw new Error(
+        `Can't assign a doctor to a ${category} booking. Doctors are for teleconsult / homecare / chronic only.`,
+      );
+    }
+    // Re-fetch the doctor to confirm active. RLS-readable to any ops user.
     const { data: doc } = await supabase
       .from("doctors")
       .select("id, is_active")
@@ -544,12 +617,150 @@ export async function assignDoctor(formData: FormData) {
     doctor_id = doc.id;
   }
 
-  const supabase = await createOpsRSCClient();
+  // On unassign (doctor_id = null), also clear the audit columns —
+  // assigned_at represents the most recent assignment action across
+  // all roles, so leaving stale values when the resource is removed
+  // would mis-report.
+  const update: Record<string, unknown> = doctor_id
+    ? {
+        doctor_id,
+        assigned_at: new Date().toISOString(),
+        assigned_by: opsUser.id,
+      }
+    : { doctor_id: null };
+
   const { error } = await supabase
     .from("bookings")
-    .update({ doctor_id })
+    .update(update)
     .eq("id", bookingId);
   if (error) throw new Error(`Could not assign doctor: ${error.message}`);
+
+  revalidateBooking(bookingId);
+}
+
+/**
+ * Assign a paramedic (medic) to a booking. M032 added both the
+ * assigned_paramedic_id column and the (assigned_at, assigned_by)
+ * audit columns. Empty target unassigns.
+ *
+ * Service category must allow a medic (homecare / chronic). UI
+ * label is "Medic" — the table is called paramedics for legacy
+ * reasons (Q3 confirmation).
+ *
+ * Note: paramedics.name (not full_name) is the display column —
+ * the table is sparser than doctors/partners and uses a different
+ * naming convention.
+ */
+export async function assignParamedic(formData: FormData) {
+  const opsUser = await getCurrentOpsUser();
+  const bookingId = getRequired(formData, "booking_id");
+  const supabase = await createOpsRSCClient();
+
+  const target = getString(formData, "paramedic_id");
+  let assigned_paramedic_id: string | null = null;
+
+  if (target) {
+    if (!UUID_RE.test(target)) {
+      throw new Error("Invalid medic id.");
+    }
+    const category = await readServiceCategory(supabase, bookingId);
+    if (!ASSIGN_PARAMEDIC_ALLOWED_CATEGORIES.has(category)) {
+      throw new Error(
+        `Can't assign a medic to a ${category} booking. Medics are for homecare / chronic only.`,
+      );
+    }
+    const { data: medic } = await supabase
+      .from("paramedics")
+      .select("id, is_active")
+      .eq("id", target)
+      .maybeSingle();
+    if (!medic) throw new Error("Medic not found.");
+    if (medic.is_active === false) {
+      throw new Error("That medic is inactive — pick an active one.");
+    }
+    assigned_paramedic_id = medic.id;
+  }
+
+  const update: Record<string, unknown> = assigned_paramedic_id
+    ? {
+        assigned_paramedic_id,
+        assigned_at: new Date().toISOString(),
+        assigned_by: opsUser.id,
+      }
+    : { assigned_paramedic_id: null };
+
+  const { error } = await supabase
+    .from("bookings")
+    .update(update)
+    .eq("id", bookingId);
+  if (error) {
+    throw new Error(`Could not assign medic: ${error.message}`);
+  }
+
+  revalidateBooking(bookingId);
+}
+
+/**
+ * Assign a partner (lab / diagnostic vendor) to a booking. Writes
+ * the new bookings.assigned_partner_id column (M032), distinct from
+ * the legacy bookings.partner_id which linkPartner continues to
+ * manage. Empty target unassigns.
+ *
+ * Service category must allow a partner (diagnostics).
+ *
+ * Why two partner columns: bookings.partner_id is the broader
+ * "linked organization" concept (lab bookings created via /api/lab/
+ * create-booking, etc.). bookings.assigned_partner_id is the formal
+ * "ops assigned this partner for fulfillment of this booking" concept
+ * with audit columns. They serve different use cases; ops admin may
+ * later collapse them in a follow-up migration after the framework
+ * matures.
+ */
+export async function assignPartner(formData: FormData) {
+  const opsUser = await getCurrentOpsUser();
+  const bookingId = getRequired(formData, "booking_id");
+  const supabase = await createOpsRSCClient();
+
+  const target = getString(formData, "partner_id");
+  let assigned_partner_id: string | null = null;
+
+  if (target) {
+    if (!UUID_RE.test(target)) {
+      throw new Error("Invalid partner id.");
+    }
+    const category = await readServiceCategory(supabase, bookingId);
+    if (!ASSIGN_PARTNER_ALLOWED_CATEGORIES.has(category)) {
+      throw new Error(
+        `Can't assign a partner to a ${category} booking. Partners are for diagnostics only.`,
+      );
+    }
+    const { data: partner } = await supabase
+      .from("partners")
+      .select("id, is_active")
+      .eq("id", target)
+      .maybeSingle();
+    if (!partner) throw new Error("Partner not found.");
+    if (partner.is_active === false) {
+      throw new Error("That partner is inactive — pick an active one.");
+    }
+    assigned_partner_id = partner.id;
+  }
+
+  const update: Record<string, unknown> = assigned_partner_id
+    ? {
+        assigned_partner_id,
+        assigned_at: new Date().toISOString(),
+        assigned_by: opsUser.id,
+      }
+    : { assigned_partner_id: null };
+
+  const { error } = await supabase
+    .from("bookings")
+    .update(update)
+    .eq("id", bookingId);
+  if (error) {
+    throw new Error(`Could not assign partner: ${error.message}`);
+  }
 
   revalidateBooking(bookingId);
 }
