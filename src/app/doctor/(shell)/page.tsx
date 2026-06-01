@@ -74,6 +74,14 @@ export default async function DoctorHomePage() {
         )}
       </div>
 
+      {/* C2-V admit gate (Task #43) lives as a floating LobbyPanel
+          inside DutyRoomEmbed below — not as a standalone queue card.
+          The standalone-card version was the wrong UX (founder redirect
+          2026-05-29): real doctors run a clinic-lobby model where
+          reception is OUTSIDE the consult room and the doctor calls
+          patients in / sends them back from within. The LobbyPanel
+          renders as a FAB + slide-in panel inside the embed wrapper. */}
+
       {/* ============================== Waiting room queue (C2) ============================== */}
       <DoctorWaitingQueue
         sessions={queue}

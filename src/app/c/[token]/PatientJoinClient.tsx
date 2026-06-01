@@ -1,33 +1,52 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
-import { Video, Loader2, AlertCircle, ShieldCheck, CheckCircle2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Video,
+  Loader2,
+  AlertCircle,
+  ShieldCheck,
+  CheckCircle2,
+  Stethoscope,
+  Clock,
+} from "lucide-react";
+import { useSessionAdmitState } from "@/lib/realtime/useSessionAdmitState";
 
 /**
- * The interactive part of /c/[token]. Renders the NMC teleconsultation
- * consent checkbox + the Join button. On click, POSTs to
- * /api/consultation/join/[token] which records the consent + joined_at
- * and returns a Daily room URL + a freshly-minted 90-minute non-owner
- * meeting token. The client then dynamic-imports @daily-co/daily-js,
- * mounts a Daily Prebuilt iframe, and joins the room with the token —
- * the patient stays on sanocare.in throughout.
+ * The interactive part of /c/[token]. Drives the patient's journey from
+ * consent → Sanocare-native waiting room → Daily-embedded video call
+ * → ended state.
  *
- * C2-V replaces C2's window.location.assign() redirect-out — the patient
- * never leaves the page; the call is embedded inline. Daily Prebuilt
- * renders its own knock UI (the patient waits for the doctor to admit)
- * and the in-call controls (mute, camera, leave).
+ * C2-V (PR #11): patient never leaves sanocare.in; Daily Prebuilt is
+ * embedded.
  *
- * Lifecycle states surfaced in the UI:
- *   "consent"   — show consent checkbox + Join button (or "Join again"
- *                 if alreadyConsented). Pre-call.
- *   "joining"   — POST in flight or Daily SDK loading.
- *   "in-call"   — iframe mounted, Daily owns the UI.
- *   "ended"     — frame.on("left-meeting") fired; show "Call ended" +
- *                 "Need help?" footer.
- *   "error"     — fetch / mint / iframe error; show retry option.
+ * Task #43 (M029, this PR): the Sanocare-native waiting room sits
+ * BETWEEN consent and the Daily mount. The patient consents, hits a
+ * branded "Dr X will admit you shortly" screen, and the Daily iframe
+ * only mounts once consultation_sessions.doctor_admitted_at flips
+ * non-null (driven by the doctor's POST /api/doctor/admit-patient
+ * click on the Patient Ready card). The transition is live via the
+ * useSessionAdmitState hook (realtime postgres_changes attempt + 5s
+ * polling fallback).
+ *
+ * Lifecycle states:
+ *   "consent"       — show consent checkbox + Join button.
+ *   "waiting-room"  — Sanocare waiting screen; Daily NOT mounted yet.
+ *                     Realtime/polling watches for doctor_admitted_at.
+ *   "joining"       — admit landed → POST to mint a Daily token +
+ *                     dynamic-import the SDK.
+ *   "in-call"       — iframe mounted, Daily owns the UI.
+ *   "ended"         — frame.on("left-meeting") fired.
+ *   "error"         — surfaced on fetch / mint / iframe error.
  */
-type ClientState = "consent" | "joining" | "in-call" | "ended" | "error";
+type ClientState =
+  | "consent"
+  | "waiting-room"
+  | "joining"
+  | "in-call"
+  | "ended"
+  | "error";
 
 // We type Daily's DailyIframe loosely — full types come from
 // @daily-co/daily-js but we don't import them at module scope (we
@@ -42,14 +61,89 @@ export function PatientJoinClient({
   token,
   patientName,
   alreadyConsented,
+  sessionId,
+  initialJoinedAt,
+  initialAdmittedAt,
+  initialEndedAt,
+  initialWasEverAdmitted,
+  doctorFullName,
+  doctorQualification,
+  scheduledAt,
 }: {
   token: string;
   patientName: string | null;
   alreadyConsented: boolean;
+  /** consultation_sessions.id — used by the admit-state hook. */
+  sessionId: string;
+  /** SSR-loaded consultation_participants.joined_at — non-null if the
+   *  patient already POSTed /api/consultation/join previously
+   *  (re-tapping the link). */
+  initialJoinedAt: string | null;
+  /** SSR-loaded consultation_sessions.doctor_admitted_at. If already
+   *  non-null at page load (doctor admitted before the patient even
+   *  refreshed), we skip the waiting-room state and go straight to
+   *  joining. */
+  initialAdmittedAt: string | null;
+  /** SSR-loaded consultation_sessions.ended_at. If already non-null
+   *  at page load, the patient lands directly on the post-consult
+   *  screen — they re-tapped the WhatsApp link after the consult
+   *  was wrapped. */
+  initialEndedAt: string | null;
+  /** SSR-derived from consultation_sessions.first_admitted_at IS NOT
+   *  NULL (M031). Drives the brief-hold vs initial-wait copy split
+   *  on the waiting screen. */
+  initialWasEverAdmitted: boolean;
+  doctorFullName: string;
+  doctorQualification: string | null;
+  scheduledAt: string;
 }) {
   const [consented, setConsented] = useState(alreadyConsented);
+  // Initial state: if the doctor already admitted before the patient
+  // landed (rare — doctor saw a Patient Ready card from an earlier
+  // tap and admitted instantly), start in "consent" but flag to
+  // auto-advance to joining once consent is acknowledged.
   const [state, setState] = useState<ClientState>("consent");
   const [error, setError] = useState<string | null>(null);
+
+  // ---- Realtime/polling on the session's admit state ----
+  //
+  // The patient-side polling endpoint is token-gated (the join token
+  // IS the auth). The hook attempts a postgres_changes sub in parallel
+  // (best-effort under current RLS) and always runs the 5s poll.
+  //
+  // Three signals drive transitions (PR #22 redirect — clinic-lobby
+  // model with Send to Waiting + Mark Attended):
+  //   admittedAt: null → non-null    →  mount Daily (waiting → joining)
+  //   admittedAt: non-null → null    →  unmount Daily, re-show waiting
+  //                                     (doctor clicked Send to Waiting)
+  //   endedAt:    null → non-null    →  unmount Daily, show post-consult
+  //                                     (doctor clicked Mark Attended)
+  const fetchAdmitState = useCallback(async () => {
+    const res = await fetch(`/api/consultation/admit-state/${token}`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`admit-state ${res.status}`);
+    const data = (await res.json()) as {
+      joinedAt: string | null;
+      admittedAt: string | null;
+      endedAt: string | null;
+      wasEverAdmitted: boolean;
+    };
+    return data;
+  }, [token]);
+
+  const { admittedAt, endedAt, wasEverAdmitted } = useSessionAdmitState({
+    sessionId,
+    initial: {
+      joinedAt: initialJoinedAt,
+      admittedAt: initialAdmittedAt,
+      endedAt: initialEndedAt,
+      wasEverAdmitted: initialWasEverAdmitted,
+    },
+    fetchState: fetchAdmitState,
+  });
 
   // Pre-resolved Daily join args, populated by the POST response and
   // consumed by the useEffect that mounts the iframe.
@@ -221,13 +315,26 @@ export function PatientJoinClient({
     // effect — see the v5 mirror comment above the effect body.
   }, [dailyArgs]);
 
-  const handleJoin = async () => {
-    if (!consented) {
-      setError("Please tick the consent box before joining.");
-      return;
-    }
-    setError(null);
-    setState("joining");
+  // Cache the Daily room URL + meeting token between consent click and
+  // admit. POST /api/consultation/join records consent + joined_at AND
+  // mints a 90-min Daily token in one shot; we hold the token in
+  // state while the patient sits in the Sanocare waiting room and
+  // hand it to the Daily mount the moment the doctor admits.
+  //
+  // The token cache is non-critical — if it's missing when admit
+  // lands (page refresh between consent and admit, etc.), mintAndJoin
+  // fetches a fresh one. Worst case is a single extra round-trip,
+  // never a stuck UI.
+  const [cachedDailyArgs, setCachedDailyArgs] = useState<{
+    roomUrl: string;
+    meetingToken: string;
+  } | null>(null);
+
+  /** Shared join-fetch — POSTs /api/consultation/join and returns the
+   *  room URL + token, or throws / sets state="error". */
+  const fetchJoinArgs = useCallback(async (): Promise<
+    { roomUrl: string; meetingToken: string } | null
+  > => {
     try {
       const res = await fetch(`/api/consultation/join/${token}`, {
         method: "POST",
@@ -241,20 +348,123 @@ export function PatientJoinClient({
             "Couldn't start your consultation. Please try again or call ops.",
         );
         setState("error");
-        return;
+        return null;
       }
-      setDailyArgs({ roomUrl: data.room_url, meetingToken: data.meeting_token });
-      // The useEffect above will pick this up and mount the iframe.
+      return { roomUrl: data.room_url, meetingToken: data.meeting_token };
     } catch (err) {
       console.error("[patient-join] fetch error", err);
       setError("Network error. Please try again.");
       setState("error");
+      return null;
     }
+  }, [token]);
+
+  /** Consent click: record consent + joined_at, cache the token,
+   *  transition to Sanocare waiting room. */
+  const handleConsentSubmit = async () => {
+    if (!consented) {
+      setError("Please tick the consent box before joining.");
+      return;
+    }
+    setError(null);
+
+    // If the doctor already admitted before the patient even reached
+    // this screen (rare: doctor saw an earlier-tap joined_at and
+    // admitted instantly), skip the waiting-room state and go
+    // straight to joining.
+    if (admittedAt) {
+      setState("joining");
+      const args = await fetchJoinArgs();
+      if (args) {
+        setCachedDailyArgs(args);
+        setDailyArgs(args);
+      }
+      return;
+    }
+
+    // Normal flow: consent → waiting-room. We mint the Daily token
+    // upfront so the post-admit transition is instant; the token
+    // sits cached until admittedAt flips.
+    setState("waiting-room");
+    const args = await fetchJoinArgs();
+    if (args) setCachedDailyArgs(args);
+  };
+
+  /** Called from the admit-detection useEffect when admittedAt flips
+   *  non-null while we're in waiting-room. Uses cached args if
+   *  present; otherwise fetches fresh.
+   *
+   *  Returns void; setDailyArgs triggers the existing Daily mount
+   *  effect (dependency on dailyArgs only — see the long comment
+   *  above that effect for why we don't depend on state). */
+  const mintAndJoin = useCallback(async () => {
+    setState("joining");
+    if (cachedDailyArgs) {
+      setDailyArgs(cachedDailyArgs);
+      return;
+    }
+    const args = await fetchJoinArgs();
+    if (args) {
+      setCachedDailyArgs(args);
+      setDailyArgs(args);
+    }
+  }, [cachedDailyArgs, fetchJoinArgs]);
+
+  // ===== Admit-state reactions =====
+  //
+  // (1) admittedAt becomes non-null while waiting → mount Daily.
+  // (2) admittedAt becomes null while joining/in-call → unmount Daily
+  //     and re-show the Sanocare waiting screen (doctor clicked Send
+  //     to Waiting). The dailyArgs=null trigger lets the existing
+  //     mount effect's cleanup destroy the frame.
+  // (3) endedAt becomes non-null → unmount Daily and show the
+  //     post-consult screen (doctor clicked Mark Attended). Takes
+  //     precedence over admit transitions.
+  useEffect(() => {
+    // Mark Attended path — takes precedence.
+    if (endedAt && state !== "ended" && state !== "error") {
+      setDailyArgs(null);
+      setState("ended");
+      return;
+    }
+    // Send to Waiting path — admit cleared while in active call.
+    if (
+      !admittedAt &&
+      (state === "joining" || state === "in-call")
+    ) {
+      setDailyArgs(null);
+      setState("waiting-room");
+      return;
+    }
+    // Admit lands path — patient was waiting, now goes to joining.
+    if (admittedAt && state === "waiting-room") {
+      void mintAndJoin();
+    }
+    // mintAndJoin is memoised; safe to depend on. state included
+    // because the guards above branch on it.
+  }, [admittedAt, endedAt, state, mintAndJoin]);
+
+  /** Cancel from waiting room — route to / with a session-storage flag
+   *  so the home page can surface a toast. No booking-state mutation
+   *  per the v1 brief. The flag is read on the home page side; if no
+   *  toast surface exists yet, the flag harmlessly persists until the
+   *  next pageview cleans it up. */
+  const handleCancelWait = () => {
+    try {
+      sessionStorage.setItem(
+        "sanocare:waiting-room-cancel",
+        JSON.stringify({ at: new Date().toISOString() }),
+      );
+    } catch {
+      /* sessionStorage may be unavailable (private mode); non-fatal. */
+    }
+    window.location.assign("/");
   };
 
   const handleRetry = () => {
     setError(null);
     setDailyArgs(null);
+    setCachedDailyArgs(null);
     setState("consent");
   };
 
@@ -358,28 +568,130 @@ export function PatientJoinClient({
     );
   }
 
+  // ===== Sanocare-native waiting room =====
+  // Task #43: the gate that replaces Daily's generic prejoin/knock for
+  // the patient. Sits between consent and the Daily mount. The
+  // useSessionAdmitState hook above watches doctor_admitted_at; when
+  // it flips non-null, the [admittedAt, state] effect calls
+  // mintAndJoin() which transitions us into "joining".
+  if (state === "waiting-room") {
+    const scheduled = new Date(scheduledAt);
+    const scheduledLabel = Number.isFinite(scheduled.getTime())
+      ? scheduled.toLocaleString("en-IN", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
+      : null;
+    // "Send to Waiting" re-entry: the patient was already in-call and
+    // the doctor pushed them back. M031: wasEverAdmitted is the
+    // server-derived signal (true iff consultation_sessions.
+    // first_admitted_at IS NOT NULL) — survives page refresh and
+    // device switch, unlike the previous cachedDailyArgs-presence
+    // heuristic which fired immediately after consent because the
+    // token mint runs upfront.
+    const isBriefHold = wasEverAdmitted;
+    return (
+      <div className="space-y-5">
+        <div className="rounded-2xl bg-gradient-to-br from-sky-50 to-blue-50 border border-sky-200 px-6 py-7 text-center">
+          {/* Doctor avatar — we don't have a real photo URL surface yet,
+              so a tinted Stethoscope sits inside a pulsing dot. Pure
+              CSS animation; no JS work per second. */}
+          <div className="relative w-20 h-20 mx-auto mb-4">
+            <div className="absolute inset-0 rounded-full bg-sky-200 animate-ping opacity-60" />
+            <div className="relative w-20 h-20 rounded-full bg-white border-2 border-sky-300 inline-flex items-center justify-center">
+              <Stethoscope className="w-9 h-9 text-sky-700" />
+            </div>
+          </div>
+          <div className="font-semibold text-slate-900 text-lg">
+            Dr {doctorFullName}
+          </div>
+          {doctorQualification && (
+            <div className="text-sm text-slate-600 mt-0.5">
+              {doctorQualification}
+            </div>
+          )}
+          <div className="text-sm text-slate-700 mt-4">
+            {isBriefHold
+              ? `Dr ${doctorFullName.split(" ")[0]} stepped out for a moment. They'll bring you back in shortly.`
+              : `Dr ${doctorFullName.split(" ")[0]} will admit you shortly.`}
+          </div>
+          <div className="text-xs text-slate-500 mt-1">
+            {isBriefHold
+              ? "Please keep this tab open — your call will resume automatically."
+              : "Average wait time 2–3 minutes."}
+          </div>
+          {scheduledLabel && !isBriefHold && (
+            <div className="text-[11px] font-mono text-slate-500 mt-4 inline-flex items-center gap-1.5">
+              <Clock className="w-3 h-3" />
+              {scheduledLabel}
+            </div>
+          )}
+        </div>
+
+        {error && (
+          <div className="flex items-start gap-2 text-rose-700 text-sm bg-rose-50 border border-rose-200 rounded-lg p-3">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            {error}
+          </div>
+        )}
+
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={handleCancelWait}
+            className="text-sm text-slate-500 hover:text-slate-900 underline decoration-slate-300 hover:decoration-slate-900"
+          >
+            Cancel and return
+          </button>
+        </div>
+
+        <div className="text-[11px] text-slate-400 text-center flex items-center justify-center gap-1.5">
+          <ShieldCheck className="w-3 h-3" />
+          Don&apos;t close this tab — we&apos;ll move you into the consultation
+          automatically.
+        </div>
+      </div>
+    );
+  }
+
   if (state === "ended") {
+    // Two ways we landed here:
+    //   (a) Doctor clicked Mark Attended → endedAt is non-null. The
+    //       consult is formally over; "Re-join" is misleading and we
+    //       hide it (the doctor's Mark Attended is intentional).
+    //   (b) Patient hit Leave inside Daily → endedAt is still null,
+    //       just a soft client-side state. "Re-join the call" reopens
+    //       the path (mints a fresh token, lands in waiting-room,
+    //       admit-state polling will resume).
+    const formallyAttended = endedAt != null;
     return (
       <div className="space-y-4">
         <div className="rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-900 p-4">
           <div className="flex items-start gap-2">
             <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
             <div>
-              <div className="font-semibold mb-1">Consultation ended.</div>
+              <div className="font-semibold mb-1">
+                {formallyAttended
+                  ? "Consultation complete."
+                  : "Consultation ended."}
+              </div>
               <div className="text-sm">
-                Your doctor&apos;s notes and prescription (if any) are with
-                ops — you&apos;ll get them on WhatsApp shortly.
+                {formallyAttended
+                  ? `Dr ${doctorFullName.split(" ")[0]} has marked your consultation attended. Your prescription (if any) will arrive on WhatsApp shortly. You can close this tab.`
+                  : "Your doctor's notes and prescription (if any) are with ops — you'll get them on WhatsApp shortly."}
               </div>
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={handleRetry}
-          className="text-sm text-text-secondary hover:text-primary"
-        >
-          Re-join the call
-        </button>
+        {!formallyAttended && (
+          <button
+            type="button"
+            onClick={handleRetry}
+            className="text-sm text-text-secondary hover:text-primary"
+          >
+            Re-join the call
+          </button>
+        )}
       </div>
     );
   }
@@ -412,7 +724,7 @@ export function PatientJoinClient({
 
       <button
         type="button"
-        onClick={handleJoin}
+        onClick={handleConsentSubmit}
         disabled={!consented}
         className="w-full inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors"
       >
