@@ -347,13 +347,20 @@ export function DutyRoomEmbed({ url }: { url: string | null }) {
               {/* v3: floating Rx composer FAB. Only renders once we're
                   actually in-call (no prejoin distraction). Drawer is
                   exclusive — when open the FAB hides; closing the drawer
-                  re-shows the FAB so doctor can reopen mid-consult. */}
+                  re-shows the FAB so doctor can reopen mid-consult.
+                  PR #22 round 6: stacked above the LobbyPanel FAB
+                  (which sits at fixed bottom-6 right-6 z-[70]). bottom-24
+                  gives ~72px gap so both pills are visible + thumb-
+                  reachable without overlap. Higher z just made the
+                  lobby FAB cover this one. Lobby is primary (every
+                  patient transition); Rx is secondary (once per
+                  consult) — lobby gets the thumb-natural lower slot. */}
               {state === "in-call" && !rxDrawerOpen && (
                 <button
                   type="button"
                   onClick={() => setRxDrawerOpen(true)}
                   aria-label="Open Rx composer"
-                  className="absolute bottom-6 right-6 z-[60] inline-flex items-center gap-2 bg-[#2B81FF] hover:bg-[#1E6BD6] text-white text-sm font-semibold px-4 py-3 rounded-full shadow-2xl ring-2 ring-white/30 transition-colors"
+                  className="absolute bottom-24 right-6 z-[60] inline-flex items-center gap-2 bg-[#2B81FF] hover:bg-[#1E6BD6] text-white text-sm font-semibold px-4 py-3 rounded-full shadow-2xl ring-2 ring-white/30 transition-colors"
                 >
                   <FileText className="w-5 h-5" />
                   Compose Rx
