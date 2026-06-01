@@ -61,6 +61,10 @@ export type LobbyPanelSessionInfo = {
   date_of_birth: string | null;
   gender: string | null;
   specific_ailment: string | null;
+  /** M032 / Q8 — derived server-side: true iff a prescriptions row
+   *  on this session has BOTH chief_complaint and provisional_diagnosis
+   *  populated. Drives Mark Attended button enabled state. */
+  mark_attended_gate_open?: boolean;
 };
 
 type LobbyState = {
@@ -349,25 +353,36 @@ export function LobbyPanel() {
                       hint="Once you admit a patient, they'll show here so you can send them back or mark the consult attended."
                     />
                   ) : (
-                    state.in_call.map((s) => (
-                      <SessionRow
-                        key={s.session_id}
-                        info={s}
-                        nowMs={nowMs}
-                        pending={pendingSessionId === s.session_id}
-                        secondary={{
-                          label: "Send to Waiting",
-                          icon: <ArrowLeft className="w-3.5 h-3.5" />,
-                          onClick: () => handleSendToWaiting(s.session_id),
-                        }}
-                        primary={{
-                          label: "Mark Attended",
-                          icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-                          onClick: () => handleMarkAttended(s.session_id),
-                          tone: "emerald",
-                        }}
-                      />
-                    ))
+                    state.in_call.map((s) => {
+                      // M032 / Q8: gate Mark Attended on the derived
+                      // server flag. If undefined (pre-M032 cached
+                      // response from before this build deployed),
+                      // keep the button enabled — graceful degrade.
+                      const gateExplicit = s.mark_attended_gate_open !== undefined;
+                      const gateOpen = s.mark_attended_gate_open !== false;
+                      return (
+                        <SessionRow
+                          key={s.session_id}
+                          info={s}
+                          nowMs={nowMs}
+                          pending={pendingSessionId === s.session_id}
+                          secondary={{
+                            label: "Send to Waiting",
+                            icon: <ArrowLeft className="w-3.5 h-3.5" />,
+                            onClick: () => handleSendToWaiting(s.session_id),
+                          }}
+                          primary={{
+                            label: "Mark Attended",
+                            icon: <CheckCircle2 className="w-3.5 h-3.5" />,
+                            onClick: () => handleMarkAttended(s.session_id),
+                            tone: "emerald",
+                            disabled: gateExplicit && !gateOpen,
+                            disabledTooltip:
+                              "Save or send a prescription with chief complaint and diagnosis before marking attended.",
+                          }}
+                        />
+                      );
+                    })
                   )}
                 </>
               )}
@@ -445,6 +460,10 @@ function SessionRow({
     icon: React.ReactNode;
     onClick: () => void;
     tone?: "blue" | "emerald";
+    /** M032 / Q8 gate: when true, button renders disabled regardless
+     *  of `pending` and surfaces `disabledTooltip` via title attr. */
+    disabled?: boolean;
+    disabledTooltip?: string;
   };
   secondary?: {
     label: string;
@@ -537,12 +556,17 @@ function SessionRow({
         <button
           type="button"
           onClick={primary.onClick}
-          disabled={pending}
+          disabled={pending || primary.disabled === true}
+          title={
+            primary.disabled === true ? primary.disabledTooltip : undefined
+          }
           className={
             "flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold py-2 rounded-lg " +
             (pending
               ? "bg-slate-300 text-slate-500 cursor-wait"
-              : primaryToneClasses)
+              : primary.disabled === true
+                ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                : primaryToneClasses)
           }
         >
           {pending ? (
