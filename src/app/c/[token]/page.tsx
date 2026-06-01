@@ -202,10 +202,22 @@ export default async function PatientJoinPage({
                 ? <>Booking <span className="font-mono">{data.booking_code}</span></>
                 : <>Booking #{data.session_id.slice(0, 8)}</>}
               {" "}·{" "}
-              {new Date(data.scheduled_at).toLocaleString("en-IN", {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}
+              {/* Server-side render runs in Netlify's UTC, so toLocaleString
+                  used to emit UTC like "30 May 2026, 1:28 pm" while the
+                  inner scheduled-time pill showed IST "6:58 pm" — same
+                  booking, two different times in the header. Explicit
+                  Asia/Kolkata timezone via Intl.DateTimeFormat forces IST
+                  everywhere this server-renders. Other UTC leakages are
+                  out of scope here — Task #51 sweeps the system. */}
+              {new Intl.DateTimeFormat("en-IN", {
+                timeZone: "Asia/Kolkata",
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+              }).format(new Date(data.scheduled_at))}
             </p>
           </div>
 
