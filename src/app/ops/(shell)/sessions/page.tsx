@@ -97,7 +97,7 @@ export default async function OpsSessionsPage() {
   // surfaces session-side scheduled_at. For bookings without a
   // session, scheduled_at is null → not in the window → row excluded.
   // That's acceptable for Phase 1 — the view is teleconsult-centric.
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const since = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from("vw_patient_session_log")
     .select(
@@ -117,7 +117,7 @@ export default async function OpsSessionsPage() {
         </div>
         <h1 className="text-2xl font-bold text-slate-900">Patient sessions</h1>
         <p className="text-sm text-slate-600 mt-1">
-          Last 24 hours of teleconsult activity. Three signal columns —
+          Last 72 hours of teleconsult activity. Three signal columns —
           waiting-room join, consultation admit, attendance — surface
           whether each consult actually happened.
         </p>
@@ -233,7 +233,7 @@ export default async function OpsSessionsPage() {
 
       <p className="text-[11px] text-slate-400 text-center mt-6">
         Source: <span className="font-mono">vw_patient_session_log</span> (M032).
-        Page shows the last 24 hours.{" "}
+        Page shows the last 72 hours.{" "}
         <Link href="/ops/bookings" className="underline">
           Switch to bookings →
         </Link>
