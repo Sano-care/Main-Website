@@ -63,7 +63,6 @@ type BookingDetail = {
   completed_at: string | null;
   cancelled_at: string | null;
   cancellation_reason: string | null;
-  notes: string | null;
   ops_notes: string | null;
   customer_id: string | null;
   partner_id: string | null;
@@ -182,30 +181,23 @@ export default async function BookingDetailPage({
   const { id } = await params;
   const supabase = await createOpsRSCClient();
 
-  // M032 round 3 fix: even the bare `partner:partners` embed is
-  // ambiguous now that M032 added `bookings.assigned_partner_id`
-  // alongside the existing `bookings.partner_id` — PostgREST sees TWO
-  // FKs from bookings to partners and refuses the embed without an
-  // explicit disambiguator. Round-2 dropped the column-name hint
-  // (which this PostgREST version doesn't accept) but the bare form
-  // still failed for the same reason.
+  // M032 round 4 fix: dumb-but-unbreakable pattern. Founder's call
+  // after rounds 2 and 3 both shipped broken — strip every PostgREST
+  // embed from this loader. Six separate single-table maybeSingle()
+  // lookups, none of which can hit embed ambiguity because there are
+  // no embeds. Same shape as getDoctorWaitingQueue in doctorData.ts.
   //
-  // Round 3 uses the FK CONSTRAINT name as the hint — the canonical
-  // PostgREST disambiguation syntax. Constraint names confirmed via
-  // pg_constraint introspection (round 2 diagnostic):
-  //   bookings_partner_id_fkey   → partners(id)
-  //   bookings_doctor_id_fkey    → doctors(id)
+  // Stage 1: base booking + three active-resource lists (pickers).
+  // The pickers were never affected by the embed bug — they're
+  // stand-alone reads on each picker's table. Kept in this same
+  // Promise.all so they run concurrently with the base lookup.
   //
-  // doctor:doctors stays bare — only one FK from bookings → doctors.
-  // customer:customers stays bare — only one FK from bookings → customers.
-  // partner uses the constraint-name hint.
-  //
-  // Plus: round 2 fell to notFound() silently on `!data`, swallowing
-  // the actual PostgREST error. Logging the error explicitly here so
-  // any future embed regression surfaces in Netlify function logs
-  // instead of just rendering 404 to the user.
+  // Stage 2: six FK-target lookups, parallel. Each conditional on
+  // its FK column being non-null; null FK → Promise.resolve(null)
+  // (zero network cost). Sanocare's ~50 bookings/day → six round
+  // trips/page is fine; Phase 3 can RPC this if we ever need to.
   const [
-    { data, error: bookingErr },
+    { data: bookingBase, error: bookingErr },
     { data: doctorsData, error: doctorsErr },
     { data: paramedicsData, error: paramedicsErr },
     { data: partnersData, error: partnersErr },
@@ -217,11 +209,9 @@ export default async function BookingDetailPage({
          specific_ailment, manual_address, status, amount, final_amount_paise,
          test_total_paise, payment_status, report_payment_status, scheduled_for,
          assigned_at, dispatched_at, completed_at, cancelled_at,
-         cancellation_reason, notes, ops_notes, customer_id, partner_id, doctor_id,
-         assigned_paramedic_id, assigned_partner_id, assigned_by,
-         customer:customers ( id, customer_code, full_name, phone, email ),
-         partner:partners!bookings_partner_id_fkey ( id, partner_code, name, partner_type ),
-         doctor:doctors ( id, doctor_code, full_name, doctor_type )`,
+         cancellation_reason, ops_notes,
+         customer_id, partner_id, doctor_id,
+         assigned_paramedic_id, assigned_partner_id, assigned_by`,
       )
       .eq("id", id)
       .maybeSingle(),
@@ -242,11 +232,8 @@ export default async function BookingDetailPage({
       .order("name", { ascending: true }),
   ]);
 
-  // Surface any error from the parallel reads BEFORE the 404 check —
-  // round 2 lost the PostgREST diagnostic because notFound() fired
-  // before any logging.
   if (bookingErr) {
-    console.error("[ops/bookings/[id]] booking lookup error", {
+    console.error("[ops/bookings/[id]] base booking lookup error", {
       id,
       code: bookingErr.code,
       message: bookingErr.message,
@@ -263,60 +250,91 @@ export default async function BookingDetailPage({
   if (partnersErr) {
     console.error("[ops/bookings/[id]] active partners lookup error", partnersErr);
   }
-  if (!data) {
-    console.error("[ops/bookings/[id]] booking null after SELECT", {
+  if (!bookingBase) {
+    console.error("[ops/bookings/[id]] booking null after base SELECT", {
       id,
       hadError: !!bookingErr,
     });
     notFound();
   }
-  // Type-narrowed below — data is non-null here. Cast through unknown
-  // because the SELECT above doesn't include the three new join fields
-  // yet (we backfill them via separate queries on the next step).
-  const bookingBase = data as unknown as Omit<
+
+  // bookingBase is non-null here per the guard above. Cast through
+  // unknown because the SELECT projects only the column list (no
+  // join fields yet); join fields are populated in Stage 2.
+  type BookingBase = Omit<
     BookingDetail,
-    "paramedic" | "assigned_partner" | "assigned_by_user"
+    "customer" | "partner" | "doctor" | "paramedic" | "assigned_partner" | "assigned_by_user"
   >;
+  const base = bookingBase as unknown as BookingBase;
+
   const activeDoctors = (doctorsData as ActiveDoctor[] | null) ?? [];
   const activeParamedics = (paramedicsData as ActiveParamedic[] | null) ?? [];
   const activePartners = (partnersData as ActivePartner[] | null) ?? [];
 
-  // Backfill the three new join fields via separate batched lookups.
-  // Each query runs in parallel — if all three FKs are null (very
-  // common for a fresh teleconsult booking), this fans out to zero
-  // network calls (the conditional .eq returns Promise.resolve(null)
-  // for the null branches). Worst case (all three populated) = 3
-  // tiny by-id reads, totalling far less wire time than the failed
-  // PostgREST disambiguator was costing on every page-load.
-  const [paramedicRow, assignedPartnerRow, assignedByUserRow] = await Promise.all([
-    bookingBase.assigned_paramedic_id
+  // Stage 2: six parallel FK-target lookups.
+  const [
+    customerRow,
+    partnerRow,
+    doctorRow,
+    paramedicRow,
+    assignedPartnerRow,
+    assignedByUserRow,
+  ] = await Promise.all([
+    base.customer_id
       ? supabase
-          .from("paramedics")
-          .select("id, name, phone, specialty")
-          .eq("id", bookingBase.assigned_paramedic_id)
+          .from("customers")
+          .select("id, customer_code, full_name, phone, email")
+          .eq("id", base.customer_id)
           .maybeSingle()
           .then((r) => r.data)
       : Promise.resolve(null),
-    bookingBase.assigned_partner_id
+    base.partner_id
       ? supabase
           .from("partners")
           .select("id, partner_code, name, partner_type")
-          .eq("id", bookingBase.assigned_partner_id)
+          .eq("id", base.partner_id)
           .maybeSingle()
           .then((r) => r.data)
       : Promise.resolve(null),
-    bookingBase.assigned_by
+    base.doctor_id
+      ? supabase
+          .from("doctors")
+          .select("id, doctor_code, full_name, doctor_type")
+          .eq("id", base.doctor_id)
+          .maybeSingle()
+          .then((r) => r.data)
+      : Promise.resolve(null),
+    base.assigned_paramedic_id
+      ? supabase
+          .from("paramedics")
+          .select("id, name, phone, specialty")
+          .eq("id", base.assigned_paramedic_id)
+          .maybeSingle()
+          .then((r) => r.data)
+      : Promise.resolve(null),
+    base.assigned_partner_id
+      ? supabase
+          .from("partners")
+          .select("id, partner_code, name, partner_type")
+          .eq("id", base.assigned_partner_id)
+          .maybeSingle()
+          .then((r) => r.data)
+      : Promise.resolve(null),
+    base.assigned_by
       ? supabase
           .from("ops_users")
           .select("id, full_name")
-          .eq("id", bookingBase.assigned_by)
+          .eq("id", base.assigned_by)
           .maybeSingle()
           .then((r) => r.data)
       : Promise.resolve(null),
   ]);
 
   const booking: BookingDetail = {
-    ...bookingBase,
+    ...base,
+    customer: (customerRow as BookingDetail["customer"]) ?? null,
+    partner: (partnerRow as BookingDetail["partner"]) ?? null,
+    doctor: (doctorRow as BookingDetail["doctor"]) ?? null,
     paramedic: (paramedicRow as BookingDetail["paramedic"]) ?? null,
     assigned_partner:
       (assignedPartnerRow as BookingDetail["assigned_partner"]) ?? null,
@@ -428,16 +446,14 @@ export default async function BookingDetailPage({
             </div>
           </div>
         )}
-        {booking.notes && (
-          <div className="mt-5 pt-5 border-t border-slate-100">
-            <div className="text-xs text-slate-500 mb-1">
-              Patient-facing notes
-            </div>
-            <div className="text-sm text-slate-800 whitespace-pre-wrap">
-              {booking.notes}
-            </div>
-          </div>
-        )}
+        {/* "Patient-facing notes" block removed — bookings.notes column
+            was referenced in the SELECT + render here but doesn't
+            exist in the live schema (only ops_notes does). The whole
+            SELECT was failing at the PostgREST level with `column
+            "notes" does not exist`, returning data: null, which the
+            page treated as notFound() → 404 on every booking detail
+            URL. The "Ops notes (internal)" block further down keeps
+            its ops_notes write surface unchanged. */}
       </div>
 
       {/* Linked customer */}
