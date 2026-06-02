@@ -3,6 +3,8 @@ import { Inter, IBM_Plex_Mono } from "next/font/google";
 import { GoogleTagManager } from "@next/third-parties/google";
 import { CmsPreloadProvider } from "@/components/providers/CmsPreloadProvider";
 import { getCmsPreloadSnapshot } from "@/services/cms/CmsContentServerService";
+import { ConsentDefaultScript } from "@/components/consent/ConsentDefaultScript";
+import { ConsentRoot } from "@/components/consent/ConsentRoot";
 import "./globals.css";
 
 // GTM container ID. Public client-side identifier — safe to commit
@@ -157,6 +159,15 @@ export default async function RootLayout({
 
   return (
     <html lang="en">
+      {/* Consent Mode v2 default-deny — MUST execute before the GTM
+          container's inline script. strategy="beforeInteractive" puts
+          this in <head> before the body's hydration scripts so Consent
+          Mode v2's wait_for_update gate has the default state set
+          before any tag inside the container has a chance to evaluate.
+          See src/components/consent/ConsentDefaultScript.tsx for the
+          full reasoning. M033 + this script + ConsentRoot together
+          satisfy DPDP Act 2023 for sanocare.in. */}
+      <ConsentDefaultScript />
       {/* GoogleTagManager injects the <head> script + <body> noscript
           iframe automatically. Placed at the top level so it covers
           every route (marketing, /ops, /doctor, patient flows). The
@@ -180,6 +191,11 @@ export default async function RootLayout({
         className={`${inter.variable} ${ibmPlexMono.variable} font-sans antialiased`}
       >
         <CmsPreloadProvider snapshot={cmsSnapshot}>{children}</CmsPreloadProvider>
+        {/* DPDP cookie consent flow. Mounts globally so the footer-link
+            reopen event listener is always armed, but the banner's
+            auto-show is suppressed on /c/, /doctor/, /ops/, /rx/,
+            /portal/ — see ConsentRoot.tsx for the route-aware logic. */}
+        <ConsentRoot />
         {/*
          * Razorpay Checkout JS is intentionally NOT loaded here.
          *
