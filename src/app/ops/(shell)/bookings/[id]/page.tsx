@@ -182,26 +182,33 @@ export default async function BookingDetailPage({
   const { id } = await params;
   const supabase = await createOpsRSCClient();
 
-  // M032 round 2 fix: PostgREST disambiguation collapsed under the
-  // dual bookings → partners FKs (`partner_id` + `assigned_partner_id`).
-  // The `partners!partner_id` / `partners!assigned_partner_id` /
-  // `paramedics!assigned_paramedic_id` / `ops_users!assigned_by`
-  // embedded-hint syntax was the breakage that 404'd the entire
-  // detail page in cb4b3ff — when one embed fails to resolve,
-  // PostgREST returns nothing and the maybeSingle falls to data:
-  // null → notFound().
+  // M032 round 3 fix: even the bare `partner:partners` embed is
+  // ambiguous now that M032 added `bookings.assigned_partner_id`
+  // alongside the existing `bookings.partner_id` — PostgREST sees TWO
+  // FKs from bookings to partners and refuses the embed without an
+  // explicit disambiguator. Round-2 dropped the column-name hint
+  // (which this PostgREST version doesn't accept) but the bare form
+  // still failed for the same reason.
   //
-  // Safe pattern (same as getDoctorWaitingQueue in doctorData.ts):
-  // keep the original single-FK embeds that were working before
-  // (customer, partner, doctor — each has exactly one FK from
-  // bookings, so PostgREST resolves uniquely), then do separate
-  // batched lookups on the resolved FK ids for the three new
-  // joins (paramedic, assigned_partner, assigned_by_user).
+  // Round 3 uses the FK CONSTRAINT name as the hint — the canonical
+  // PostgREST disambiguation syntax. Constraint names confirmed via
+  // pg_constraint introspection (round 2 diagnostic):
+  //   bookings_partner_id_fkey   → partners(id)
+  //   bookings_doctor_id_fkey    → doctors(id)
+  //
+  // doctor:doctors stays bare — only one FK from bookings → doctors.
+  // customer:customers stays bare — only one FK from bookings → customers.
+  // partner uses the constraint-name hint.
+  //
+  // Plus: round 2 fell to notFound() silently on `!data`, swallowing
+  // the actual PostgREST error. Logging the error explicitly here so
+  // any future embed regression surfaces in Netlify function logs
+  // instead of just rendering 404 to the user.
   const [
-    { data },
-    { data: doctorsData },
-    { data: paramedicsData },
-    { data: partnersData },
+    { data, error: bookingErr },
+    { data: doctorsData, error: doctorsErr },
+    { data: paramedicsData, error: paramedicsErr },
+    { data: partnersData, error: partnersErr },
   ] = await Promise.all([
     supabase
       .from("bookings")
@@ -213,7 +220,7 @@ export default async function BookingDetailPage({
          cancellation_reason, notes, ops_notes, customer_id, partner_id, doctor_id,
          assigned_paramedic_id, assigned_partner_id, assigned_by,
          customer:customers ( id, customer_code, full_name, phone, email ),
-         partner:partners ( id, partner_code, name, partner_type ),
+         partner:partners!bookings_partner_id_fkey ( id, partner_code, name, partner_type ),
          doctor:doctors ( id, doctor_code, full_name, doctor_type )`,
       )
       .eq("id", id)
@@ -235,7 +242,34 @@ export default async function BookingDetailPage({
       .order("name", { ascending: true }),
   ]);
 
-  if (!data) notFound();
+  // Surface any error from the parallel reads BEFORE the 404 check —
+  // round 2 lost the PostgREST diagnostic because notFound() fired
+  // before any logging.
+  if (bookingErr) {
+    console.error("[ops/bookings/[id]] booking lookup error", {
+      id,
+      code: bookingErr.code,
+      message: bookingErr.message,
+      details: bookingErr.details,
+      hint: bookingErr.hint,
+    });
+  }
+  if (doctorsErr) {
+    console.error("[ops/bookings/[id]] active doctors lookup error", doctorsErr);
+  }
+  if (paramedicsErr) {
+    console.error("[ops/bookings/[id]] active paramedics lookup error", paramedicsErr);
+  }
+  if (partnersErr) {
+    console.error("[ops/bookings/[id]] active partners lookup error", partnersErr);
+  }
+  if (!data) {
+    console.error("[ops/bookings/[id]] booking null after SELECT", {
+      id,
+      hadError: !!bookingErr,
+    });
+    notFound();
+  }
   // Type-narrowed below — data is non-null here. Cast through unknown
   // because the SELECT above doesn't include the three new join fields
   // yet (we backfill them via separate queries on the next step).
