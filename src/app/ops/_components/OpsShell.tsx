@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Activity,
   CalendarCheck2,
   CreditCard,
   FlaskConical,
@@ -26,6 +27,7 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { href: "/ops/bookings", label: "Bookings", icon: CalendarCheck2 },
+  { href: "/ops/sessions", label: "Patient sessions", icon: Activity },
   { href: "/ops/payments", label: "Payments", icon: CreditCard },
   { href: "/ops/lab-orders", label: "Lab Orders", icon: FlaskConical },
   { href: "/ops/patients", label: "Patients", icon: Users },
