@@ -601,7 +601,26 @@ export default async function BookingDetailPage({
         </form>
       </div>
 
-      {/* Linked partner */}
+      {/* Legacy "Linked partner" block — gated to diagnostics only.
+          Pre-PR-#24 this block rendered for every booking regardless of
+          service_category, writing to bookings.partner_id via the
+          linkPartner server action. On non-diagnostics bookings
+          (teleconsult / homecare / chronic) ops never needed it — the
+          partner concept doesn't apply — so it was visual noise.
+          PR #24's new "Assigned partner" block uses pickers.partner
+          (same flag) to render only on diagnostics; this block now
+          mirrors that gate so the two are visibility-aligned.
+
+          On diagnostics bookings BOTH blocks render — accepted v1
+          redundancy. The legacy partner_id column + linkPartner action
+          are still wired in case anything reads from them; this PR is
+          pure visibility, no behavior change.
+
+          TODO: dedup partner_id and assigned_partner_id — Phase 3+.
+          Likely path: migrate any historical bookings.partner_id values
+          into assigned_partner_id, drop linkPartner + the legacy column,
+          collapse to one block. */}
+      {pickers.partner && (
       <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
         <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-3">
           Linked partner
@@ -647,6 +666,7 @@ export default async function BookingDetailPage({
           </button>
         </form>
       </div>
+      )}
 
       {/* Assignment audit strip — shown when ANY assignment is in
           place, summarising the latest assigned_at + assigned_by.
