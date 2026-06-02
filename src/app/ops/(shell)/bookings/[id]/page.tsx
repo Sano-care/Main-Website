@@ -181,40 +181,60 @@ export default async function BookingDetailPage({
   const { id } = await params;
   const supabase = await createOpsRSCClient();
 
-  // M032 round 4 fix: dumb-but-unbreakable pattern. Founder's call
-  // after rounds 2 and 3 both shipped broken — strip every PostgREST
-  // embed from this loader. Six separate single-table maybeSingle()
-  // lookups, none of which can hit embed ambiguity because there are
-  // no embeds. Same shape as getDoctorWaitingQueue in doctorData.ts.
+  // M032 round 5 fix: previous rounds chased PostgREST embed ambiguity
+  // and missing-column issues (real, both fixed in r2-r4), but the page
+  // still 404'd. The actual residual bug is identifier shape: the
+  // route param `id` can be EITHER a UUID (linked from the list page)
+  // OR a booking_code like "SAN-B-00057" (typed in the URL bar). The
+  // loader was only doing `.eq("id", id)` against the UUID column —
+  // booking_code paste returned zero rows, fell to notFound().
   //
-  // Stage 1: base booking + three active-resource lists (pickers).
-  // The pickers were never affected by the embed bug — they're
-  // stand-alone reads on each picker's table. Kept in this same
-  // Promise.all so they run concurrently with the base lookup.
+  // Fix: probe by UUID first; if that returns null AND the input
+  // looks like a booking_code, retry by booking_code. Both URL forms
+  // resolve cleanly.
   //
-  // Stage 2: six FK-target lookups, parallel. Each conditional on
-  // its FK column being non-null; null FK → Promise.resolve(null)
-  // (zero network cost). Sanocare's ~50 bookings/day → six round
-  // trips/page is fine; Phase 3 can RPC this if we ever need to.
+  // Plus: when nothing matches either probe, render a DIAGNOSTIC
+  // CARD inline instead of silent notFound(). Surfaces id, both
+  // probes' state, and any PostgREST error directly in the rendered
+  // page body so the next regression is visible without needing
+  // Netlify function logs.
+  //
+  // Pattern stays the dumb-and-unbreakable shape from r4: separate
+  // single-table SELECTs, no embeds.
+  const BOOKING_SELECT_COLS =
+    `id, booking_code, created_at, patient_name, phone, service_category,
+     specific_ailment, manual_address, status, amount, final_amount_paise,
+     test_total_paise, payment_status, report_payment_status, scheduled_for,
+     assigned_at, dispatched_at, completed_at, cancelled_at,
+     cancellation_reason, ops_notes,
+     customer_id, partner_id, doctor_id,
+     assigned_paramedic_id, assigned_partner_id, assigned_by`;
+
+  const UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const looksLikeUuid = UUID_RE.test(id);
+
   const [
     { data: bookingBase, error: bookingErr },
     { data: doctorsData, error: doctorsErr },
     { data: paramedicsData, error: paramedicsErr },
     { data: partnersData, error: partnersErr },
   ] = await Promise.all([
-    supabase
-      .from("bookings")
-      .select(
-        `id, booking_code, created_at, patient_name, phone, service_category,
-         specific_ailment, manual_address, status, amount, final_amount_paise,
-         test_total_paise, payment_status, report_payment_status, scheduled_for,
-         assigned_at, dispatched_at, completed_at, cancelled_at,
-         cancellation_reason, ops_notes,
-         customer_id, partner_id, doctor_id,
-         assigned_paramedic_id, assigned_partner_id, assigned_by`,
-      )
-      .eq("id", id)
-      .maybeSingle(),
+    // Try UUID first if it parses as one; otherwise go straight to
+    // booking_code. Avoids the PostgREST `invalid input syntax for
+    // type uuid` error that booking_code paste would trigger on the
+    // UUID column.
+    looksLikeUuid
+      ? supabase
+          .from("bookings")
+          .select(BOOKING_SELECT_COLS)
+          .eq("id", id)
+          .maybeSingle()
+      : supabase
+          .from("bookings")
+          .select(BOOKING_SELECT_COLS)
+          .eq("booking_code", id)
+          .maybeSingle(),
     supabase
       .from("doctors")
       .select("id, doctor_code, full_name, doctor_type")
@@ -232,9 +252,31 @@ export default async function BookingDetailPage({
       .order("name", { ascending: true }),
   ]);
 
+  // Belt-and-braces: if UUID probe came up empty AND the id might
+  // ALSO be a valid booking_code (could happen if a future code
+  // format ever overlaps with UUIDs — unlikely but cheap to cover),
+  // retry on booking_code.
+  let resolvedBooking = bookingBase;
+  let resolvedErr = bookingErr;
+  if (!resolvedBooking && looksLikeUuid) {
+    const { data: byCode, error: codeErr } = await supabase
+      .from("bookings")
+      .select(BOOKING_SELECT_COLS)
+      .eq("booking_code", id)
+      .maybeSingle();
+    if (byCode) {
+      resolvedBooking = byCode;
+      resolvedErr = null;
+    } else if (codeErr) {
+      resolvedErr = codeErr;
+    }
+  }
+
   if (bookingErr) {
     console.error("[ops/bookings/[id]] base booking lookup error", {
       id,
+      looksLikeUuid,
+      probedBy: looksLikeUuid ? "id" : "booking_code",
       code: bookingErr.code,
       message: bookingErr.message,
       details: bookingErr.details,
@@ -250,22 +292,74 @@ export default async function BookingDetailPage({
   if (partnersErr) {
     console.error("[ops/bookings/[id]] active partners lookup error", partnersErr);
   }
-  if (!bookingBase) {
-    console.error("[ops/bookings/[id]] booking null after base SELECT", {
+  if (!resolvedBooking) {
+    console.error("[ops/bookings/[id]] booking null after both probes", {
       id,
-      hadError: !!bookingErr,
+      looksLikeUuid,
+      hadError: !!resolvedErr,
     });
-    notFound();
+    // Diagnostic render: instead of notFound() (which makes ALL 404s
+    // look identical and forces Netlify log archaeology), surface
+    // the exact state inline. Next regression on this surface is
+    // visible to the founder in the browser; the loader has visibly
+    // run and reported its findings.
+    return (
+      <div className="max-w-4xl mx-auto px-6 sm:px-8 py-12">
+        <Link
+          href="/ops/bookings"
+          className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-primary mb-6"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to bookings
+        </Link>
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6">
+          <h1 className="text-lg font-semibold text-amber-900 mb-2">
+            Booking not found
+          </h1>
+          <p className="text-sm text-amber-800 mb-4">
+            No booking matched the identifier in this URL. This could be
+            a typo, a deleted booking, or a regression on the lookup
+            path. Diagnostic state below — share with engineering if
+            this isn&apos;t what you expected:
+          </p>
+          <dl className="grid grid-cols-[160px_1fr] gap-y-1.5 gap-x-3 text-xs font-mono text-amber-900">
+            <dt className="text-amber-700">id (from URL):</dt>
+            <dd className="break-all">{id}</dd>
+            <dt className="text-amber-700">looksLikeUuid:</dt>
+            <dd>{String(looksLikeUuid)}</dd>
+            <dt className="text-amber-700">probed by:</dt>
+            <dd>{looksLikeUuid ? "id (UUID) then booking_code fallback" : "booking_code"}</dd>
+            <dt className="text-amber-700">PostgREST error:</dt>
+            <dd className="break-all">
+              {resolvedErr
+                ? `${resolvedErr.code ?? "?"} ${resolvedErr.message ?? ""}`
+                : "none"}
+            </dd>
+            {resolvedErr?.details && (
+              <>
+                <dt className="text-amber-700">error details:</dt>
+                <dd className="break-all">{resolvedErr.details}</dd>
+              </>
+            )}
+            {resolvedErr?.hint && (
+              <>
+                <dt className="text-amber-700">error hint:</dt>
+                <dd className="break-all">{resolvedErr.hint}</dd>
+              </>
+            )}
+          </dl>
+        </div>
+      </div>
+    );
   }
 
-  // bookingBase is non-null here per the guard above. Cast through
-  // unknown because the SELECT projects only the column list (no
-  // join fields yet); join fields are populated in Stage 2.
+  // resolvedBooking is non-null here per the guard above. Cast
+  // through unknown because the SELECT projects only the column
+  // list (no join fields yet); join fields are populated in Stage 2.
   type BookingBase = Omit<
     BookingDetail,
     "customer" | "partner" | "doctor" | "paramedic" | "assigned_partner" | "assigned_by_user"
   >;
-  const base = bookingBase as unknown as BookingBase;
+  const base = resolvedBooking as unknown as BookingBase;
 
   const activeDoctors = (doctorsData as ActiveDoctor[] | null) ?? [];
   const activeParamedics = (paramedicsData as ActiveParamedic[] | null) ?? [];
