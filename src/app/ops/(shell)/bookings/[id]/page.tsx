@@ -182,9 +182,21 @@ export default async function BookingDetailPage({
   const { id } = await params;
   const supabase = await createOpsRSCClient();
 
-  // M032: load assignment columns + joined paramedic / assigned-partner /
-  // assigned-by-ops-user, plus active pickers for all three resource types.
-  // Parallel-fetched so the detail page is one round-trip wide.
+  // M032 round 2 fix: PostgREST disambiguation collapsed under the
+  // dual bookings → partners FKs (`partner_id` + `assigned_partner_id`).
+  // The `partners!partner_id` / `partners!assigned_partner_id` /
+  // `paramedics!assigned_paramedic_id` / `ops_users!assigned_by`
+  // embedded-hint syntax was the breakage that 404'd the entire
+  // detail page in cb4b3ff — when one embed fails to resolve,
+  // PostgREST returns nothing and the maybeSingle falls to data:
+  // null → notFound().
+  //
+  // Safe pattern (same as getDoctorWaitingQueue in doctorData.ts):
+  // keep the original single-FK embeds that were working before
+  // (customer, partner, doctor — each has exactly one FK from
+  // bookings, so PostgREST resolves uniquely), then do separate
+  // batched lookups on the resolved FK ids for the three new
+  // joins (paramedic, assigned_partner, assigned_by_user).
   const [
     { data },
     { data: doctorsData },
@@ -201,11 +213,8 @@ export default async function BookingDetailPage({
          cancellation_reason, notes, ops_notes, customer_id, partner_id, doctor_id,
          assigned_paramedic_id, assigned_partner_id, assigned_by,
          customer:customers ( id, customer_code, full_name, phone, email ),
-         partner:partners!partner_id ( id, partner_code, name, partner_type ),
-         doctor:doctors ( id, doctor_code, full_name, doctor_type ),
-         paramedic:paramedics!assigned_paramedic_id ( id, name, phone, specialty ),
-         assigned_partner:partners!assigned_partner_id ( id, partner_code, name, partner_type ),
-         assigned_by_user:ops_users!assigned_by ( id, full_name )`,
+         partner:partners ( id, partner_code, name, partner_type ),
+         doctor:doctors ( id, doctor_code, full_name, doctor_type )`,
       )
       .eq("id", id)
       .maybeSingle(),
@@ -226,11 +235,61 @@ export default async function BookingDetailPage({
       .order("name", { ascending: true }),
   ]);
 
-  const booking = data as BookingDetail | null;
-  if (!booking) notFound();
+  if (!data) notFound();
+  // Type-narrowed below — data is non-null here. Cast through unknown
+  // because the SELECT above doesn't include the three new join fields
+  // yet (we backfill them via separate queries on the next step).
+  const bookingBase = data as unknown as Omit<
+    BookingDetail,
+    "paramedic" | "assigned_partner" | "assigned_by_user"
+  >;
   const activeDoctors = (doctorsData as ActiveDoctor[] | null) ?? [];
   const activeParamedics = (paramedicsData as ActiveParamedic[] | null) ?? [];
   const activePartners = (partnersData as ActivePartner[] | null) ?? [];
+
+  // Backfill the three new join fields via separate batched lookups.
+  // Each query runs in parallel — if all three FKs are null (very
+  // common for a fresh teleconsult booking), this fans out to zero
+  // network calls (the conditional .eq returns Promise.resolve(null)
+  // for the null branches). Worst case (all three populated) = 3
+  // tiny by-id reads, totalling far less wire time than the failed
+  // PostgREST disambiguator was costing on every page-load.
+  const [paramedicRow, assignedPartnerRow, assignedByUserRow] = await Promise.all([
+    bookingBase.assigned_paramedic_id
+      ? supabase
+          .from("paramedics")
+          .select("id, name, phone, specialty")
+          .eq("id", bookingBase.assigned_paramedic_id)
+          .maybeSingle()
+          .then((r) => r.data)
+      : Promise.resolve(null),
+    bookingBase.assigned_partner_id
+      ? supabase
+          .from("partners")
+          .select("id, partner_code, name, partner_type")
+          .eq("id", bookingBase.assigned_partner_id)
+          .maybeSingle()
+          .then((r) => r.data)
+      : Promise.resolve(null),
+    bookingBase.assigned_by
+      ? supabase
+          .from("ops_users")
+          .select("id, full_name")
+          .eq("id", bookingBase.assigned_by)
+          .maybeSingle()
+          .then((r) => r.data)
+      : Promise.resolve(null),
+  ]);
+
+  const booking: BookingDetail = {
+    ...bookingBase,
+    paramedic: (paramedicRow as BookingDetail["paramedic"]) ?? null,
+    assigned_partner:
+      (assignedPartnerRow as BookingDetail["assigned_partner"]) ?? null,
+    assigned_by_user:
+      (assignedByUserRow as BookingDetail["assigned_by_user"]) ?? null,
+  };
+
   const pickers = pickersFor(booking.service_category);
 
   const rupees = rupeesFor(booking);
