@@ -17,6 +17,8 @@ import {
   linkCustomer,
   linkPartner,
   assignDoctor,
+  assignParamedic,
+  assignPartner,
 } from "../actions";
 
 export const metadata: Metadata = {
@@ -61,11 +63,14 @@ type BookingDetail = {
   completed_at: string | null;
   cancelled_at: string | null;
   cancellation_reason: string | null;
-  notes: string | null;
   ops_notes: string | null;
   customer_id: string | null;
   partner_id: string | null;
   doctor_id: string | null;
+  // M032 — Ops Framework Phase 1 assignment + audit columns
+  assigned_paramedic_id: string | null;
+  assigned_partner_id: string | null;
+  assigned_by: string | null;
   customer: {
     id: string;
     customer_code: string;
@@ -85,6 +90,23 @@ type BookingDetail = {
     full_name: string;
     doctor_type: "freelancer" | "salaried";
   } | null;
+  // M032: assigned-resource joins
+  paramedic: {
+    id: string;
+    name: string;
+    phone: string | null;
+    specialty: string | null;
+  } | null;
+  assigned_partner: {
+    id: string;
+    partner_code: string;
+    name: string;
+    partner_type: string;
+  } | null;
+  assigned_by_user: {
+    id: string;
+    full_name: string;
+  } | null;
 };
 
 type ActiveDoctor = {
@@ -93,6 +115,44 @@ type ActiveDoctor = {
   full_name: string;
   doctor_type: "freelancer" | "salaried";
 };
+
+type ActiveParamedic = {
+  id: string;
+  name: string;
+  phone: string | null;
+  specialty: string | null;
+};
+
+type ActivePartner = {
+  id: string;
+  partner_code: string;
+  name: string;
+  partner_type: string;
+};
+
+// M032 — Ops Framework Phase 1: maps service_category to which
+// resource pickers should render on the booking detail page. Two
+// non-canonical labels in the brief ("nursing", "pathology") are
+// mapped onto canonical SERVICE_CATEGORIES values: chronic and
+// diagnostics respectively.
+function pickersFor(serviceCategory: string | null): {
+  doctor: boolean;
+  paramedic: boolean;
+  partner: boolean;
+} {
+  switch (serviceCategory) {
+    case "teleconsult":
+      return { doctor: true, paramedic: false, partner: false };
+    case "homecare":
+      return { doctor: true, paramedic: true, partner: false };
+    case "chronic":
+      return { doctor: true, paramedic: true, partner: false };
+    case "diagnostics":
+      return { doctor: false, paramedic: false, partner: true };
+    default:
+      return { doctor: false, paramedic: false, partner: false };
+  }
+}
 
 function rupeesFor(b: BookingDetail): number | null {
   if (b.final_amount_paise != null) return b.final_amount_paise / 100;
@@ -121,31 +181,262 @@ export default async function BookingDetailPage({
   const { id } = await params;
   const supabase = await createOpsRSCClient();
 
-  const [{ data }, { data: doctorsData }] = await Promise.all([
-    supabase
-      .from("bookings")
-      .select(
-        `id, booking_code, created_at, patient_name, phone, service_category,
-         specific_ailment, manual_address, status, amount, final_amount_paise,
-         test_total_paise, payment_status, report_payment_status, scheduled_for,
-         assigned_at, dispatched_at, completed_at, cancelled_at,
-         cancellation_reason, notes, ops_notes, customer_id, partner_id, doctor_id,
-         customer:customers ( id, customer_code, full_name, phone, email ),
-         partner:partners ( id, partner_code, name, partner_type ),
-         doctor:doctors ( id, doctor_code, full_name, doctor_type )`,
-      )
-      .eq("id", id)
-      .maybeSingle(),
+  // M032 round 5 fix: previous rounds chased PostgREST embed ambiguity
+  // and missing-column issues (real, both fixed in r2-r4), but the page
+  // still 404'd. The actual residual bug is identifier shape: the
+  // route param `id` can be EITHER a UUID (linked from the list page)
+  // OR a booking_code like "SAN-B-00057" (typed in the URL bar). The
+  // loader was only doing `.eq("id", id)` against the UUID column —
+  // booking_code paste returned zero rows, fell to notFound().
+  //
+  // Fix: probe by UUID first; if that returns null AND the input
+  // looks like a booking_code, retry by booking_code. Both URL forms
+  // resolve cleanly.
+  //
+  // Plus: when nothing matches either probe, render a DIAGNOSTIC
+  // CARD inline instead of silent notFound(). Surfaces id, both
+  // probes' state, and any PostgREST error directly in the rendered
+  // page body so the next regression is visible without needing
+  // Netlify function logs.
+  //
+  // Pattern stays the dumb-and-unbreakable shape from r4: separate
+  // single-table SELECTs, no embeds.
+  const BOOKING_SELECT_COLS =
+    `id, booking_code, created_at, patient_name, phone, service_category,
+     specific_ailment, manual_address, status, amount, final_amount_paise,
+     test_total_paise, payment_status, report_payment_status, scheduled_for,
+     assigned_at, dispatched_at, completed_at, cancelled_at,
+     cancellation_reason, ops_notes,
+     customer_id, partner_id, doctor_id,
+     assigned_paramedic_id, assigned_partner_id, assigned_by`;
+
+  const UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const looksLikeUuid = UUID_RE.test(id);
+
+  const [
+    { data: bookingBase, error: bookingErr },
+    { data: doctorsData, error: doctorsErr },
+    { data: paramedicsData, error: paramedicsErr },
+    { data: partnersData, error: partnersErr },
+  ] = await Promise.all([
+    // Try UUID first if it parses as one; otherwise go straight to
+    // booking_code. Avoids the PostgREST `invalid input syntax for
+    // type uuid` error that booking_code paste would trigger on the
+    // UUID column.
+    looksLikeUuid
+      ? supabase
+          .from("bookings")
+          .select(BOOKING_SELECT_COLS)
+          .eq("id", id)
+          .maybeSingle()
+      : supabase
+          .from("bookings")
+          .select(BOOKING_SELECT_COLS)
+          .eq("booking_code", id)
+          .maybeSingle(),
     supabase
       .from("doctors")
       .select("id, doctor_code, full_name, doctor_type")
       .eq("is_active", true)
       .order("full_name", { ascending: true }),
+    supabase
+      .from("paramedics")
+      .select("id, name, phone, specialty")
+      .eq("is_active", true)
+      .order("name", { ascending: true }),
+    supabase
+      .from("partners")
+      .select("id, partner_code, name, partner_type")
+      .eq("is_active", true)
+      .order("name", { ascending: true }),
   ]);
 
-  const booking = data as BookingDetail | null;
-  if (!booking) notFound();
+  // Belt-and-braces: if UUID probe came up empty AND the id might
+  // ALSO be a valid booking_code (could happen if a future code
+  // format ever overlaps with UUIDs — unlikely but cheap to cover),
+  // retry on booking_code.
+  let resolvedBooking = bookingBase;
+  let resolvedErr = bookingErr;
+  if (!resolvedBooking && looksLikeUuid) {
+    const { data: byCode, error: codeErr } = await supabase
+      .from("bookings")
+      .select(BOOKING_SELECT_COLS)
+      .eq("booking_code", id)
+      .maybeSingle();
+    if (byCode) {
+      resolvedBooking = byCode;
+      resolvedErr = null;
+    } else if (codeErr) {
+      resolvedErr = codeErr;
+    }
+  }
+
+  if (bookingErr) {
+    console.error("[ops/bookings/[id]] base booking lookup error", {
+      id,
+      looksLikeUuid,
+      probedBy: looksLikeUuid ? "id" : "booking_code",
+      code: bookingErr.code,
+      message: bookingErr.message,
+      details: bookingErr.details,
+      hint: bookingErr.hint,
+    });
+  }
+  if (doctorsErr) {
+    console.error("[ops/bookings/[id]] active doctors lookup error", doctorsErr);
+  }
+  if (paramedicsErr) {
+    console.error("[ops/bookings/[id]] active paramedics lookup error", paramedicsErr);
+  }
+  if (partnersErr) {
+    console.error("[ops/bookings/[id]] active partners lookup error", partnersErr);
+  }
+  if (!resolvedBooking) {
+    console.error("[ops/bookings/[id]] booking null after both probes", {
+      id,
+      looksLikeUuid,
+      hadError: !!resolvedErr,
+    });
+    // Diagnostic render: instead of notFound() (which makes ALL 404s
+    // look identical and forces Netlify log archaeology), surface
+    // the exact state inline. Next regression on this surface is
+    // visible to the founder in the browser; the loader has visibly
+    // run and reported its findings.
+    return (
+      <div className="max-w-4xl mx-auto px-6 sm:px-8 py-12">
+        <Link
+          href="/ops/bookings"
+          className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-primary mb-6"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to bookings
+        </Link>
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6">
+          <h1 className="text-lg font-semibold text-amber-900 mb-2">
+            Booking not found
+          </h1>
+          <p className="text-sm text-amber-800 mb-4">
+            No booking matched the identifier in this URL. This could be
+            a typo, a deleted booking, or a regression on the lookup
+            path. Diagnostic state below — share with engineering if
+            this isn&apos;t what you expected:
+          </p>
+          <dl className="grid grid-cols-[160px_1fr] gap-y-1.5 gap-x-3 text-xs font-mono text-amber-900">
+            <dt className="text-amber-700">id (from URL):</dt>
+            <dd className="break-all">{id}</dd>
+            <dt className="text-amber-700">looksLikeUuid:</dt>
+            <dd>{String(looksLikeUuid)}</dd>
+            <dt className="text-amber-700">probed by:</dt>
+            <dd>{looksLikeUuid ? "id (UUID) then booking_code fallback" : "booking_code"}</dd>
+            <dt className="text-amber-700">PostgREST error:</dt>
+            <dd className="break-all">
+              {resolvedErr
+                ? `${resolvedErr.code ?? "?"} ${resolvedErr.message ?? ""}`
+                : "none"}
+            </dd>
+            {resolvedErr?.details && (
+              <>
+                <dt className="text-amber-700">error details:</dt>
+                <dd className="break-all">{resolvedErr.details}</dd>
+              </>
+            )}
+            {resolvedErr?.hint && (
+              <>
+                <dt className="text-amber-700">error hint:</dt>
+                <dd className="break-all">{resolvedErr.hint}</dd>
+              </>
+            )}
+          </dl>
+        </div>
+      </div>
+    );
+  }
+
+  // resolvedBooking is non-null here per the guard above. Cast
+  // through unknown because the SELECT projects only the column
+  // list (no join fields yet); join fields are populated in Stage 2.
+  type BookingBase = Omit<
+    BookingDetail,
+    "customer" | "partner" | "doctor" | "paramedic" | "assigned_partner" | "assigned_by_user"
+  >;
+  const base = resolvedBooking as unknown as BookingBase;
+
   const activeDoctors = (doctorsData as ActiveDoctor[] | null) ?? [];
+  const activeParamedics = (paramedicsData as ActiveParamedic[] | null) ?? [];
+  const activePartners = (partnersData as ActivePartner[] | null) ?? [];
+
+  // Stage 2: six parallel FK-target lookups.
+  const [
+    customerRow,
+    partnerRow,
+    doctorRow,
+    paramedicRow,
+    assignedPartnerRow,
+    assignedByUserRow,
+  ] = await Promise.all([
+    base.customer_id
+      ? supabase
+          .from("customers")
+          .select("id, customer_code, full_name, phone, email")
+          .eq("id", base.customer_id)
+          .maybeSingle()
+          .then((r) => r.data)
+      : Promise.resolve(null),
+    base.partner_id
+      ? supabase
+          .from("partners")
+          .select("id, partner_code, name, partner_type")
+          .eq("id", base.partner_id)
+          .maybeSingle()
+          .then((r) => r.data)
+      : Promise.resolve(null),
+    base.doctor_id
+      ? supabase
+          .from("doctors")
+          .select("id, doctor_code, full_name, doctor_type")
+          .eq("id", base.doctor_id)
+          .maybeSingle()
+          .then((r) => r.data)
+      : Promise.resolve(null),
+    base.assigned_paramedic_id
+      ? supabase
+          .from("paramedics")
+          .select("id, name, phone, specialty")
+          .eq("id", base.assigned_paramedic_id)
+          .maybeSingle()
+          .then((r) => r.data)
+      : Promise.resolve(null),
+    base.assigned_partner_id
+      ? supabase
+          .from("partners")
+          .select("id, partner_code, name, partner_type")
+          .eq("id", base.assigned_partner_id)
+          .maybeSingle()
+          .then((r) => r.data)
+      : Promise.resolve(null),
+    base.assigned_by
+      ? supabase
+          .from("ops_users")
+          .select("id, full_name")
+          .eq("id", base.assigned_by)
+          .maybeSingle()
+          .then((r) => r.data)
+      : Promise.resolve(null),
+  ]);
+
+  const booking: BookingDetail = {
+    ...base,
+    customer: (customerRow as BookingDetail["customer"]) ?? null,
+    partner: (partnerRow as BookingDetail["partner"]) ?? null,
+    doctor: (doctorRow as BookingDetail["doctor"]) ?? null,
+    paramedic: (paramedicRow as BookingDetail["paramedic"]) ?? null,
+    assigned_partner:
+      (assignedPartnerRow as BookingDetail["assigned_partner"]) ?? null,
+    assigned_by_user:
+      (assignedByUserRow as BookingDetail["assigned_by_user"]) ?? null,
+  };
+
+  const pickers = pickersFor(booking.service_category);
 
   const rupees = rupeesFor(booking);
   const isCancelled = booking.status === "CANCELLED";
@@ -249,16 +540,14 @@ export default async function BookingDetailPage({
             </div>
           </div>
         )}
-        {booking.notes && (
-          <div className="mt-5 pt-5 border-t border-slate-100">
-            <div className="text-xs text-slate-500 mb-1">
-              Patient-facing notes
-            </div>
-            <div className="text-sm text-slate-800 whitespace-pre-wrap">
-              {booking.notes}
-            </div>
-          </div>
-        )}
+        {/* "Patient-facing notes" block removed — bookings.notes column
+            was referenced in the SELECT + render here but doesn't
+            exist in the live schema (only ops_notes does). The whole
+            SELECT was failing at the PostgREST level with `column
+            "notes" does not exist`, returning data: null, which the
+            page treated as notFound() → 404 on every booking detail
+            URL. The "Ops notes (internal)" block further down keeps
+            its ops_notes write surface unchanged. */}
       </div>
 
       {/* Linked customer */}
@@ -359,9 +648,38 @@ export default async function BookingDetailPage({
         </form>
       </div>
 
+      {/* Assignment audit strip — shown when ANY assignment is in
+          place, summarising the latest assigned_at + assigned_by.
+          The (assigned_at, assigned_by) audit columns are most-recent
+          across all roles per Phase-3 flag from founder (any role
+          touched). */}
+      {(booking.doctor || booking.paramedic || booking.assigned_partner) &&
+        booking.assigned_at && (
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2 mb-6 text-[11px] text-slate-600">
+            Last assignment{" "}
+            <span className="font-mono">
+              {new Intl.DateTimeFormat("en-IN", {
+                timeZone: "Asia/Kolkata",
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+              }).format(new Date(booking.assigned_at))}
+            </span>
+            {booking.assigned_by_user
+              ? <> by <span className="font-medium">{booking.assigned_by_user.full_name}</span></>
+              : null}
+          </div>
+        )}
+
       {/* Assigned doctor — added in M4. Any ops user can assign; the
           revenue_share / commission auto-post happens later when status
-          flips to COMPLETED via the M019 trigger. */}
+          flips to COMPLETED via the M019 trigger.
+          M032: only rendered when service_category allows a doctor
+          (teleconsult / homecare / chronic). */}
+      {pickers.doctor && (
       <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
         <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-3">
           Assigned doctor
@@ -427,6 +745,140 @@ export default async function BookingDetailPage({
           </p>
         )}
       </div>
+      )}
+
+      {/* Assigned medic (paramedics table; UI label "Medic" per Q3) —
+          shown for homecare + chronic. Mirrors the doctor block shape. */}
+      {pickers.paramedic && (
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
+        <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-3">
+          Assigned medic
+        </div>
+        {booking.paramedic ? (
+          <div>
+            <div className="text-base font-semibold text-slate-900">
+              {booking.paramedic.name}
+            </div>
+            <div className="text-sm text-slate-500 mt-0.5">
+              {booking.paramedic.phone ?? "—"}
+              {booking.paramedic.specialty && (
+                <>
+                  {" · "}
+                  {booking.paramedic.specialty}
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm text-slate-500">
+            No medic assigned yet.
+          </div>
+        )}
+        <form
+          action={assignParamedic}
+          className="flex flex-wrap items-end gap-2 mt-4 pt-4 border-t border-slate-100"
+        >
+          <input type="hidden" name="booking_id" value={booking.id} />
+          <div className="grow min-w-[260px]">
+            <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-1">
+              {booking.paramedic ? "Reassign" : "Assign medic"}
+            </label>
+            <select
+              name="paramedic_id"
+              defaultValue={booking.assigned_paramedic_id ?? ""}
+              className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+            >
+              <option value="">— Unassigned —</option>
+              {activeParamedics.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                  {p.specialty ? ` (${p.specialty})` : ""}
+                </option>
+              ))}
+            </select>
+            {activeParamedics.length === 0 && (
+              <p className="text-[11px] text-slate-500 mt-1">
+                No active medics on file. Add via SQL or the future
+                /ops/medics admin (Phase 3).
+              </p>
+            )}
+          </div>
+          <button
+            type="submit"
+            className="bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+          >
+            Save
+          </button>
+        </form>
+      </div>
+      )}
+
+      {/* Assigned partner — for diagnostics only. Distinct from the
+          general-purpose "Link partner" block above which manages the
+          legacy bookings.partner_id column for any service. */}
+      {pickers.partner && (
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
+        <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-3">
+          Assigned partner (fulfillment)
+        </div>
+        {booking.assigned_partner ? (
+          <div>
+            <div className="text-base font-semibold text-slate-900">
+              {booking.assigned_partner.name}
+            </div>
+            <div className="text-sm text-slate-500 mt-0.5">
+              <span className="font-mono">
+                {booking.assigned_partner.partner_code}
+              </span>
+              {" · "}
+              {booking.assigned_partner.partner_type}
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm text-slate-500">
+            No partner assigned for fulfillment yet.
+          </div>
+        )}
+        <form
+          action={assignPartner}
+          className="flex flex-wrap items-end gap-2 mt-4 pt-4 border-t border-slate-100"
+        >
+          <input type="hidden" name="booking_id" value={booking.id} />
+          <div className="grow min-w-[260px]">
+            <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-1">
+              {booking.assigned_partner ? "Reassign" : "Assign partner"}
+            </label>
+            <select
+              name="partner_id"
+              defaultValue={booking.assigned_partner_id ?? ""}
+              className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+            >
+              <option value="">— Unassigned —</option>
+              {activePartners.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.partner_code} · {p.name} ({p.partner_type})
+                </option>
+              ))}
+            </select>
+            {activePartners.length === 0 && (
+              <p className="text-[11px] text-slate-500 mt-1">
+                No active partners. Add one from{" "}
+                <Link href="/ops/partners" className="underline">
+                  /ops/partners
+                </Link>
+                .
+              </p>
+            )}
+          </div>
+          <button
+            type="submit"
+            className="bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+          >
+            Save
+          </button>
+        </form>
+      </div>
+      )}
 
       {/* Actions: status, schedule, cancel */}
       <div className="grid lg:grid-cols-2 gap-6 mb-6">

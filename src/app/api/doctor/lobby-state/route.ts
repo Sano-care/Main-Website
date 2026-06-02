@@ -151,6 +151,35 @@ export async function GET() {
     }
   }
 
+  // M032: Mark-Attended gate. Per founder Q8, the doctor cannot mark
+  // a consult attended until a prescriptions row exists for the
+  // session with BOTH chief_complaint AND provisional_diagnosis
+  // populated (non-empty after trim). Compute the flag per session
+  // here so the LobbyPanel's Mark Attended button can render
+  // disabled+tooltip without an extra round-trip.
+  //
+  // No status filter — any version on the session with both fields
+  // populated passes (drafts qualify; the doctor has clearly examined
+  // the patient enough to know what's wrong).
+  const gateOpenBySession = new Set<string>();
+  if (sessionIds.length > 0) {
+    const { data: rxRows } = await supabaseAdmin
+      .from("prescriptions")
+      .select("session_id, chief_complaint, provisional_diagnosis")
+      .in("session_id", sessionIds);
+    for (const r of (rxRows ?? []) as {
+      session_id: string;
+      chief_complaint: string | null;
+      provisional_diagnosis: string | null;
+    }[]) {
+      const cc = (r.chief_complaint ?? "").trim();
+      const pd = (r.provisional_diagnosis ?? "").trim();
+      if (cc !== "" && pd !== "") {
+        gateOpenBySession.add(r.session_id);
+      }
+    }
+  }
+
   type SessionInfo = {
     session_id: string;
     booking_code: string | null;
@@ -161,6 +190,10 @@ export async function GET() {
     date_of_birth: string | null;
     gender: string | null;
     specific_ailment: string | null;
+    /** M032 / Q8: true iff a prescriptions row on this session has
+     *  BOTH chief_complaint AND provisional_diagnosis non-empty.
+     *  Drives the LobbyPanel "Mark Attended" button enabled state. */
+    mark_attended_gate_open: boolean;
   };
 
   const waiting: SessionInfo[] = [];
@@ -183,6 +216,7 @@ export async function GET() {
       date_of_birth: cust?.date_of_birth ?? null,
       gender: cust?.gender ?? null,
       specific_ailment: bk?.specific_ailment ?? null,
+      mark_attended_gate_open: gateOpenBySession.has(s.id),
     };
 
     // State derivation per the redirect brief:
