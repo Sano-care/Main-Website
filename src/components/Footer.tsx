@@ -236,6 +236,28 @@ export function Footer() {
                 </Link>
               </li>
             ))}
+            {/* Manage cookies — re-opens the DPDP consent preferences
+                modal regardless of prior consent. Dispatches a window
+                event picked up by <ConsentRoot/> mounted globally in
+                the root layout. The Footer itself only renders on
+                marketing surfaces, so this link is moot on /c/,
+                /doctor/, /ops/, /rx/, /portal/ — which is fine: those
+                surfaces never expected analytics in the first place
+                and the user can still adjust consent by returning to
+                any marketing page. */}
+            <li>
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    window.dispatchEvent(new Event("sano:openConsent"));
+                  }
+                }}
+                className="hover:text-primary transition-colors"
+              >
+                Manage cookies
+              </button>
+            </li>
           </ul>
         </div>
 
