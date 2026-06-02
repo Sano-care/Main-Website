@@ -44,8 +44,24 @@ import {
  * "Manage cookies" link still works on any page that mounts the
  * Footer, but those Footer-mounting surfaces are marketing-only by
  * construction.
+ *
+ * Matched by `pathname === prefix || pathname.startsWith(prefix + "/")`
+ * — NOT a plain `startsWith(prefix)`. Plain startsWith would
+ * false-positive on marketing routes that legitimately begin with a
+ * suppressed prefix's characters (e.g. /carehub, /contact would both
+ * match a bare "/c" prefix; /doctors would match "/doctor"). The
+ * boundary-aware matcher catches the bare suppressed root (/ops, /c,
+ * /rx, /portal, /doctor) AND any /prefix/* sub-path, while leaving
+ * /carehub and friends untouched.
  */
-const SUPPRESSED_PREFIXES = ["/c/", "/doctor/", "/ops/", "/rx/", "/portal/"];
+const SUPPRESSED_PREFIXES = ["/c", "/doctor", "/ops", "/rx", "/portal"];
+
+function isSuppressedPath(pathname: string | null): boolean {
+  if (!pathname) return false;
+  return SUPPRESSED_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(p + "/"),
+  );
+}
 
 /** Window event name dispatched by the Footer "Manage cookies" button. */
 export const OPEN_CONSENT_EVENT = "sano:openConsent";
@@ -71,8 +87,7 @@ export function ConsentRoot() {
       return;
     }
 
-    const suppressed = SUPPRESSED_PREFIXES.some((p) => pathname?.startsWith(p));
-    setShouldShowBanner(!suppressed);
+    setShouldShowBanner(!isSuppressedPath(pathname));
   }, [pathname]);
 
   // Footer-link reopen path.
