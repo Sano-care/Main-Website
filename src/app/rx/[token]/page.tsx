@@ -3,6 +3,7 @@ import Image from "next/image";
 import { Download, FileX, AlertTriangle, FileText } from "lucide-react";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { isValidRxPatientViewTokenFormat } from "@/lib/rx/tokens";
+import { formatIST } from "@/lib/time/formatIST";
 
 // =====================================================================
 // Patient-facing prescription view at /rx/<token>.
@@ -162,7 +163,7 @@ function ValidView({ token, row }: { token: string; row: SentRx }) {
         <h1 className="text-xl font-bold text-slate-900">{row.patient_name}</h1>
         <div className="text-sm text-slate-600 mt-1">
           From {row.doctor_name}
-          {row.sent_at && ` · ${formatWhen(row.sent_at)}`}
+          {row.sent_at && ` · ${formatIST(row.sent_at)}`}
         </div>
       </div>
 
@@ -248,13 +249,3 @@ function CenteredCard({
   );
 }
 
-function formatWhen(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}

@@ -23,19 +23,18 @@ import { useCmsSection } from "@/hooks/useCmsSection";
 import { useCmsBlogPost } from "@/hooks/useCmsBlogPost";
 import { BLOG_PAGE_CONTENT } from "@/constants/cms-content";
 import ReactMarkdown from "react-markdown";
+import { formatIST } from "@/lib/time/formatIST";
 
 // Related posts (exclude current)
 function getRelatedPosts(currentSlug: string): BlogPost[] {
   return BLOG_POSTS.filter((post) => post.slug !== currentSlug).slice(0, 3);
 }
 
+// T51: formatDate routed through formatIST(..., "dateLong"). Local
+// helper retained as a one-line wrapper so the call-sites read cleanly
+// ("formatDate(publishedAt)" is more legible than the inline arg form).
 function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString("en-IN", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  return formatIST(dateString, "dateLong");
 }
 
 export default function BlogPostPage() {
