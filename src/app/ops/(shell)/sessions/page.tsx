@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle2, Circle, XCircle } from "lucide-react";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
+import { formatIST } from "@/lib/time/formatIST";
 import { getCurrentOpsUser } from "../../_lib/getCurrentOpsUser";
 
 export const metadata: Metadata = {
@@ -52,23 +53,6 @@ type SessionLogRow = {
   started_at: string | null;
   ended_at: string | null;
 };
-
-const IST_FORMAT = new Intl.DateTimeFormat("en-IN", {
-  timeZone: "Asia/Kolkata",
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-});
-
-function fmtIst(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return IST_FORMAT.format(d);
-}
 
 function SignalCell({ value }: { value: boolean | null }) {
   // Tri-state: true → green check, false → grey dash circle, null → red X.
@@ -192,13 +176,13 @@ export default async function OpsSessionsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-500">
-                    {fmtIst(r.scheduled_at)}
+                    {formatIST(r.scheduled_at)}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <SignalCell value={r.joined_waiting_room} />
                     {r.waiting_room_joined_at && (
                       <div className="text-[10px] font-mono text-slate-400 mt-0.5">
-                        {fmtIst(r.waiting_room_joined_at).split(", ")[1] ?? ""}
+                        {formatIST(r.waiting_room_joined_at, "time")}
                       </div>
                     )}
                   </td>
@@ -206,7 +190,7 @@ export default async function OpsSessionsPage() {
                     <SignalCell value={r.admitted_to_consultation} />
                     {r.consultation_admitted_at && (
                       <div className="text-[10px] font-mono text-slate-400 mt-0.5">
-                        {fmtIst(r.consultation_admitted_at).split(", ")[1] ?? ""}
+                        {formatIST(r.consultation_admitted_at, "time")}
                       </div>
                     )}
                   </td>

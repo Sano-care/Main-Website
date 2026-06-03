@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { AlertCircle, CalendarPlus, Undo2 } from "lucide-react";
 import { markAttendance, undoAttendance } from "../actions";
+import { formatIST } from "@/lib/time/formatIST";
 
 type AttendanceRow = {
   id: string;
@@ -169,7 +170,7 @@ export function AttendanceSection({
               {attendance.map((a) => (
                 <tr key={a.id}>
                   <td className="py-2 text-slate-700 whitespace-nowrap">
-                    {new Date(a.work_date).toLocaleDateString("en-IN")}
+                    {formatIST(a.work_date, "date")}
                   </td>
                   <td className="py-2">
                     {a.is_present ? (

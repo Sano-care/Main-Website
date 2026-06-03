@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
+import { formatIST } from "@/lib/time/formatIST";
 import {
   BOOKING_STATUSES,
   STATUS_STYLE,
@@ -473,11 +474,11 @@ export default async function BookingDetailPage({
             {booking.customer?.full_name ?? booking.patient_name}
           </h1>
           <div className="text-sm text-slate-600 mt-1">
-            Created {new Date(booking.created_at).toLocaleString("en-IN")}
+            Created {formatIST(booking.created_at)}
             {booking.scheduled_for && (
               <>
                 {" · Scheduled "}
-                {new Date(booking.scheduled_for).toLocaleString("en-IN")}
+                {formatIST(booking.scheduled_for)}
               </>
             )}
           </div>
@@ -678,15 +679,7 @@ export default async function BookingDetailPage({
           <div className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2 mb-6 text-[11px] text-slate-600">
             Last assignment{" "}
             <span className="font-mono">
-              {new Intl.DateTimeFormat("en-IN", {
-                timeZone: "Asia/Kolkata",
-                year: "numeric",
-                month: "short",
-                day: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
-                hour12: true,
-              }).format(new Date(booking.assigned_at))}
+              {formatIST(booking.assigned_at)}
             </span>
             {booking.assigned_by_user
               ? <> by <span className="font-medium">{booking.assigned_by_user.full_name}</span></>
@@ -1028,7 +1021,7 @@ export default async function BookingDetailPage({
           <div className="text-sm text-slate-800">
             Cancelled{" "}
             {booking.cancelled_at
-              ? new Date(booking.cancelled_at).toLocaleString("en-IN")
+              ? formatIST(booking.cancelled_at)
               : "(no timestamp)"}
           </div>
           {booking.cancellation_reason && (
@@ -1086,7 +1079,7 @@ function Stamp({ label, iso }: { label: string; iso: string | null }) {
     <div>
       <span className="text-xs text-slate-500">{label}: </span>
       <span className="text-sm text-slate-800">
-        {iso ? new Date(iso).toLocaleString("en-IN") : "—"}
+        {formatIST(iso)}
       </span>
     </div>
   );
@@ -1193,12 +1186,7 @@ async function BookingPrescriptionsSection({
                   )
                 )}
                 <span className="text-slate-500">
-                  {new Date(r.sent_at ?? r.created_at).toLocaleString("en-IN", {
-                    day: "2-digit",
-                    month: "short",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  {formatIST(r.sent_at ?? r.created_at)}
                 </span>
               </div>
             </li>

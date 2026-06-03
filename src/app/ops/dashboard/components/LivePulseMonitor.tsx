@@ -19,6 +19,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { BookingRow, Paramedic, SERVICE_LABELS, BookingStatus } from "@/lib/supabase";
+import { formatIST } from "@/lib/time/formatIST";
 
 interface LivePulseMonitorProps {
   bookings: BookingRow[];
@@ -131,17 +132,10 @@ export function LivePulseMonitor({
     return paramedic?.name || "Unknown";
   };
 
-  const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
-    return date.toLocaleDateString();
-  };
+  // T51: hand-rolled formatter ripped — formatIST(value, "relativeShort")
+  // covers the same range with hybrid short/long Intl styles. "Just now"
+  // is now "now" (Intl's RelativeTimeFormat default); sub-minute precision
+  // wasn't load-bearing here.
 
   const getGoogleMapsUrl = (booking: BookingRow) => {
     const gps = booking.gps_location as { lat: number; lng: number } | null;
@@ -308,7 +302,7 @@ export function LivePulseMonitor({
                             <span className="size-2 rounded-full bg-red-500 animate-pulse" />
                           )}
                           <span className={`text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>
-                            {formatTime(booking.created_at)}
+                            {formatIST(booking.created_at, "relativeShort")}
                           </span>
                         </div>
                       </td>
@@ -387,7 +381,7 @@ export function LivePulseMonitor({
                         </span>
                         {booking.dispatched_at && (
                           <p className="text-xs text-slate-500">
-                            {formatTime(booking.dispatched_at)}
+                            {formatIST(booking.dispatched_at, "relativeShort")}
                           </p>
                         )}
                       </td>

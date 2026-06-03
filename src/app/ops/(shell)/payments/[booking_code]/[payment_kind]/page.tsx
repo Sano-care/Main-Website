@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
+import { formatIST } from "@/lib/time/formatIST";
 import { getCurrentOpsUser } from "../../../../_lib/getCurrentOpsUser";
 import { RefundForm } from "./RefundForm";
 import { ReconcileForm } from "./ReconcileForm";
@@ -146,9 +147,9 @@ export default async function PaymentDetailPage({
           )}
         </div>
         <div className="text-sm text-slate-600 mt-2">
-          Created {new Date(payment.created_at).toLocaleString("en-IN")}
+          Created {formatIST(payment.created_at)}
           {payment.captured_at && (
-            <> · Captured {new Date(payment.captured_at).toLocaleString("en-IN")}</>
+            <> · Captured {formatIST(payment.captured_at)}</>
           )}
         </div>
       </div>
@@ -315,7 +316,7 @@ export default async function PaymentDetailPage({
                     {r.reason ?? "—"}
                   </td>
                   <td className="px-5 py-3 text-xs text-slate-500 whitespace-nowrap">
-                    {new Date(r.created_at).toLocaleString("en-IN")}
+                    {formatIST(r.created_at)}
                   </td>
                 </tr>
               ))}
