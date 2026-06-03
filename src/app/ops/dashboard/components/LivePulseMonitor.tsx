@@ -338,6 +338,7 @@ export function LivePulseMonitor({
                         </div>
                         {booking.amount && (
                           <span className={`text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                            {/* eslint-disable-next-line no-restricted-syntax -- Number.toLocaleString for currency, not Date. */}
                             ₹{booking.amount.toLocaleString()}
                           </span>
                         )}

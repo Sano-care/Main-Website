@@ -72,7 +72,12 @@ export function DispatchModal({
 📞 *Phone:* ${booking.phone}
 
 🩺 *Service:* ${SERVICE_LABELS[booking.service_category] || booking.service_category}
-${booking.amount != null && booking.amount > 0 ? `💰 *Price:* ₹${booking.amount.toLocaleString()}` : ""}
+${
+      booking.amount != null && booking.amount > 0
+        // eslint-disable-next-line no-restricted-syntax -- Number.toLocaleString for currency, not Date.
+        ? `💰 *Price:* ₹${booking.amount.toLocaleString()}`
+        : ""
+    }
 
 📍 *Address:* ${booking.manual_address}
 🗺️ *Maps:* ${mapsLink}
@@ -189,6 +194,7 @@ Please proceed immediately. Reply when you reach the location.`;
                     </span>
                     {booking.amount != null && booking.amount > 0 && (
                       <span className="text-primary font-semibold">
+                        {/* eslint-disable-next-line no-restricted-syntax -- Number.toLocaleString for currency, not Date. */}
                         ₹{booking.amount.toLocaleString()}
                       </span>
                     )}
