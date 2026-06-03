@@ -12,6 +12,7 @@ import {
   Clock,
 } from "lucide-react";
 import { useSessionAdmitState } from "@/lib/realtime/useSessionAdmitState";
+import { formatIST } from "@/lib/time/formatIST";
 
 /**
  * The interactive part of /c/[token]. Drives the patient's journey from
@@ -575,13 +576,8 @@ export function PatientJoinClient({
   // it flips non-null, the [admittedAt, state] effect calls
   // mintAndJoin() which transitions us into "joining".
   if (state === "waiting-room") {
-    const scheduled = new Date(scheduledAt);
-    const scheduledLabel = Number.isFinite(scheduled.getTime())
-      ? scheduled.toLocaleString("en-IN", {
-          dateStyle: "medium",
-          timeStyle: "short",
-        })
-      : null;
+    const scheduledFormatted = formatIST(scheduledAt);
+    const scheduledLabel = scheduledFormatted === "—" ? null : scheduledFormatted;
     // "Send to Waiting" re-entry: the patient was already in-call and
     // the doctor pushed them back. M031: wasEverAdmitted is the
     // server-derived signal (true iff consultation_sessions.

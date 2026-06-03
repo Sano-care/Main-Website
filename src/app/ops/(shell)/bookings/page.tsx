@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Search, Plus } from "lucide-react";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
+import { formatIST } from "@/lib/time/formatIST";
 import {
   BOOKING_STATUSES,
   SERVICE_CATEGORIES,
@@ -326,7 +327,7 @@ export default async function BookingsListPage({
                       {rupees != null ? `₹${rupees.toLocaleString("en-IN")}` : "—"}
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-500">
-                      {new Date(b.created_at).toLocaleString("en-IN")}
+                      {formatIST(b.created_at)}
                     </td>
                   </tr>
                 );

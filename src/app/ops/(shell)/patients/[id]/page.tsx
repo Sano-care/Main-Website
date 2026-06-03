@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
+import { formatIST } from "@/lib/time/formatIST";
 import { ProfileCard } from "./ProfileCard";
 
 export const metadata: Metadata = {
@@ -102,7 +103,7 @@ export default async function PatientDetailPage({
           </div>
           <h1 className="text-2xl font-bold text-slate-900">{customer.full_name}</h1>
           <div className="text-sm text-slate-600 mt-1">
-            Created {new Date(customer.created_at).toLocaleString("en-IN")}
+            Created {formatIST(customer.created_at)}
           </div>
         </div>
       </div>
@@ -160,7 +161,7 @@ export default async function PatientDetailPage({
                       </Link>
                     </td>
                     <td className="px-5 py-3 text-slate-600">
-                      {new Date(b.created_at).toLocaleString("en-IN")}
+                      {formatIST(b.created_at)}
                     </td>
                     <td className="px-5 py-3 text-slate-700">
                       {b.service_category ?? "—"}

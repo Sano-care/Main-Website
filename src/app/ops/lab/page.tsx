@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { ArrowLeft, AlertCircle } from "lucide-react";
 import type { Metadata } from "next";
+import { formatIST } from "@/lib/time/formatIST";
 
 export const metadata: Metadata = {
   title: "Ops · Lab Orders",
@@ -218,7 +219,7 @@ export default async function OpsLabPage() {
                           Test total
                         </div>
                         <div className="text-xs text-text-secondary mt-2">
-                          {new Date(b.created_at).toLocaleString("en-IN")}
+                          {formatIST(b.created_at)}
                         </div>
                       </div>
                     </div>

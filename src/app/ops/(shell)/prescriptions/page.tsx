@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle2, AlertCircle, FileX, History, FileText, Send } from "lucide-react";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
+import { formatIST } from "@/lib/time/formatIST";
 import { getCurrentOpsUser } from "../../_lib/getCurrentOpsUser";
 
 export const metadata: Metadata = {
@@ -138,7 +139,7 @@ export default async function OpsPrescriptionsList({
                     )}
                   </td>
                   <td className="px-4 py-2 text-xs text-slate-500">
-                    {formatWhen(r.sent_at ?? r.created_at)}
+                    {formatIST(r.sent_at ?? r.created_at)}
                   </td>
                 </tr>
               ))
@@ -204,12 +205,3 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-function formatWhen(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}

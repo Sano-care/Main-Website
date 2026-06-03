@@ -60,6 +60,8 @@
 //   NEXT_PUBLIC_SITE_URL                    — default 'https://sanocare.in';
 //                                              used to build the Rx URL.
 
+import { formatIST } from "@/lib/time/formatIST";
+
 const DEFAULT_API_URL =
   "https://api.rampwin.com/api/messages/send?dontShowInChatList=false";
 const DEFAULT_SITE_URL = "https://sanocare.in";
@@ -107,18 +109,17 @@ export interface SendRxLinkInput {
   signedPdfUrl?: string | null;
 }
 
-/** Format an ISO timestamp as "27 May 2026" in en-IN locale. Used for
- *  the body-only template's {{3}} consultation-date placeholder.
- *  Returns the input verbatim if it doesn't parse — defensive against
- *  upstream loaders that hand us a malformed string. */
+/** Format an ISO timestamp as "27 May 2026" in IST. Used for the
+ *  body-only template's {{3}} consultation-date placeholder. The
+ *  template is date-only (no time variable bound) so we use the
+ *  "dateLong" format token — full month name, formal-Rx tone.
+ *
+ *  T51: was a local en-IN toLocaleDateString call without explicit
+ *  timezone, which would render a UTC date on Netlify SSR for late-IST
+ *  consultations. formatIST() forces Asia/Kolkata so the consult date
+ *  matches the IST calendar even when SSR runs in UTC. */
 function formatConsultationDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return formatIST(iso, "dateLong");
 }
 
 export interface SendRxLinkResult {

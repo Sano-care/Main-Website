@@ -15,6 +15,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { BookingRow, Paramedic, SERVICE_LABELS } from "@/lib/supabase";
+import { formatIST } from "@/lib/time/formatIST";
 
 interface DispatchModalProps {
   isOpen: boolean;
@@ -71,7 +72,12 @@ export function DispatchModal({
 📞 *Phone:* ${booking.phone}
 
 🩺 *Service:* ${SERVICE_LABELS[booking.service_category] || booking.service_category}
-${booking.amount != null && booking.amount > 0 ? `💰 *Price:* ₹${booking.amount.toLocaleString()}` : ""}
+${
+      booking.amount != null && booking.amount > 0
+        // eslint-disable-next-line no-restricted-syntax -- Number.toLocaleString for currency, not Date.
+        ? `💰 *Price:* ₹${booking.amount.toLocaleString()}`
+        : ""
+    }
 
 📍 *Address:* ${booking.manual_address}
 🗺️ *Maps:* ${mapsLink}
@@ -95,13 +101,6 @@ Please proceed immediately. Reply when you reach the location.`;
     }
 
     setIsSubmitting(false);
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString("en-IN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
   };
 
   const getGoogleMapsUrl = () => {
@@ -195,6 +194,7 @@ Please proceed immediately. Reply when you reach the location.`;
                     </span>
                     {booking.amount != null && booking.amount > 0 && (
                       <span className="text-primary font-semibold">
+                        {/* eslint-disable-next-line no-restricted-syntax -- Number.toLocaleString for currency, not Date. */}
                         ₹{booking.amount.toLocaleString()}
                       </span>
                     )}
@@ -203,7 +203,7 @@ Please proceed immediately. Reply when you reach the location.`;
                   <div className="flex items-center gap-3">
                     <Clock className={`w-4 h-4 ${isDark ? "text-slate-500" : "text-slate-400"}`} />
                     <span className={`${isDark ? "text-slate-400" : "text-slate-500"} text-sm`}>
-                      Booked: {formatDate(booking.created_at)}
+                      Booked: {formatIST(booking.created_at)}
                     </span>
                   </div>
 
