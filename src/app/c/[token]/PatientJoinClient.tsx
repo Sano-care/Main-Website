@@ -12,6 +12,7 @@ import {
   Clock,
 } from "lucide-react";
 import { useSessionAdmitState } from "@/lib/realtime/useSessionAdmitState";
+import { MicBlockedBanner } from "./_components/MicBlockedBanner";
 
 /**
  * The interactive part of /c/[token]. Drives the patient's journey from
@@ -104,6 +105,12 @@ export function PatientJoinClient({
   // auto-advance to joining once consent is acknowledged.
   const [state, setState] = useState<ClientState>("consent");
   const [error, setError] = useState<string | null>(null);
+  // T52: mic-permission denied banner. Set true when Daily emits a
+  // 'camera-error' with type='permissions' AND blockedMedia includes
+  // 'audio'. Dismissible via the × on the banner. No auto-hide wire —
+  // Daily's own in-iframe mic icon owns the retry flow; patient closes
+  // the banner manually once their mic works.
+  const [micBlocked, setMicBlocked] = useState(false);
 
   // ---- Realtime/polling on the session's admit state ----
   //
@@ -284,6 +291,32 @@ export function PatientJoinClient({
             setError("The call disconnected unexpectedly. Please rejoin.");
             setState("error");
             setDailyArgs(null);
+          }
+        });
+        // T52: mic-permission detection. Daily's 'camera-error' event
+        // (poorly named — covers mic too) fires with a permissions
+        // payload when the browser blocks audio. We narrow to
+        // type === 'permissions' AND blockedMedia includes 'audio' to
+        // avoid surfacing the banner for camera-only blocks (patient
+        // chose to disable camera — out of scope per the brief).
+        // Other camera-error types ('mic-in-use', 'not-found') are NOT
+        // caught here — Daily Prebuilt's own in-iframe UI shows those
+        // errors; we don't want two surfaces racing on the same event.
+        frame.on("camera-error", (e: unknown) => {
+          const evt = e as {
+            type?: string;
+            blockedMedia?: Array<string>;
+          } | null;
+          if (
+            !cancelled &&
+            evt?.type === "permissions" &&
+            Array.isArray(evt.blockedMedia) &&
+            evt.blockedMedia.includes("audio")
+          ) {
+            console.log("[patient-join-client] mic permission blocked", {
+              blockedMedia: evt.blockedMedia,
+            });
+            setMicBlocked(true);
           }
         });
 
@@ -524,6 +557,19 @@ export function PatientJoinClient({
           }
         >
           <div ref={containerRef} className="absolute inset-0" />
+          {/* T52: mic-permission banner. Sits above the Daily iframe
+              wrapper with absolute positioning so it overlays the
+              top of the video area when in-call (where mic errors
+              are most likely to surface), and inside the joining
+              card otherwise. z-20 > the Sanocare badge's z-10 so
+              it stacks on top when both are visible. `pointer-events-
+              auto` so the × is clickable; the badge sibling stays
+              pointer-events-none. */}
+          {micBlocked && (
+            <div className="absolute top-2 left-2 right-2 z-20 pointer-events-auto">
+              <MicBlockedBanner onDismiss={() => setMicBlocked(false)} />
+            </div>
+          )}
           {/* v6.1: Sanocare brand badge anchored top-left of the
               iframe wrapper. Renders across both joining (small
               card view) and in-call (fullscreen view) — the
