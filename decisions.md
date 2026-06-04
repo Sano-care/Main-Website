@@ -143,3 +143,79 @@ separate task — recommend doing it in Week 2 alongside the LLM.
 Env notes and `.netlify/` artifacts show the app deploys on Netlify, not Vercel
 (handover/spec say Vercel). No code impact for Week 1; relevant only for where
 the env vars are set and for the queue choice in Week 2 (see D3).
+
+---
+---
+
+# Week-2 kickoff addendum (founder review 2026-06-04)
+
+Shashwat approved D3, D4, D6, D7 and unblocked Week 2. Status updates + new
+decisions from that review and the repo reconciliation below.
+
+## D3 ✅ APPROVED — inline before 200 OK
+Confirmed correct at ~1 lead/week. Revisit only past ~100 inbound/day.
+
+## D4 ✅ APPROVED + change — handoff is WhatsApp, NOT Slack
+Full phone in body / masked title approved. **Major change: Slack is dropped
+entirely.** Ops handoff is a WhatsApp **template** message to the founder's
+personal number (`MY_PERSONAL_WHATSAPP=+919760059900`), sent via Meta Cloud API
+by the `escalate_to_ops` tool. Template `aarogya_lead_alert` (Meta-approved,
+id pending). Additional audit event **`ops_viewed_full_number`** — logged when
+the ops handoff message is *read*; since there is no Slack "opened" event, this
+maps to the Cloud API `read` status webhook for the outbound handoff message.
+→ `src/lib/slack/alerts.ts` will be retired/replaced by the WhatsApp handoff in
+the adapter; Block-Kit structure is reused as the WhatsApp message layout.
+
+## D6 ✅ APPROVED + addition — emergency for opted-out user
+Block the auto-reply, still alert ops + escalate. Add audit event
+**`emergency_for_opted_out_user`** for compliance visibility.
+
+## D7 ✅ KEEP for v1, TUNE in v1.1 — broad emergency keywords
+Keep `urgent`/`serious` (err toward over-alerting). Add false-positive
+tracking: an ops "not actually emergency" action (button in the handoff message
+or `/admin`) logs an FP audit event; prune after ~2 weeks of real data.
+
+## D11 — RLS enabled on all 6 agent tables — **DECIDED**
+The six tables hold full phone numbers, transcripts and medical context. The
+Supabase advisor flags RLS-disabled public tables as readable by anyone with the
+public anon key (the key ships in the browser bundle). All six are written/read
+ONLY via the service-role client (`supabaseAdmin`), which bypasses RLS — so they
+ship **RLS-enabled with zero policies**: app works, anon key denied. Closes the
+"lead data leak / Catastrophic" risk (§13). Departs from M033's RLS-disabled
+`consent_ledger` because that table holds only consent booleans, not PII.
+**Separately flagged to founder (not fixed — his tables):** existing
+`public.vitals` (medical) and `public.callback_requests` (name+phone) are
+RLS-disabled and anon-readable; recommend enabling RLS + policies.
+
+## D12 — Migration renumbered 034 → 035 + applied via MCP — **DECIDED**
+Between Week-1 and Week-2 the repo diverged: a parallel `callback_requests`
+migration took number **034** (already live). The agent schema was renumbered to
+`035_whatsapp_agent.sql` and applied to the live DB via the Supabase MCP
+(project `qkjidzaltuvapnjlcvof`). Beyond renumbering, the applied 035 differs
+from the reviewed Week-1 DDL by: (a) `conversations.channel` column
+(default `whatsapp`, CHECK whatsapp|website|mobile) — the channel-agnostic
+requirement; (b) `escalations.escalation_type` CHECK widened to the **union** of
+the spec list and the `escalate_to_ops` function enum (adds `qualified_lead`,
+`stalled_conversation`) so the Week-2 tool call cannot throw; (c) RLS (D11).
+The repo migration file was reconciled on `feat/whatsapp-agent-week1` via a git
+worktree so the parallel `web-v2-mobile-first-hero` working tree was untouched.
+
+## D13 — 🚩 OPEN BLOCKER — Rampwin → Meta-direct cutover (Day 7)
+The Sanocare WhatsApp number is operated via **Rampwin (BSP)** today
+(`OTP_DEFAULT_CHANNEL=rampwin`, `WHATSAPP_OTP_ENABLED=false`, the
+`aarogya-rampwin-flow-v*.json` flows, KB function specs written "for Rampwin's
+Functions section", consult join-links "via Rampwin WhatsApp"). A number's
+inbound webhook can point to exactly ONE destination. Cutting it to
+`sanocare.in/api/whatsapp/webhook` will (a) break OTP delivery unless OTP is
+flipped to Meta-direct (`WHATSAPP_OTP_ENABLED=true`, existing
+`src/lib/otp/whatsapp.ts`) at the same moment — needs an approved `sanocare_otp`
+template on the Meta-direct WABA — and (b) retire the existing Rampwin Aarogya
+flow. **Has 24–48h+ lead time. Founder action required before Day 7.**
+
+## Reconciliation notes for the Week-2 system prompt (from CLAUDE.md + KB)
+- Medics are **GNM / B.Sc Nursing**, NOT ANM (founder override beats spec §8).
+- Doctors are **MBBS on live video**, they do NOT visit the home — the "doctor
+  home visit" framing in the spec must be reconciled with the actual teleconsult
+  model before loading the prompt. **Flag for founder.**
+- Sanocare is **planned care, not emergency**; brand coral accent `#F4845A`
+  exists alongside blue `#2B81FF`.
