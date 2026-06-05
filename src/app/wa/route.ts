@@ -11,18 +11,18 @@
 // (invisible). A <meta refresh> + <noscript> backstop guarantee the redirect
 // even if JS errors or is disabled — the user is NEVER stranded.
 //
-// IMPORTANT REALITY (see PR description): the GTM container (GTM-T6K94WMC) is
-// currently EMPTY and there is no GA4 / Meta Pixel / Google Ads ID wired in the
-// app. So the conversion fires below are dormant until the founder creates those
-// and sets GA4_MEASUREMENT_ID / META_PIXEL_ID / GOOGLE_ADS_CONVERSION (or
-// configures the GTM container to act on the `whatsapp_click_paid` dataLayer
-// event we always push). The redirect + server log work today regardless.
+// ANALYTICS POSTURE (founder decision 2026-06-05): GA4 + Google Ads fire here
+// directly under Consent Mode v2 default-deny (cookieless modelling pings). The
+// Meta Pixel is NOT fired here — it runs via a consent-gated GTM tag, so it
+// never sets cookies pre-consent (healthcare DPDP). GA4_MEASUREMENT_ID defaults
+// to the live property; GOOGLE_ADS_CONVERSION is set once the Ads conversion
+// action exists. The redirect + server log work regardless of any of this.
 //
 // Corrections vs the spec skeleton:
 //   * Supabase (supabaseAdmin), not the non-existent `@/lib/db` `sql`.
-//   * gtag/fbq are loaded HERE (route handlers don't inherit the root layout
-//     where GTM lives), and every call is guarded so it can never block the
-//     redirect.
+//   * gtag is loaded + consent-defaulted HERE (route handlers don't inherit the
+//     root layout/Consent script), every call guarded so tracking can never
+//     block the redirect; the Pixel is routed via consent-gated GTM, not direct.
 //   * DB insert runs via after() so it can't be dropped as an un-awaited
 //     promise, without blocking TTFB.
 //   * UTM values are attacker-controllable — they are JSON-encoded and
@@ -122,13 +122,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   });
 
   // (2) Config the inline script reads — XSS-safe (UTMs are user input).
+  // GA4 + Google Ads fire DIRECTLY here under Consent Mode (cookieless). Meta
+  // Pixel is intentionally NOT fired here — it runs via the consent-gated GTM
+  // tag off the whatsapp_click_paid dataLayer event (DPDP: Consent Mode v2,
+  // founder decision). The GTM container is NOT loaded on /wa on purpose: doing
+  // so would double-fire the Ads conversion (GTM tag + direct fire) and corrupt
+  // Smart Bidding. The independent backup is the server-side paid_click_log.
   const cfg = safeJson({
     wa: waUrl,
     service,
     utm,
-    ga4: process.env.GA4_MEASUREMENT_ID ?? null, // e.g. "G-XXXXXXX"
-    pixel: process.env.META_PIXEL_ID ?? null, // e.g. "123456789012345"
-    ads: process.env.GOOGLE_ADS_CONVERSION ?? null, // e.g. "AW-XXXXXXXXX/YYYYY"
+    ga4: process.env.GA4_MEASUREMENT_ID ?? "G-VSP31JFVVJ", // public id; env overrides
+    ads: process.env.GOOGLE_ADS_CONVERSION ?? null, // AW-.../label — set when ready
   });
 
   const waAttr = escapeAttr(waUrl);
@@ -145,8 +150,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   var cfg = ${cfg};
   function go(){ try { window.location.replace(cfg.wa); } catch(e){ window.location.href = cfg.wa; } }
   try {
-    // Always push to dataLayer so a (later-configured) GTM container can fire tags.
     window.dataLayer = window.dataLayer || [];
+    function gtag(){ window.dataLayer.push(arguments); }
+    window.gtag = window.gtag || gtag;
+    // Consent Mode v2 default-deny: GA4 + Ads send COOKIELESS modelling pings
+    // until the user consents elsewhere. Healthcare DPDP posture (founder call).
+    gtag('consent', 'default', { ad_storage: 'denied', analytics_storage: 'denied',
+      ad_user_data: 'denied', ad_personalization: 'denied' });
+    // Event for the consent-gated GTM tags (incl. the Meta Pixel, which is NOT
+    // fired directly here). GTM is not loaded on /wa, so this is a no-op on this
+    // page today; it is the integration point if a GTM Pixel tag is ever loaded.
     window.dataLayer.push({ event: 'whatsapp_click_paid', service: cfg.service,
       utm_source: cfg.utm.source, utm_medium: cfg.utm.medium, utm_campaign: cfg.utm.campaign,
       utm_content: cfg.utm.content, utm_term: cfg.utm.term });
@@ -155,24 +168,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       var g = document.createElement('script'); g.async = true;
       g.src = 'https://www.googletagmanager.com/gtag/js?id=' + cfg.ga4;
       document.head.appendChild(g);
-      function gtag(){ window.dataLayer.push(arguments); }
-      window.gtag = window.gtag || gtag;
       gtag('js', new Date());
       gtag('config', cfg.ga4, { transport_type: 'beacon' });
       gtag('event', 'whatsapp_click', { service: cfg.service, transport_type: 'beacon',
         utm_source: cfg.utm.source, utm_medium: cfg.utm.medium, utm_campaign: cfg.utm.campaign,
         utm_content: cfg.utm.content, utm_term: cfg.utm.term });
       if (cfg.ads) gtag('event', 'conversion', { send_to: cfg.ads, transport_type: 'beacon' });
-    }
-
-    if (cfg.pixel) {
-      !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-        n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
-        n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
-        t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}
-        (window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
-      fbq('init', cfg.pixel);
-      fbq('track', 'Lead', { content_name: cfg.service });
     }
   } catch (e) { /* tracking must never block the redirect */ }
   setTimeout(go, 150);
