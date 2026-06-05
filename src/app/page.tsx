@@ -2,7 +2,6 @@ import { DNABackground } from "@/components/ui";
 import {
   Navbar,
   Hero,
-  HomeGalleryBanner,
   StatsBar,
   Features,
   Journey,
@@ -52,10 +51,6 @@ export default function Home() {
         {SHOW_PULSE_BANNER && <TopBanner />}
 
         <main className="flex flex-col flex-1 pb-20 lg:pb-0">
-          {/* Gallery banner sits above the hero; not part of the reveal cascade
-              (it auto-plays its own carousel). */}
-          <HomeGalleryBanner />
-
           <SectionReveal>
             <Hero />
           </SectionReveal>
