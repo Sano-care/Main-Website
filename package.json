@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lighthouse:audit": "npx -y lighthouse https://sanocare.in --form-factor=mobile --only-categories=performance,accessibility,seo --output html --output-path lighthouse-baseline.html"
   },
   "dependencies": {
     "@daily-co/daily-js": "^0.90.0",
