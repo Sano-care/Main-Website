@@ -106,14 +106,16 @@ export async function getImportableRx(
   // with a line-item count. The doctor name is resolved separately — there are
   // two FKs from prescriptions to doctors (doctor_id + created_by_doctor_id),
   // so an embedded `doctors(...)` would be ambiguous.
-  // prescription_items!inner → only prescriptions that HAVE at least one line
-  // item come back (PostgREST's EXISTS equivalent), so an empty Rx never reaches
-  // the import banner. The (count) aggregate is still read for item_count, and a
-  // JS count>0 guard below double-checks it.
+  // prescription_items(count) gives the line-item count per Rx; the JS count>0
+  // guard below filters out empty Rxs so the import banner only offers a
+  // prescription that actually has medicines to import. (This keeps the exact
+  // PostgREST embed that's already proven in prod and applies the EXISTS as a
+  // guard on the fetched count — equivalent outcome, no inner-join-aggregate
+  // surprises.)
   const { data: candidates, error: candErr } = await supabaseAdmin
     .from("prescriptions")
     .select(
-      "id, sent_at, doctor_id, bookings!inner(customer_id), prescription_items!inner(count)",
+      "id, sent_at, doctor_id, bookings!inner(customer_id), prescription_items(count)",
     )
     .eq("bookings.customer_id", customerId)
     .eq("status", "sent")

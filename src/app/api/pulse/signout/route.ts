@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
 import { VERIFY_COOKIE_NAME } from "@/lib/otp/token";
 
@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 // clears the patient verify cookie; it deliberately leaves any doctor session
 // cookie (sanocare_doctor_session) untouched.
 
-export async function POST(_req: NextRequest) {
+export async function POST() {
   const response = new NextResponse(null, { status: 204 });
   response.cookies.set({
     name: VERIFY_COOKIE_NAME,
