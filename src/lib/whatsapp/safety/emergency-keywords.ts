@@ -33,6 +33,9 @@ export const EMERGENCY_KEYWORDS: Record<string, string[]> = {
     "fainted",
     "passed out",
     "behosh",
+    "dil ka daura",
+    "not responding",
+    "not waking up",
   ],
   trauma: [
     "severe bleeding",
@@ -42,6 +45,7 @@ export const EMERGENCY_KEYWORDS: Record<string, string[]> = {
     "injured",
     "injury",
     "head injury",
+    "head trauma",
     "burn",
     "burnt",
     "jal gaya",
@@ -58,6 +62,7 @@ export const EMERGENCY_KEYWORDS: Record<string, string[]> = {
     "severe pain",
     "unbearable pain",
     "bahut dard",
+    "bahut zyada dard",
     "overdose",
     "poisoning",
     "zeher",
@@ -65,6 +70,7 @@ export const EMERGENCY_KEYWORDS: Record<string, string[]> = {
     "suicide",
     "khudkushi",
     "self-harm",
+    "marna chahta hoon",
   ],
   pediatric_maternal: [
     "baby not breathing",
@@ -76,6 +82,7 @@ export const EMERGENCY_KEYWORDS: Record<string, string[]> = {
   ],
   general: [
     "emergency",
+    "911",
     "urgent",
     "serious",
     "dying",
