@@ -106,10 +106,14 @@ export async function getImportableRx(
   // with a line-item count. The doctor name is resolved separately — there are
   // two FKs from prescriptions to doctors (doctor_id + created_by_doctor_id),
   // so an embedded `doctors(...)` would be ambiguous.
+  // prescription_items!inner → only prescriptions that HAVE at least one line
+  // item come back (PostgREST's EXISTS equivalent), so an empty Rx never reaches
+  // the import banner. The (count) aggregate is still read for item_count, and a
+  // JS count>0 guard below double-checks it.
   const { data: candidates, error: candErr } = await supabaseAdmin
     .from("prescriptions")
     .select(
-      "id, sent_at, doctor_id, bookings!inner(customer_id), prescription_items(count)",
+      "id, sent_at, doctor_id, bookings!inner(customer_id), prescription_items!inner(count)",
     )
     .eq("bookings.customer_id", customerId)
     .eq("status", "sent")
@@ -139,19 +143,27 @@ export async function getImportableRx(
       .filter((v): v is string => !!v),
   );
 
-  const fresh = candidates.find((c) => !importedSet.has(c.id as string));
-  if (!fresh) return null;
-
   // Supabase renders the prescription_items aggregate as a 1-element array.
-  const itemCountRow = Array.isArray(fresh.prescription_items)
-    ? fresh.prescription_items[0]
-    : (fresh.prescription_items as { count?: number } | null);
+  const itemCountOf = (c: { prescription_items?: unknown }): number => {
+    const pi = c.prescription_items;
+    const row = Array.isArray(pi)
+      ? (pi[0] as { count?: number } | undefined)
+      : (pi as { count?: number } | null);
+    return Number(row?.count ?? 0);
+  };
+
+  // First un-imported candidate that actually has items (guards the edge where
+  // !inner ever lets a zero through, and is the authoritative "offer it?" check).
+  const fresh = candidates.find(
+    (c) => !importedSet.has(c.id as string) && itemCountOf(c) > 0,
+  );
+  if (!fresh) return null;
 
   return {
     id: fresh.id as string,
     doctor_name: await doctorName(fresh.doctor_id as string | null),
     sent_at: (fresh.sent_at as string | null) ?? null,
-    item_count: Number(itemCountRow?.count ?? 0),
+    item_count: itemCountOf(fresh),
   };
 }
 
