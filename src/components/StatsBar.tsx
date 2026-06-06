@@ -5,10 +5,31 @@ import { useInView } from "framer-motion";
 import { useRef } from "react";
 import { useCmsSection } from "@/hooks/useCmsSection";
 import { HOME_CONTENT } from "@/constants/cms-content";
+import { AnimatedCounter } from "@/components/marketing/AnimatedCounter";
+
+// Split a CMS stat string into an optional non-numeric prefix (e.g. "<"), a
+// numeric value, and its decimal count, so the count-up animates the number
+// while keeping any prefix. Returns null for values with no parseable number
+// (rendered statically). Note: thousands separators are dropped during the
+// count-up (AnimatedCounter has no grouping) — "1,000" animates to "1000".
+function parseStatValue(
+  value: string,
+): { prefix: string; num: number; decimals: number } | null {
+  const m = value.match(/^([^\d.-]*)([\d,.]+)$/);
+  if (!m) return null;
+  const prefix = m[1] ?? "";
+  const numStr = m[2].replace(/,/g, "");
+  const num = parseFloat(numStr);
+  if (!Number.isFinite(num)) return null;
+  const dot = numStr.indexOf(".");
+  const decimals = dot >= 0 ? numStr.length - dot - 1 : 0;
+  return { prefix, num, decimals };
+}
 
 function AnimatedNumber({ value, suffix }: { value: string; suffix: string }) {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true });
+  const parsed = parseStatValue(value);
 
   return (
     <motion.div
@@ -18,7 +39,17 @@ function AnimatedNumber({ value, suffix }: { value: string; suffix: string }) {
       animate={isInView ? { opacity: 1, y: 0 } : {}}
       transition={{ duration: 0.5 }}
     >
-      <span className="font-serif text-5xl lg:text-6xl font-medium">{value}</span>
+      <span className="font-serif text-5xl lg:text-6xl font-medium">
+        {parsed ? (
+          <AnimatedCounter
+            value={parsed.num}
+            prefix={parsed.prefix}
+            decimals={parsed.decimals}
+          />
+        ) : (
+          value
+        )}
+      </span>
       <span className="text-2xl text-primary">{suffix}</span>
     </motion.div>
   );

@@ -1,68 +1,61 @@
 "use client";
 
+// T61 navbar. Changes from the pre-T61 version:
+//   - Persistent click-to-call phone number (tel:) — a number on desktop, a
+//     phone icon button on mobile. Always in the top nav.
+//   - "Sign in" pill replacing the Patient Portal outline button (label from
+//     CMS, now defaulting to "Sign in"; pill styling per the locked plan-gate).
+//   - The inline AnimatePresence dropdown menu is gone; the hamburger now opens
+//     the full-screen MobileMenu (B1). MobileMenu is rendered OUTSIDE <header>
+//     (alongside the modals) because the scrolled header sets backdrop-blur,
+//     which creates a containing block — a fixed child inside it would mis-place.
+//   - The gate→modal booking trigger is the shared useBookingFlow hook (same
+//     flow, now reusable by the hero, sticky bar, CTA strips and the menu).
+//
+// BookingModal + BookingGate are still mounted here once and stay store-driven.
+
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X } from "lucide-react";
+import { Menu, Phone } from "lucide-react";
 import { Button } from "@/components/ui";
 import { BookingModal } from "@/components/BookingModal";
 import { BookingGate } from "@/components/booking/BookingGate";
+import { MobileMenu } from "@/components/marketing/MobileMenu";
 import { useBookingStore } from "@/store/bookingStore";
+import { useBookingFlow } from "@/hooks/useBookingFlow";
 import { cn } from "@/lib/utils";
 import { useCmsSection } from "@/hooks/useCmsSection";
 import { useCmsSiteGlobals } from "@/hooks/useCmsSiteGlobals";
 import { SHARED_CONTENT } from "@/constants/cms-content";
 
+const PHONE_TEL = "+919711977782";
+const PHONE_DISPLAY = "+91 97119 77782";
+
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [pendingOpenModal, setPendingOpenModal] = useState(false);
-  const {
-    isModalOpen,
-    openModal,
-    closeModal,
-    isGateOpen,
-    openGate,
-    closeGate,
-    phoneVerifiedUntil,
-  } = useBookingStore();
-  const isPhoneVerified =
-    phoneVerifiedUntil !== null && phoneVerifiedUntil > Date.now();
 
-  // The "Book a Visit" button gates through OTP first. After successful
-  // verification, the gate fires onVerified → we flip pendingOpenModal,
-  // and this effect runs once the store reflects the verified state.
-  useEffect(() => {
-    if (pendingOpenModal && isPhoneVerified) {
-      setPendingOpenModal(false);
-      openModal();
-    }
-  }, [pendingOpenModal, isPhoneVerified, openModal]);
+  // Booking modal + OTP gate stay mounted here; the trigger is shared.
+  const isModalOpen = useBookingStore((s) => s.isModalOpen);
+  const closeModal = useBookingStore((s) => s.closeModal);
+  const isGateOpen = useBookingStore((s) => s.isGateOpen);
+  const closeGate = useBookingStore((s) => s.closeGate);
+  const { requestBooking } = useBookingFlow();
 
-  function handleBookClick() {
-    if (isPhoneVerified) {
-      openModal();
-    } else {
-      setPendingOpenModal(true);
-      openGate();
-    }
-  }
   const { data: navbarCopy } = useCmsSection(
     "shared",
     "navbar",
     SHARED_CONTENT.navbar,
   );
   const siteGlobals = useCmsSiteGlobals();
-  const logoAlt = siteGlobals?.logoAlt ?? siteGlobals?.companyName ?? navbarCopy.logoAlt;
+  const logoAlt =
+    siteGlobals?.logoAlt ?? siteGlobals?.companyName ?? navbarCopy.logoAlt;
   const logoSrc = siteGlobals?.logoUrl ?? "/logo.svg";
   const navLinks = navbarCopy.navLinks;
 
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 50);
-    };
-
+    const handleScroll = () => setIsScrolled(window.scrollY > 50);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
@@ -74,11 +67,11 @@ export function Navbar() {
           "sticky top-0 z-40 w-full transition-all duration-300",
           isScrolled
             ? "bg-white/80 backdrop-blur-xl shadow-sm border-b border-slate-100"
-            : "bg-surface-light/95 border-b border-slate-100"
+            : "bg-surface-light/95 border-b border-slate-100",
         )}
       >
         <div className="mx-auto flex h-16 md:h-20 lg:h-24 max-w-[1400px] items-center justify-between px-4 md:px-6 lg:px-12">
-          {/* Logo — single-word "Sanocare" wordmark with coral tagline strip */}
+          {/* Logo */}
           <Link href="/" className="flex items-center gap-3 group">
             <Image
               src={logoSrc}
@@ -114,77 +107,70 @@ export function Navbar() {
               ))}
             </div>
             <div className="flex items-center gap-3">
+              {/* Click-to-call — copyable on desktop, dials on mobile. */}
+              <a
+                href={`tel:${PHONE_TEL}`}
+                className="inline-flex items-center gap-2 text-sm font-semibold text-text-main hover:text-primary transition-colors"
+                aria-label={`Call Sanocare at ${PHONE_DISPLAY}`}
+              >
+                <Phone className="w-4 h-4 text-primary" aria-hidden="true" />
+                {PHONE_DISPLAY}
+              </a>
               <Button
                 variant="primary"
                 size="md"
                 className="rounded-full"
-                onClick={handleBookClick}
+                onClick={requestBooking}
               >
                 {navbarCopy.primaryCtaLabel}
               </Button>
-              <Link href="/portal">
-                <Button variant="outline" size="md" className="rounded-full">
-                  {navbarCopy.portalLabel}
-                </Button>
+              {/* "Sign in" pill — distinct from regular nav links. Links
+                  directly to /pulse/login (not /portal) to skip the
+                  /portal→/pulse→/pulse/login redirect chain + its PulseShell
+                  transition flash. /pulse/login itself bounces an already-signed
+                  -in patient to /pulse server-side. */}
+              <Link
+                href="/pulse/login"
+                className="inline-flex items-center justify-center rounded-full border border-primary/20 bg-primary/5 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+              >
+                {navbarCopy.portalLabel}
               </Link>
             </div>
           </nav>
 
-          {/* Mobile Menu Button */}
-          <button
-            className="md:hidden flex items-center justify-center text-text-main p-2"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            aria-label="Toggle menu"
-          >
-            {isMobileMenuOpen ? (
-              <X className="w-6 h-6" />
-            ) : (
-              <Menu className="w-6 h-6" />
-            )}
-          </button>
-        </div>
-
-        {/* Mobile Menu */}
-        <AnimatePresence>
-          {isMobileMenuOpen && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="md:hidden bg-white border-t border-slate-100 overflow-hidden"
+          {/* Mobile cluster — persistent click-to-call + hamburger. */}
+          <div className="flex items-center gap-1 md:hidden">
+            <a
+              href={`tel:${PHONE_TEL}`}
+              aria-label={`Call Sanocare at ${PHONE_DISPLAY}`}
+              className="inline-flex items-center justify-center w-11 h-11 rounded-full text-primary hover:bg-primary/5 transition-colors"
             >
-              <nav className="flex flex-col p-6 gap-4">
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className="text-base font-medium text-text-main hover:text-primary py-2 transition-colors"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    {link.label}
-                  </Link>
-                ))}
-                <Button
-                  variant="primary"
-                  size="md"
-                  className="mt-4 rounded-full"
-                  onClick={() => {
-                    setIsMobileMenuOpen(false);
-                    handleBookClick();
-                  }}
-                >
-                  {navbarCopy.primaryCtaLabel}
-                </Button>
-                <Link href="/portal" onClick={() => setIsMobileMenuOpen(false)}>
-                  <Button variant="outline" size="md" className="rounded-full w-full">
-                    {navbarCopy.portalLabel}
-                  </Button>
-                </Link>
-              </nav>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <Phone className="w-5 h-5" aria-hidden="true" />
+            </a>
+            <button
+              type="button"
+              className="inline-flex items-center justify-center w-11 h-11 text-text-main"
+              onClick={() => setIsMobileMenuOpen(true)}
+              aria-label="Open menu"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
       </header>
+
+      {/* Full-screen mobile menu (B1). Rendered outside <header> so the
+          scrolled header's backdrop-blur containing block doesn't trap it. */}
+      <MobileMenu
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        onBook={requestBooking}
+        navLinks={navLinks}
+        signInLabel={navbarCopy.portalLabel}
+        signInHref="/pulse/login"
+        phoneNumber={PHONE_TEL}
+        phoneDisplay={PHONE_DISPLAY}
+      />
 
       <BookingModal isOpen={isModalOpen} onClose={closeModal} />
       <BookingGate

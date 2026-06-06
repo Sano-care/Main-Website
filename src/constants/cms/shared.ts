@@ -42,7 +42,11 @@ export const SHARED_CONTENT = {
       { href: "/contact", label: "Contact" },
     ],
     primaryCtaLabel: "Book a visit",
-    portalLabel: "Patient Portal",
+    // T61: "Patient Portal" → "Sign in". This is the in-code DEFAULT; the live
+    // CMS may still carry a "Patient Portal" override that must be flipped on
+    // prod post-deploy (flagged in the PR description). href stays /portal until
+    // the T62 /portal→/pulse redirect ships.
+    portalLabel: "Sign in",
     logoAlt: "Sanocare",
   },
   floatingSidebar: {
