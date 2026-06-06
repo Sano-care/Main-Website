@@ -196,14 +196,19 @@ async function PulseHomeBody() {
                           </div>
                           <div
                             className={
-                              "text-sm font-semibold text-text-main " +
+                              "text-sm font-semibold " +
                               (visual === "missed"
-                                ? "line-through decoration-rose-300"
-                                : "")
+                                ? "text-slate-400 line-through decoration-2 decoration-rose-400"
+                                : "text-text-main")
                             }
                           >
                             {dose.name}{" "}
-                            <span className="font-normal text-text-secondary">
+                            <span
+                              className={
+                                "font-normal " +
+                                (visual === "missed" ? "" : "text-text-secondary")
+                              }
+                            >
                               {dose.dose}
                             </span>
                           </div>
