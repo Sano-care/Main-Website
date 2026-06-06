@@ -18,6 +18,12 @@ import { SectionReveal } from "@/components/marketing/SectionReveal";
 import { FloatingWhatsApp } from "@/components/marketing/FloatingWhatsApp";
 import { BookingCTASection } from "@/components/marketing/BookingCTASection";
 import { HomeStickyBar } from "@/components/marketing/HomeStickyBar";
+// T85 PR1 — new service-led sections rendered BENEATH existing T61
+// content so the visual diff is observable on the same page. PR2
+// rewires the hierarchy and deletes the legacy hero CTAs / service
+// blocks; PR1 ships only the new component + catalog + render.
+import { ServiceSection } from "@/components/marketing/ServiceSection";
+import { SERVICES } from "@/lib/services/catalog";
 
 // T61 mobile-first homepage. Each major section is wrapped in SectionReveal
 // (scroll-triggered fade/slide-up, reduced-motion safe) and the booking-density
@@ -112,6 +118,28 @@ export default function Home() {
             headline="Ready when you are"
             subline="Book a visit, or talk to us on WhatsApp."
           />
+
+          {/* T85 PR1 — service-led sections rendered side-by-side with the
+              legacy T61 content above for founder UAT. PR2 rewires the
+              hierarchy (these move to the top, legacy hero CTAs and
+              service blocks come out). PR3 adds the TopNav Call button,
+              sticky service bar, and floating WhatsApp; PR4 wires the
+              booking modal. */}
+          <div
+            id="t85-pr1-services"
+            className="mx-auto max-w-[420px] w-full"
+            aria-label="T85 PR1 — new service sections (preview)"
+          >
+            {SERVICES.map((config, index) => (
+              <SectionReveal key={config.slug}>
+                <ServiceSection
+                  config={config}
+                  index={index}
+                  total={SERVICES.length}
+                />
+              </SectionReveal>
+            ))}
+          </div>
         </main>
 
         <Footer />
