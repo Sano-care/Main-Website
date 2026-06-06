@@ -37,9 +37,14 @@ export const colors = {
     900: "#0a2670",
   },
   // Coral accent — warmth + family-friendly CTA highlights.
+  // `dark` reconciled to the brand hex #E16A3D in T85 PR2; prior
+  // value #dc6a40 was unintended drift. The CSS var
+  // `--color-accent-coral-dark` in globals.css mirrors this; every
+  // surface that reads `var(--color-accent-coral-dark)` picks the new
+  // hex up automatically.
   coral: {
     DEFAULT: "#f4845a",
-    dark: "#dc6a40",
+    dark: "#E16A3D",
     50: "#fff1ec",
   },
   // Surfaces & ink.

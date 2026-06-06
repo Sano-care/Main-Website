@@ -26,7 +26,7 @@
 //   - prefers-reduced-motion ⇒ height transition is instant snap.
 //
 // Tailwind class set translates the mockup CSS verbatim:
-//   .sec-tag      → text-[11px] tracking-[0.8px] uppercase font-bold text-[#E16A3D]
+//   .sec-tag      → text-[11px] tracking-[0.8px] uppercase font-bold text-[color:var(--color-accent-coral-dark)]
 //   .sec-icon     → w-14 h-14 rounded-[16px] bg-primary/5 text-primary
 //   .sec-meta h2  → text-2xl font-bold tracking-[-0.5px] leading-[1.15]
 //   .sec-desc     → text-sm text-slate-600 leading-[1.6]
@@ -34,10 +34,9 @@
 //   .cta-primary  → coral bg + shadow + tap-scale 0.985
 //   .expand       → grey-50 bg + grey-150 border, 14px radius
 //
-// Coral hex `#E16A3D` for the eyebrow is the mockup's `--coral-dark`
-// (different from the existing `tokens.ts coral.dark = #dc6a40`). PR2
-// reconciles the palette; PR1 holds the mockup value inline to land the
-// visual without forking tokens. Founder UAT will catch any drift.
+// T85 PR2 — palette reconciled. `--color-accent-coral-dark` now equals
+// the mockup's `--coral-dark = #E16A3D`, so the eyebrow reads from the
+// CSS var instead of the inline hex it carried in PR1.
 
 import { useState } from "react";
 import { ChevronRight, Clock, Check } from "lucide-react";
@@ -83,7 +82,7 @@ export function ServiceSection({
       aria-labelledby={`service-${config.slug}-heading`}
     >
       {/* Eyebrow — Service N of total, coral-dark uppercase */}
-      <p className="inline-block text-[11px] font-bold uppercase tracking-[0.8px] text-[#E16A3D] mb-3">
+      <p className="inline-block text-[11px] font-bold uppercase tracking-[0.8px] text-[color:var(--color-accent-coral-dark)] mb-3">
         Service {index + 1} of {total}
       </p>
 
