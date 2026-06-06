@@ -124,9 +124,13 @@ export function Navbar() {
               >
                 {navbarCopy.primaryCtaLabel}
               </Button>
-              {/* "Sign in" pill — distinct from regular nav links. */}
+              {/* "Sign in" pill — distinct from regular nav links. Links
+                  directly to /pulse/login (not /portal) to skip the
+                  /portal→/pulse→/pulse/login redirect chain + its PulseShell
+                  transition flash. /pulse/login itself bounces an already-signed
+                  -in patient to /pulse server-side. */}
               <Link
-                href="/portal"
+                href="/pulse/login"
                 className="inline-flex items-center justify-center rounded-full border border-primary/20 bg-primary/5 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
               >
                 {navbarCopy.portalLabel}
@@ -163,7 +167,7 @@ export function Navbar() {
         onBook={requestBooking}
         navLinks={navLinks}
         signInLabel={navbarCopy.portalLabel}
-        signInHref="/portal"
+        signInHref="/pulse/login"
         phoneNumber={PHONE_TEL}
         phoneDisplay={PHONE_DISPLAY}
       />
