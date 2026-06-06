@@ -13,7 +13,10 @@
 //        - What's included (bulleted)
 //        - Best for
 //   5. Green promise pill
-//   6. Coral CTA — full-width, 52px tall, hrefs to /book?service={slug}
+//   6. Coral CTA — full-width, 52px tall, opens T61's BookingGate /
+//      BookingModal via `useBookingFlow().requestBooking()` (PR2.5
+//      stopgap). PR4 extends the store with a pre-selected service so
+//      `config.slug` round-trips into the modal as a default.
 //   7. "Schedule for later" stub link (toast in PR2)
 //
 // Consistency rules enforced here so adding a 5th service is one
@@ -40,8 +43,8 @@
 
 import { useState } from "react";
 import { ChevronRight, Clock, Check } from "lucide-react";
-import Link from "next/link";
 import type { ServiceConfig } from "@/lib/services/catalog";
+import { useBookingFlow } from "@/hooks/useBookingFlow";
 import { getServiceIcon } from "./icons/ServiceIcons";
 
 interface ServiceSectionProps {
@@ -62,6 +65,11 @@ export function ServiceSection({
 }: ServiceSectionProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const Icon = getServiceIcon(config.iconKey);
+  // T85 PR2.5 — CTA opens T61's gate→modal flow. `requestBooking()`
+  // takes no args today; PR4 extends `bookingStore` with a
+  // `preselectService` field, then this callsite threads
+  // `config.slug` through.
+  const { requestBooking } = useBookingFlow();
 
   const handleSchedule = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -183,13 +191,18 @@ export function ServiceSection({
         </span>
       </div>
 
-      {/* Primary CTA — coral, full-width, tap-scale */}
-      <Link
-        href={`/book?service=${config.slug}`}
-        className="block w-full text-center bg-accent-coral text-white py-4 px-4 rounded-[14px] text-[15px] font-semibold tracking-[-0.1px] no-underline transition-transform duration-100 active:scale-[0.985] shadow-[0_8px_18px_rgba(244,132,90,0.36),0_2px_4px_rgba(244,132,90,0.20)]"
+      {/* Primary CTA — coral, full-width, tap-scale.
+          T85 PR2.5 stopgap: button → useBookingFlow.requestBooking()
+          opens T61's BookingGate (OTP) or BookingModal directly. PR4
+          replaces the bare call with a slug-carrying variant. */}
+      <button
+        type="button"
+        onClick={requestBooking}
+        aria-label={`${config.ctaLabel} — opens booking flow`}
+        className="block w-full text-center bg-accent-coral text-white py-4 px-4 rounded-[14px] text-[15px] font-semibold tracking-[-0.1px] transition-transform duration-100 active:scale-[0.985] shadow-[0_8px_18px_rgba(244,132,90,0.36),0_2px_4px_rgba(244,132,90,0.20)]"
       >
         {config.ctaLabel}
-      </Link>
+      </button>
 
       {/* Schedule-for-later soft escape */}
       <button

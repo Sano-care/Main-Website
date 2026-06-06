@@ -8,12 +8,20 @@
 // up automatically.
 //
 // Service slugs (`home-visit`, `teleconsultation`, `lab-tests`,
-// `medic-at-home`) are the T85 public URL aliases used by the booking
-// modal (PR4) — `/book?service={slug}`. The DB column
-// `bookings.service_category` still uses the legacy enum
-// `homecare | teleconsult | chronic | diagnostics` from migration 003.
-// PR4 will map the T85 slug → legacy slug at the boundary (no DB
-// migration in T85 unless founder picks option (b) at the PR4 plan-gate).
+// `medic-at-home`) are the T85 public identifiers used by the booking
+// modal (PR4). The DB column `bookings.service_category` still uses
+// the legacy enum `homecare | teleconsult | chronic | diagnostics`
+// from migration 003. PR4 will map the T85 slug → legacy slug at the
+// boundary (no DB migration in T85 unless founder picks option (b)
+// at the PR4 plan-gate).
+//
+// PR2.5 stopgap (between PR2 and PR4): ServiceSection's coral CTA
+// no longer routes to `/book?service={slug}` — that route never
+// existed and was a 404 placeholder. It now calls
+// `useBookingFlow().requestBooking()` directly, opening T61's
+// BookingGate (OTP) or BookingModal. The slug is NOT yet pre-selected
+// in the modal — PR4 extends `bookingStore` with a `preselectService`
+// field and the ServiceSection callsite threads `config.slug` through.
 
 import type { ComponentType } from "react";
 
