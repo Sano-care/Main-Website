@@ -163,12 +163,14 @@ export async function POST(req: NextRequest) {
       await sendOtp({ phone, code, channel });
       console.log("[send-otp] dispatch ok", { channel });
     } catch (err) {
-      const channelLabel = channel === "whatsapp" ? "WhatsApp" : "SMS";
+      // rampwin + whatsapp both render to the patient as "WhatsApp"; only the
+      // msg91 channel is "SMS". (Previously rampwin was mislabeled "SMS".)
+      const channelLabel = channel === "sms" ? "SMS" : "WhatsApp";
       console.error(`[send-otp] ${channelLabel} delivery failed:`, err);
       if (err instanceof OtpDeliveryError) {
         return NextResponse.json(
           {
-            error: `We couldn't send the code on ${channelLabel}. Please try again${channel === "whatsapp" ? " or use SMS" : ""}.`,
+            error: `We couldn't send the code on ${channelLabel}. Please try again${channel === "sms" ? "" : " or use SMS"}.`,
           },
           { status: 502 },
         );
