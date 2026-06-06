@@ -11,6 +11,7 @@
 // mutation, so the schedule, adherence ring and active list stay consistent.
 
 import { useCallback, useEffect, useState } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   Plus,
   Check,
@@ -51,6 +52,14 @@ export function MedicationsSurface() {
   const [detailMed, setDetailMed] = useState<Medication | null>(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  // Auto-dismiss the toast after a few seconds.
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const loadAll = useCallback(async () => {
     const [m, s, a, rx] = await Promise.all([
@@ -119,7 +128,11 @@ export function MedicationsSurface() {
     if (!importable || importing) return;
     setImporting(true);
     setImportError(null);
-    const { ok, data } = await pulseFetch<{ error?: string }>(
+    const { ok, data } = await pulseFetch<{
+      imported?: number;
+      message?: string;
+      error?: string;
+    }>(
       `/api/pulse/medications/import-from-rx?rx_id=${encodeURIComponent(
         importable.id,
       )}`,
@@ -131,6 +144,14 @@ export function MedicationsSurface() {
         data.error || "Could not import the prescription. Try again.",
       );
       return;
+    }
+    // Nothing to import (items deleted between banner + tap): not an error —
+    // nudge to "Add manually" via a toast, and refresh so the now-empty banner
+    // clears.
+    if (data.message === "no_items" || data.imported === 0) {
+      setToast(
+        "This prescription has no medications to import. Tap Add manually to set up your schedule.",
+      );
     }
     await loadAll();
   }
@@ -215,7 +236,45 @@ export function MedicationsSurface() {
         onClose={() => setDetailMed(null)}
         onChanged={() => void loadAll()}
       />
+
+      <PulseToast message={toast} onDismiss={() => setToast(null)} />
     </div>
+  );
+}
+
+// Minimal toast — no toast lib in the repo, so this is a small self-contained
+// one. Fixed above the sticky bar, auto-dismissed by the caller's timer; honors
+// prefers-reduced-motion (no slide).
+function PulseToast({
+  message,
+  onDismiss,
+}: {
+  message: string | null;
+  onDismiss: () => void;
+}) {
+  const prefersReducedMotion = useReducedMotion();
+  return (
+    <AnimatePresence>
+      {message && (
+        <motion.div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-x-4 bottom-24 z-50 mx-auto max-w-md rounded-2xl bg-text-main px-4 py-3 text-sm text-white shadow-xl"
+          initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
+          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.2 }}
+        >
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="flex w-full items-start gap-2 text-left"
+          >
+            <span>{message}</span>
+          </button>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
