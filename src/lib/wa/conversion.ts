@@ -115,7 +115,7 @@ export async function buildWaResponse(
     service,
     utm,
     ga4: process.env.GA4_MEASUREMENT_ID ?? "G-VSP31JFVVJ", // public id; env overrides
-    ads: process.env.GOOGLE_ADS_CONVERSION ?? null, // AW-.../label — set when ready
+    ads: process.env.GOOGLE_ADS_CONVERSION ?? "AW-18031024663/lDyRCNb0sLocEJe07pVD", // public Ads send_to; env overrides
   });
 
   const waAttr = escapeAttr(waUrl);
@@ -151,7 +151,7 @@ export async function buildWaResponse(
       gtag('event', 'whatsapp_click', { service: cfg.service, transport_type: 'beacon',
         utm_source: cfg.utm.source, utm_medium: cfg.utm.medium, utm_campaign: cfg.utm.campaign,
         utm_content: cfg.utm.content, utm_term: cfg.utm.term });
-      if (cfg.ads) gtag('event', 'conversion', { send_to: cfg.ads, transport_type: 'beacon' });
+      if (cfg.ads) gtag('event', 'conversion', { send_to: cfg.ads, value: 500.0, currency: 'INR', transport_type: 'beacon' });
     }
   } catch (e) { /* tracking must never block the redirect */ }
   setTimeout(go, 150);
