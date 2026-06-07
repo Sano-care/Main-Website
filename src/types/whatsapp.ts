@@ -49,6 +49,28 @@ export const WhatsAppMessageSchema = z
     timestamp: z.string(), // unix seconds, as a string
     type: z.string(),
     text: TextBodySchema.optional(),
+    // Template quick-reply tap (type "button"): { payload, text }.
+    button: z
+      .object({ payload: z.string().optional(), text: z.string().optional() })
+      .passthrough()
+      .optional(),
+    // Interactive reply (type "interactive"): button_reply / list_reply.
+    interactive: z
+      .object({
+        type: z.string().optional(),
+        button_reply: z
+          .object({ id: z.string().optional(), title: z.string().optional() })
+          .passthrough()
+          .optional(),
+      })
+      .passthrough()
+      .optional(),
+    // Reply context — for a button tap, context.id is the original (template)
+    // message's wamid. This is how we map "Mark as Attended" back to its escalation.
+    context: z
+      .object({ id: z.string().optional() })
+      .passthrough()
+      .optional(),
   })
   .passthrough();
 
@@ -129,6 +151,12 @@ export interface NormalizedInbound {
   phoneNumberId: string | null;
   /** Unix seconds (string, as Meta sends it). */
   timestamp: string;
+  /** Quick-reply / interactive button payload, if this is a button tap. */
+  buttonPayload: string | null;
+  /** Button display text/title, if present. */
+  buttonText: string | null;
+  /** context.id — the wamid of the message being replied to (button taps). */
+  contextId: string | null;
   /** The original message object, for messages.raw_payload. */
   raw: WhatsAppMessage;
 }
@@ -169,6 +197,14 @@ export function extractInboundMessages(
       }
 
       for (const msg of messages) {
+        const buttonPayload =
+          msg.button?.payload ??
+          msg.interactive?.button_reply?.id ??
+          null;
+        const buttonText =
+          msg.button?.text ??
+          msg.interactive?.button_reply?.title ??
+          null;
         out.push({
           providerMessageId: msg.id,
           phone: toE164(msg.from),
@@ -177,6 +213,9 @@ export function extractInboundMessages(
           contactName: contactsByWaId.get(msg.from) ?? null,
           phoneNumberId,
           timestamp: msg.timestamp,
+          buttonPayload,
+          buttonText,
+          contextId: msg.context?.id ?? null,
           raw: msg,
         });
       }

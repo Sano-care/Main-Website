@@ -18,7 +18,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhookSignature } from "@/lib/whatsapp/webhook-signature";
-import { processWebhook } from "@/lib/whatsapp/orchestrator";
+import { processWebhook } from "@/lib/whatsapp/adapter";
 import { AuditEvent, writeAudit } from "@/lib/whatsapp/safety/audit";
 import { WebhookEnvelopeSchema } from "@/types/whatsapp";
 import { log } from "@/lib/whatsapp/log";

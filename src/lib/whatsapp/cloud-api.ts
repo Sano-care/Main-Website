@@ -112,3 +112,81 @@ export async function sendTextMessage(input: {
 
   return { providerMessageId: lastId };
 }
+
+/**
+ * Send a pre-approved template message. Used for the ops handoff
+ * (aarogya_lead_alert) to the founder's WhatsApp, and for OTP post-cutover.
+ *
+ * bodyParams fill the {{1}}..{{n}} placeholders in order. quickReplyPayload, if
+ * given, is attached to the first quick-reply button so the inbound button tap
+ * echoes it back (we use it to carry the escalation_id). Returns the send wamid.
+ */
+export async function sendTemplateMessage(input: {
+  to: string;
+  templateName: string;
+  languageCode?: string;
+  bodyParams: string[];
+  quickReplyPayload?: string;
+}): Promise<{ providerMessageId?: string }> {
+  const phoneNumberId = requireEnv("WHATSAPP_PHONE_NUMBER_ID");
+  const accessToken = requireEnv("WHATSAPP_ACCESS_TOKEN");
+  const apiVersion = process.env.WHATSAPP_API_VERSION ?? "v21.0";
+  const to = input.to.replace(/[^\d]/g, "");
+
+  const components: Record<string, unknown>[] = [
+    {
+      type: "body",
+      parameters: input.bodyParams.map((text) => ({ type: "text", text })),
+    },
+  ];
+  if (input.quickReplyPayload !== undefined) {
+    components.push({
+      type: "button",
+      sub_type: "quick_reply",
+      index: 0,
+      parameters: [{ type: "payload", payload: input.quickReplyPayload }],
+    });
+  }
+
+  const body = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "template",
+    template: {
+      name: input.templateName,
+      language: { code: input.languageCode ?? "en" },
+      components,
+    },
+  };
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${GRAPH_BASE}/${apiVersion}/${phoneNumberId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      },
+    );
+  } catch (cause) {
+    log.error("cloud-api template network error", cause);
+    throw new CloudApiError("Network error reaching WhatsApp Cloud API");
+  }
+
+  const json = (await response.json().catch(() => ({}))) as MetaMessagesResponse;
+  if (!response.ok || json.error) {
+    throw new CloudApiError(
+      `WhatsApp template send failed (${response.status}): ${
+        json.error?.message ?? "unknown"
+      }`,
+      response.status,
+    );
+  }
+
+  return { providerMessageId: json.messages?.[0]?.id };
+}

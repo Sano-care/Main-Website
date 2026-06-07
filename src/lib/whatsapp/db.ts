@@ -255,3 +255,106 @@ export async function createEscalation(args: {
 
   return data.id;
 }
+
+// ---------------------------------------------------------------------------
+// Week-2 agent helpers.
+// ---------------------------------------------------------------------------
+
+/**
+ * Load the last `limit` messages for a conversation as orchestrator history
+ * (oldest → newest). inbound → "user", outbound → "assistant".
+ */
+export async function loadHistory(
+  conversationId: string,
+  limit: number,
+): Promise<{ role: "user" | "assistant"; content: string }[]> {
+  const { data, error } = await supabaseAdmin
+    .from("messages")
+    .select("direction, content, created_at")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error || !data) {
+    log.error("loadHistory failed", error?.message);
+    return [];
+  }
+  return data
+    .reverse()
+    .map((m) => ({
+      role: m.direction === "inbound" ? ("user" as const) : ("assistant" as const),
+      content: m.content as string,
+    }));
+}
+
+/** Count inbound (user) messages — used for model-routing turn count. */
+export async function countInboundMessages(conversationId: string): Promise<number> {
+  const { count, error } = await supabaseAdmin
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conversationId)
+    .eq("direction", "inbound");
+  if (error) {
+    log.error("countInboundMessages failed", error.message);
+    return 0;
+  }
+  return count ?? 0;
+}
+
+/** Update lead profile fields captured during qualification. Best-effort. */
+export async function updateLeadFields(
+  leadId: string | null,
+  fields: Record<string, unknown>,
+): Promise<void> {
+  if (!leadId) return;
+  const { error } = await supabaseAdmin
+    .from("leads")
+    .update({ ...fields, updated_at: new Date().toISOString() })
+    .eq("id", leadId);
+  if (error) log.error("updateLeadFields failed", error.message);
+}
+
+/**
+ * Store the outbound ops-alert template's wamid on the escalation, so an inbound
+ * "Mark as Attended" button reply (whose context.id == this wamid) maps back to
+ * the right escalation. (slack_message_id is repurposed for the WA template wamid.)
+ */
+export async function setEscalationProviderMessageId(
+  escalationId: string,
+  wamid: string,
+): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("escalations")
+    .update({ slack_message_id: wamid })
+    .eq("id", escalationId);
+  if (error) log.error("setEscalationProviderMessageId failed", error.message);
+}
+
+/**
+ * Mark the escalation whose ops-alert wamid == `wamid` as attended. Returns true
+ * if a still-open escalation matched. Idempotent (won't re-mark an acknowledged one).
+ */
+export async function markEscalationAttended(
+  wamid: string,
+  byIdentifier: string,
+): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from("escalations")
+    .update({
+      acknowledged_at: new Date().toISOString(),
+      acknowledged_by: byIdentifier,
+    })
+    .eq("slack_message_id", wamid)
+    .is("acknowledged_at", null)
+    .select("id, conversation_id")
+    .maybeSingle();
+  if (error) {
+    log.error("markEscalationAttended failed", error.message);
+    return null;
+  }
+  if (!data) return null;
+  await supabaseAdmin
+    .from("conversations")
+    .update({ escalation_status: "complete", updated_at: new Date().toISOString() })
+    .eq("id", data.conversation_id);
+  return data.id;
+}

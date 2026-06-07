@@ -1,14 +1,9 @@
-// The ONLY file that will touch the Anthropic SDK (wired in Checkpoint 2). The
-// orchestrator depends on this interface, not the SDK, so the brain stays
-// testable and the SDK surface is isolated to ~20 lines.
-//
-// Checkpoint 2 implements generateResponse() with:
-//   import Anthropic from "@anthropic-ai/sdk";
-//   const client = new Anthropic();  // reads ANTHROPIC_API_KEY
-//   const msg = await client.messages.create({ model, system, max_tokens,
-//     messages, tools });
-//   → flatten text blocks + tool_use blocks into ClaudeResponse.
+// The ONLY file that touches the Anthropic SDK. The orchestrator depends on this
+// interface, not the SDK, so the brain stays testable and the SDK surface is
+// isolated here. ToolSchema is already Anthropic's tool shape, so it passes
+// straight through.
 
+import Anthropic from "@anthropic-ai/sdk";
 import type { ToolSchema } from "@/lib/agent/tools";
 
 export interface ClaudeRequest {
@@ -35,10 +30,43 @@ export interface ClaudeResponse {
   tokensOut: number;
 }
 
+let _client: Anthropic | null = null;
+function getClient(): Anthropic {
+  // Lazily constructed so a missing key fails at call time (caught by the
+  // adapter), not at module load (which would break the whole route).
+  if (_client === null) _client = new Anthropic(); // reads ANTHROPIC_API_KEY
+  return _client;
+}
+
 export async function generateResponse(req: ClaudeRequest): Promise<ClaudeResponse> {
-  // Checkpoint 2: replace this throw with the real Anthropic call.
-  throw new Error(
-    `Claude client not wired yet (model=${req.model}) — Checkpoint 2 needs ` +
-      `@anthropic-ai/sdk installed + ANTHROPIC_API_KEY set.`,
-  );
+  const msg = await getClient().messages.create({
+    model: req.model,
+    max_tokens: req.maxTokens,
+    system: req.system,
+    messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
+    tools: req.tools as unknown as Anthropic.Tool[],
+  });
+
+  let text = "";
+  const toolUses: ClaudeToolUse[] = [];
+  for (const block of msg.content) {
+    if (block.type === "text") {
+      text += block.text;
+    } else if (block.type === "tool_use") {
+      toolUses.push({
+        id: block.id,
+        name: block.name,
+        input: (block.input ?? {}) as Record<string, unknown>,
+      });
+    }
+  }
+
+  return {
+    text,
+    toolUses,
+    stopReason: msg.stop_reason,
+    model: msg.model,
+    tokensIn: msg.usage.input_tokens,
+    tokensOut: msg.usage.output_tokens,
+  };
 }

@@ -23,6 +23,11 @@ export const AuditEvent = {
   SIGNATURE_VERIFICATION_FAILED: "signature_verification_failed",
   UNSUPPORTED_MESSAGE_RECEIVED: "unsupported_message_received",
   OUTBOUND_SEND_FAILED: "outbound_send_failed",
+  // Week 2 (LLM)
+  AGENT_RESPONSE: "agent_response",
+  AGENT_ERROR: "agent_error",
+  OPS_ALERT_SENT: "ops_alert_sent",
+  OPS_ATTENDED: "ops_attended",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
