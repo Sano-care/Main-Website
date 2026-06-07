@@ -47,6 +47,16 @@ export const colors = {
     dark: "#E16A3D",
     50: "#fff1ec",
   },
+  // WhatsApp brand colour — used on every "Chat on WhatsApp" affordance
+  // (floating FAB, sticky bar CTAs, mobile menu). Brand hex is fixed by
+  // WhatsApp itself; `dark` is the hover variant used in T61. T85 PR3
+  // promotes these from inline-hex at 3 sites into the token system. PR5
+  // sweeps the legacy inline callsites (MobileStickyBar, MobileMenu,
+  // FloatingWhatsApp's prior inline reference) to `var(--color-whatsapp)`.
+  whatsapp: {
+    DEFAULT: "#25D366",
+    dark: "#1ebe57",
+  },
   // Surfaces & ink.
   surface: {
     light: "#ffffff",

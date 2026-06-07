@@ -66,6 +66,14 @@ export interface ServiceExpandable {
 export interface ServiceConfig {
   slug: ServiceSlug;
   name: string;
+  /**
+   * Compact label for the ServiceStickyBar (T85 PR3). Sticky-bar
+   * columns are too narrow for the full `name` ("Lab Tests at Home" /
+   * "Teleconsultation"), so each service carries a 1–2-word version
+   * here. ServiceSection still renders the long `name`; only the
+   * sticky bar uses `shortName`.
+   */
+  shortName: string;
   iconKey: ServiceIconKey;
   priceLine: PriceLine;
   description: string;
@@ -86,6 +94,7 @@ export const SERVICES: ReadonlyArray<ServiceConfig> = [
   {
     slug: "home-visit",
     name: "Home-Visit",
+    shortName: "Home-Visit",
     iconKey: "home",
     priceLine: { kind: "from", amount: 499, suffix: "per visit" },
     description:
@@ -110,6 +119,7 @@ export const SERVICES: ReadonlyArray<ServiceConfig> = [
   {
     slug: "teleconsultation",
     name: "Teleconsultation",
+    shortName: "Teleconsult",
     iconKey: "video",
     priceLine: { kind: "from", amount: 399, suffix: "per 15-min consult" },
     description:
@@ -133,6 +143,7 @@ export const SERVICES: ReadonlyArray<ServiceConfig> = [
   {
     slug: "lab-tests",
     name: "Lab Tests at Home",
+    shortName: "Lab Tests",
     iconKey: "flask",
     priceLine: { kind: "bare", text: "₹200 collection fee + test amount" },
     description:
@@ -157,6 +168,7 @@ export const SERVICES: ReadonlyArray<ServiceConfig> = [
   {
     slug: "medic-at-home",
     name: "Medic at Home",
+    shortName: "Medic Home",
     iconKey: "syringe",
     priceLine: { kind: "from", amount: 199, suffix: "per visit" },
     description:

@@ -1,24 +1,35 @@
 "use client";
 
-// T61 floating WhatsApp button — bottom-right, persistent across all
-// viewport sizes. Opens WhatsApp web/app with a pre-filled message.
+// T85 PR3 — restyled floating WhatsApp FAB.
 //
-// Coexists with FloatingSidebar (desktop-only vertical icon rail on
-// the RIGHT edge, vertical-center) by anchoring to the bottom-right
-// instead of the right-center. Different anchor, no overlap.
+// Position, size, and decoration are locked to the v4 mockup:
+//   - 52×52 fixed circle
+//   - bottom: 96px, right: 14px (clears ServiceStickyBar at 100,
+//     no overlap with the safe-area inset)
+//   - z-index: 90 (below ServiceStickyBar at 100, above page content)
+//   - Two-layer drop shadow + 14% white inner ring (via box-shadow
+//     `inset 0 0 0 1.4px rgba(255,255,255,0.14)`)
+//   - 2.4s `whatsapp-pulse` outer-ring animation defined in
+//     globals.css — kept in CSS so the keyframes stay in the design-
+//     system file rather than inlined here
+//   - Reads `--color-whatsapp` / `--color-whatsapp-dark` from the new
+//     tokens; replaces the T61 inline `#25D366` references
 //
-// On mobile, sits above the sticky bottom CTA bar (z-stack:
-// MobileStickyBar bottom: 0 z-50, FloatingWhatsApp bottom: 88px z-50
-// — sits clear of the sticky bar plus a small visual gap).
+// Behaviour kept from T61:
+//   - `hidden` prop hides the FAB when a modal overlay is open
+//   - Deferred mount until after first paint so LCP isn't blocked
+//   - Same wa.me href shape + prefill text
 //
-// Hides while the BookingModal or any other modal-overlay surface is
-// open (parent controls visibility via the `hidden` prop). Default
-// always visible.
+// Reduced motion handling moved to the className — when
+// `useReducedMotion()` returns true, drop the `animate-whatsapp-pulse`
+// class so the ring is static. framer-motion's `animate-pulse` style
+// transforms also collapse to a no-op. Net result: respectful of
+// `prefers-reduced-motion` without forking the markup.
 
 import { motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 
-const WHATSAPP_NUMBER = "919711977782"; // E.164 without +
+const WHATSAPP_NUMBER = "919711977782"; // E.164 without + (matches Navbar PHONE_TEL)
 const PREFILL_MESSAGE = "Hi, I'd like to book a Sanocare visit";
 
 interface FloatingWhatsAppProps {
@@ -28,8 +39,6 @@ interface FloatingWhatsAppProps {
 
 export function FloatingWhatsApp({ hidden = false }: FloatingWhatsAppProps) {
   const prefersReducedMotion = useReducedMotion();
-  // Defer mount until after first paint to avoid blocking LCP. Also
-  // gives mobile keyboard-open detectors a clean baseline.
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -39,13 +48,26 @@ export function FloatingWhatsApp({ hidden = false }: FloatingWhatsAppProps) {
 
   const href = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(PREFILL_MESSAGE)}`;
 
+  // Compose the static decoration on the anchor itself:
+  //   - drop shadow (outer + tight inner-light)
+  //   - 14% white inner ring (the `inset` shadow)
+  // The pulse ring rides on top via a sibling absolutely-positioned
+  // span (the box-shadow keyframes don't fight the static shadow that
+  // way). When reduced-motion is on, we skip rendering the pulse span.
   return (
     <motion.a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Chat with us on WhatsApp"
-      className="fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-50 inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-[#25D366] hover:bg-[#1ebe57] text-white rounded-full shadow-2xl ring-4 ring-white/60"
+      className="fixed z-[90] inline-flex items-center justify-center w-[52px] h-[52px] rounded-full text-white bg-[color:var(--color-whatsapp)] hover:bg-[color:var(--color-whatsapp-dark)] transition-colors"
+      style={{
+        bottom: "96px",
+        right: "14px",
+        // Two-layer outer shadow + 14% inner ring per mockup.
+        boxShadow:
+          "0 8px 20px rgba(0,0,0,0.18), 0 2px 4px rgba(0,0,0,0.12), inset 0 0 0 1.4px rgba(255,255,255,0.14)",
+      }}
       initial={prefersReducedMotion ? false : { scale: 0, opacity: 0 }}
       animate={prefersReducedMotion ? undefined : { scale: 1, opacity: 1 }}
       transition={
@@ -55,12 +77,25 @@ export function FloatingWhatsApp({ hidden = false }: FloatingWhatsAppProps) {
       }
       whileTap={prefersReducedMotion ? undefined : { scale: 0.92 }}
     >
-      {/* WhatsApp glyph — inline SVG so the green pill renders with no
-          additional font / icon-set bundle. */}
+      {/* Pulse ring — sibling span so the keyframed box-shadow doesn't
+          collide with the static one on the anchor. Sized to match the
+          parent and clipped by the anchor's rounded edge. */}
+      {!prefersReducedMotion && (
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 rounded-full pointer-events-none"
+          style={{
+            animation: "whatsapp-pulse 2.4s ease-out infinite",
+          }}
+        />
+      )}
+
+      {/* Official WhatsApp glyph — inline SVG so the green pill renders
+          with no additional font / icon-set bundle. */}
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 32 32"
-        className="w-7 h-7 sm:w-8 sm:h-8"
+        className="w-7 h-7 relative"
         aria-hidden="true"
         fill="currentColor"
       >

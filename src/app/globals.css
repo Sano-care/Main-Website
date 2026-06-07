@@ -21,6 +21,13 @@
   --color-accent-coral-dark: #E16A3D;
   --color-accent-coral-50: #fff1ec;
 
+  /* WhatsApp brand colour — mirrors `tokens.ts colors.whatsapp`. T85
+     PR3 promoted from inline-hex at 3 sites. New FloatingWhatsApp +
+     ServiceStickyBar read these vars; PR5 sweeps the legacy inline
+     callsites (MobileStickyBar, MobileMenu) for full consistency. */
+  --color-whatsapp: #25D366;
+  --color-whatsapp-dark: #1ebe57;
+
   /* Surfaces & ink */
   --color-background-light: #f7fafc;
   --color-background-dark: #0f172a;
@@ -127,5 +134,26 @@ body {
   }
   100% {
     box-shadow: 0 0 0 0 rgba(244, 132, 90, 0);
+  }
+}
+
+/* T85 PR3 — WhatsApp FAB pulse. Subtle (2.4s) ring-expand at brand
+   green, attention-grabbing without being noisy. Stacks cleanly with
+   the FAB's static two-layer shadow + 14% inner ring (those use the
+   `box-shadow` property; this animation drives an outer ring via a
+   pseudo-element keyframed shadow that doesn't conflict).
+
+   Respect `prefers-reduced-motion` at the callsite (FloatingWhatsApp
+   reads `useReducedMotion()` and skips the class), not via the
+   media query here — keeps animation control in component logic. */
+@keyframes whatsapp-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 14px rgba(37, 211, 102, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 211, 102, 0);
   }
 }

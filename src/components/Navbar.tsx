@@ -1,18 +1,20 @@
 "use client";
 
-// T61 navbar. Changes from the pre-T61 version:
-//   - Persistent click-to-call phone number (tel:) — a number on desktop, a
-//     phone icon button on mobile. Always in the top nav.
-//   - "Sign in" pill replacing the Patient Portal outline button (label from
-//     CMS, now defaulting to "Sign in"; pill styling per the locked plan-gate).
-//   - The inline AnimatePresence dropdown menu is gone; the hamburger now opens
-//     the full-screen MobileMenu (B1). MobileMenu is rendered OUTSIDE <header>
-//     (alongside the modals) because the scrolled header sets backdrop-blur,
-//     which creates a containing block — a fixed child inside it would mis-place.
-//   - The gate→modal booking trigger is the shared useBookingFlow hook (same
-//     flow, now reusable by the hero, sticky bar, CTA strips and the menu).
+// T61 navbar — T85 PR3 retint:
+//   - Desktop phone affordance: text-link `+91 97119 77782` → 36×36
+//     coral circular icon button 8px left of the Sign-in pill. Single
+//     Call language across mobile + desktop per brief. Number stays
+//     visible in the footer for read-then-dial users.
+//   - Mobile phone icon: blue (text-primary) → coral. Disciplined
+//     palette: coral = action; phone = call action.
+//   - All other T61 behaviours preserved: sticky w/ scrolled
+//     backdrop-blur, mobile hamburger → full-screen MobileMenu,
+//     shared useBookingFlow trigger for Book a Visit pill, BookingModal
+//     + BookingGate still mounted here once and store-driven.
 //
-// BookingModal + BookingGate are still mounted here once and stay store-driven.
+// PR3 keeps PHONE_TEL = "+919711977782" (T61 codebase number). Founder
+// will confirm whether this is the real ops number or also a
+// placeholder — single grep at launch covers every surface either way.
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -107,15 +109,6 @@ export function Navbar() {
               ))}
             </div>
             <div className="flex items-center gap-3">
-              {/* Click-to-call — copyable on desktop, dials on mobile. */}
-              <a
-                href={`tel:${PHONE_TEL}`}
-                className="inline-flex items-center gap-2 text-sm font-semibold text-text-main hover:text-primary transition-colors"
-                aria-label={`Call Sanocare at ${PHONE_DISPLAY}`}
-              >
-                <Phone className="w-4 h-4 text-primary" aria-hidden="true" />
-                {PHONE_DISPLAY}
-              </a>
               <Button
                 variant="primary"
                 size="md"
@@ -124,26 +117,45 @@ export function Navbar() {
               >
                 {navbarCopy.primaryCtaLabel}
               </Button>
-              {/* "Sign in" pill — distinct from regular nav links. Links
-                  directly to /pulse/login (not /portal) to skip the
-                  /portal→/pulse→/pulse/login redirect chain + its PulseShell
-                  transition flash. /pulse/login itself bounces an already-signed
-                  -in patient to /pulse server-side. */}
-              <Link
-                href="/pulse/login"
-                className="inline-flex items-center justify-center rounded-full border border-primary/20 bg-primary/5 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
-              >
-                {navbarCopy.portalLabel}
-              </Link>
+              {/* T85 PR3 — coral Call icon, 36×36 circle, 8px left of
+                  Sign-in pill (the parent `gap-3` = 12px is the larger
+                  spacing between Book-pill and the right cluster; the
+                  tighter 8px gap between Call icon and Sign-in pill is
+                  the `gap-2` wrapper below). aria-label carries the
+                  number for screen readers; visible number lives in
+                  the footer. */}
+              <div className="flex items-center gap-2">
+                <a
+                  href={`tel:${PHONE_TEL}`}
+                  aria-label={`Call Sanocare at ${PHONE_DISPLAY}`}
+                  className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-[color:var(--color-accent-coral)] hover:bg-[color:var(--color-accent-coral-dark)] text-white transition-colors shadow-[0_4px_10px_rgba(244,132,90,0.32)]"
+                >
+                  <Phone className="w-4 h-4" aria-hidden="true" />
+                </a>
+                {/* "Sign in" pill — distinct from regular nav links.
+                    Links directly to /pulse/login (not /portal) to skip
+                    the /portal→/pulse→/pulse/login redirect chain + its
+                    PulseShell transition flash. /pulse/login itself
+                    bounces an already-signed-in patient to /pulse
+                    server-side. */}
+                <Link
+                  href="/pulse/login"
+                  className="inline-flex items-center justify-center rounded-full border border-primary/20 bg-primary/5 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+                >
+                  {navbarCopy.portalLabel}
+                </Link>
+              </div>
             </div>
           </nav>
 
-          {/* Mobile cluster — persistent click-to-call + hamburger. */}
+          {/* Mobile cluster — persistent click-to-call + hamburger.
+              T85 PR3 retint: phone icon goes coral to match desktop.
+              Disciplined palette: coral = action. */}
           <div className="flex items-center gap-1 md:hidden">
             <a
               href={`tel:${PHONE_TEL}`}
               aria-label={`Call Sanocare at ${PHONE_DISPLAY}`}
-              className="inline-flex items-center justify-center w-11 h-11 rounded-full text-primary hover:bg-primary/5 transition-colors"
+              className="inline-flex items-center justify-center w-11 h-11 rounded-full text-[color:var(--color-accent-coral)] hover:bg-[color:var(--color-accent-coral-50)] transition-colors"
             >
               <Phone className="w-5 h-5" aria-hidden="true" />
             </a>
