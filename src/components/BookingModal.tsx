@@ -10,6 +10,7 @@ import { Button, Input, Select } from "@/components/ui";
 import { useBookingStore } from "@/store/bookingStore";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useBookingSubmit } from "@/hooks/useBookingSubmit";
+import { useScrollLock } from "@/hooks/useScrollLock";
 import { useCmsSection } from "@/hooks/useCmsSection";
 import { BookingConfirmation } from "@/components/BookingConfirmation";
 import { HOME_CONTENT } from "@/constants/cms-content";
@@ -112,19 +113,21 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
   };
 
   // Close on escape key
+  // T85 PR4a bug 2 fix — body scroll lock via shared useScrollLock
+  // (position:fixed pattern, ref-counted across all 3 booking surfaces).
+  // The prior `overflow: hidden` here was iOS-broken — rubber-band
+  // scroll bled through. The hook handles acquire/release; this effect
+  // now only owns the Escape key listener.
+  useScrollLock(isOpen);
+
   useEffect(() => {
+    if (!isOpen) return;
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-    
-    if (isOpen) {
-      document.addEventListener("keydown", handleEscape);
-      document.body.style.overflow = "hidden";
-    }
-    
+    document.addEventListener("keydown", handleEscape);
     return () => {
       document.removeEventListener("keydown", handleEscape);
-      document.body.style.overflow = "unset";
     };
   }, [isOpen, onClose]);
 

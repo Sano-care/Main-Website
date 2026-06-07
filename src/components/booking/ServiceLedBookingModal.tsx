@@ -29,6 +29,7 @@ import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
 import { useBookingStore } from "@/store/bookingStore";
+import { useScrollLock } from "@/hooks/useScrollLock";
 import { getServiceBySlug } from "@/lib/services/catalog";
 import type { ServiceSlug } from "@/lib/services/catalog";
 
@@ -51,6 +52,11 @@ export function ServiceLedBookingModal({
   const serviceSlug = useBookingStore((s) => s.serviceSlug);
   const storedName = useBookingStore((s) => s.name);
   const resetForNewBooking = useBookingStore((s) => s.resetForNewBooking);
+
+  // T85 PR4a bug 2 fix — body scroll lock. position:fixed pattern via
+  // shared useScrollLock hook; ref-counted module so gate→modal
+  // handoff doesn't double-restore.
+  useScrollLock(isOpen);
 
   const [step, setStep] = useState<Step>(() =>
     storedName.trim().length >= 2 ? "wherewhen" : "identify",
