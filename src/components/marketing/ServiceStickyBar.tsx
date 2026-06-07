@@ -45,6 +45,7 @@
 
 import { useEffect, useState } from "react";
 import { SERVICES, type ServiceIconKey } from "@/lib/services/catalog";
+import { useBookingStore } from "@/store/bookingStore";
 
 // T85 PR3 v1.1 — solid filled icons.
 //
@@ -186,6 +187,15 @@ export function ServiceStickyBar() {
   // inline. Compute once.
   const [slugs] = useState(() => SERVICES.map((s) => s.slug));
   const active = useActiveService(slugs);
+
+  // T85 PR4a bug 1 fix — hide while any booking surface is open. The
+  // sticky bar was covering the "Continue" / "Proceed to Pay" CTAs at
+  // the bottom of each modal step on real devices. Both BookingModal
+  // and ServiceLedBookingModal are dispatched off `isModalOpen`;
+  // `isGateOpen` covers the OTP gate before either modal opens.
+  const isModalOpen = useBookingStore((s) => s.isModalOpen);
+  const isGateOpen = useBookingStore((s) => s.isGateOpen);
+  if (isModalOpen || isGateOpen) return null;
 
   return (
     <nav
