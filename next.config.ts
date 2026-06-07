@@ -29,19 +29,11 @@ const nextConfig: NextConfig = {
     ];
   },
 
-  // Marketing alias URLs for paid campaigns (Google Ads Final URLs). Each is an
-  // internal REWRITE (HTTP 200, stays on-domain) to the /wa conversion endpoint
-  // with the service preset. UTM params on the alias (utm_source/campaign/term…)
-  // are forwarded to /wa automatically by Next.js, so attribution + the GA4/Ads
-  // conversion fire work unchanged. Rewrites (not redirects) so the click lands
-  // on the conversion page in a single hop and Smart Bidding sees a clean URL.
-  async rewrites() {
-    return [
-      { source: "/book-home-visit", destination: "/wa?service=home_visit" },
-      { source: "/book-teleconsult", destination: "/wa?service=teleconsult" },
-      { source: "/book-lab-test", destination: "/wa?service=lab" },
-    ];
-  },
+  // NOTE: the /book-* paid-campaign aliases are NOT config rewrites — Next on
+  // Netlify drops a rewrite destination's static query (?service=…), so they
+  // silently fell back to the generic message. They are real route handlers
+  // (src/app/book-*/route.ts) that share @/lib/wa/conversion with the service
+  // hard-set: guaranteed 200 + correct service + UTM passthrough.
 
   // v5.1 ships no bundled font TTFs — the renderer uses @react-pdf's
   // built-in PDF standard fonts (Times-Roman, Times-Bold, Times-Italic,
