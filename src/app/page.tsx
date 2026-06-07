@@ -3,31 +3,48 @@ import {
   Navbar,
   Hero,
   StatsBar,
-  Features,
-  Journey,
-  Testimonials,
-  Insights,
-  Accreditations,
   Footer,
   FloatingSidebar,
   TopBanner,
   SanocareAdvantage,
 } from "@/components";
-import { LabTestSearchSection } from "@/components/lab/LabTestSearchSection";
 import { SectionReveal } from "@/components/marketing/SectionReveal";
 import { FloatingWhatsApp } from "@/components/marketing/FloatingWhatsApp";
-import { BookingCTASection } from "@/components/marketing/BookingCTASection";
 import { HomeStickyBar } from "@/components/marketing/HomeStickyBar";
+import { ServiceSection } from "@/components/marketing/ServiceSection";
+import { AboutBand } from "@/components/marketing/AboutBand";
+import { SERVICES } from "@/lib/services/catalog";
 
-// T61 mobile-first homepage. Each major section is wrapped in SectionReveal
-// (scroll-triggered fade/slide-up, reduced-motion safe) and the booking-density
-// sweep drops a BookingCTASection after the patient-decision sections, each with
-// section-matched copy. The sticky bottom bar + floating WhatsApp keep a booking
-// affordance reachable from any scroll position.
+// T85 PR2 — homepage rewired to the brief's 8-section hierarchy:
 //
-// Note: the full-screen MobileMenu is mounted from Navbar (outside its <header>)
-// rather than here — see Navbar.tsx for the backdrop-blur containing-block
-// rationale; that keeps the booking trigger + menu state co-located.
+//   1. Navbar
+//   2. Hero (informational only — CTAs stripped in Hero.tsx itself)
+//   3. Service 1: Home-Visit
+//   4. AboutBand (blue band, between Service 1 and Service 2)
+//   5. Service 2: Teleconsultation
+//   6. Service 3: Lab Tests at Home
+//   7. Service 4: Medic at Home
+//   8. StatsBar (Numbers band — copy locked to T85 brief Section 5)
+//   9. SanocareAdvantage
+//  10. Footer
+//
+// Booking entry points across the homepage:
+//   - 4 coral CTAs inside ServiceSections (PR4 wires the modal flow)
+//   - HomeStickyBar (mobile sticky)
+//   - FloatingWhatsApp (mobile pill)
+//   - Navbar Book a Visit button
+//
+// Removed from the homepage tree in PR2 (vs T61) — file-level cleanup
+// happens in PR5 after a full grep for other callers:
+//   - 5 × BookingCTASection strips
+//   - LabTestSearchSection (Lab is now Service 3 card; the component
+//     still serves `/lab-tests` page)
+//   - Testimonials, Features, Journey, Insights, Accreditations
+//   - Hero CTA buttons + QuickBookCard (handled inside Hero.tsx)
+//
+// The 4 ServiceSections + the AboutBand all render inside a 420px
+// mobile-first column. StatsBar + SanocareAdvantage are full-bleed
+// bands with their own internal max-widths.
 
 // NEXT_PUBLIC_SHOW_PULSE_BETA_BANNER gates the Pulse closed-beta TopBanner.
 // Defaults hidden (false / unset); flip to "true" to surface it.
@@ -51,67 +68,52 @@ export default function Home() {
         {SHOW_PULSE_BANNER && <TopBanner />}
 
         <main className="flex flex-col flex-1 pb-20 lg:pb-0">
+          {/* Hero — informational only (CTAs + QuickBookCard removed in Hero.tsx) */}
           <SectionReveal>
             <Hero />
           </SectionReveal>
-          <BookingCTASection
-            headline="Ready to book?"
-            subline="Pick a service — ₹249 confirms your visit."
-          />
 
-          <SectionReveal>
-            <LabTestSearchSection />
-          </SectionReveal>
-          <BookingCTASection
-            headline="Need this test?"
-            subline="Book free home collection at a time that suits you."
-            ctaLabel="Book home collection"
-          />
+          {/* Service stack — mobile-first 420px column. Brief order:
+              Service 1 → AboutBand → Service 2 → Service 3 → Service 4. */}
+          <div className="mx-auto max-w-[420px] w-full">
+            {/* Service 1: Home-Visit */}
+            <SectionReveal>
+              <ServiceSection
+                config={SERVICES[0]}
+                index={0}
+                total={SERVICES.length}
+              />
+            </SectionReveal>
 
+            {/* About Sanocare blue band */}
+            <SectionReveal>
+              <AboutBand />
+            </SectionReveal>
+
+            {/* Services 2–4: Teleconsultation, Lab Tests, Medic at Home */}
+            {SERVICES.slice(1).map((config, i) => {
+              const index = i + 1;
+              return (
+                <SectionReveal key={config.slug}>
+                  <ServiceSection
+                    config={config}
+                    index={index}
+                    total={SERVICES.length}
+                  />
+                </SectionReveal>
+              );
+            })}
+          </div>
+
+          {/* Numbers band */}
           <SectionReveal>
             <StatsBar />
           </SectionReveal>
-          <BookingCTASection
-            headline="Join 1,000+ families"
-            subline="Trusted, MoHFW-2020-compliant care at home."
-          />
 
+          {/* The Sanocare Advantage */}
           <SectionReveal>
             <SanocareAdvantage />
           </SectionReveal>
-
-          <SectionReveal>
-            <Testimonials />
-          </SectionReveal>
-
-          <SectionReveal>
-            <Features />
-          </SectionReveal>
-          <BookingCTASection
-            headline="Book one of these"
-            subline="Pick the service you need — we'll handle the rest."
-          />
-
-          <SectionReveal>
-            <Journey />
-          </SectionReveal>
-          <BookingCTASection
-            headline="Start your visit in 60 seconds"
-            subline="Two fields and a callback — that's all it takes."
-          />
-
-          <SectionReveal>
-            <Insights />
-          </SectionReveal>
-
-          <SectionReveal>
-            <Accreditations />
-          </SectionReveal>
-
-          <BookingCTASection
-            headline="Ready when you are"
-            subline="Book a visit, or talk to us on WhatsApp."
-          />
         </main>
 
         <Footer />

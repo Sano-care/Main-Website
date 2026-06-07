@@ -1,43 +1,42 @@
 "use client";
 
-// T61 mobile-first hero. Replaces the desktop-era split (faint background +
-// inline 5-field booking form) with:
-//   - a single static hero image (4:5 on mobile, 16:9 on desktop),
-//   - badge + H1 + sub-headline (all CMS-driven via useCmsSection),
-//   - a primary "Book a Visit" CTA wired to the shared gate→modal flow,
-//   - a secondary "Talk to us on WhatsApp" outline CTA,
-//   - a static micro-trust strip (rating + visits + response time),
-//   - QuickBookCard as a follow-on card (callback path, 2 fields) below the CTAs.
+// T85 PR2 — Hero is informational only.
 //
-// Locked T61 plan-gate decisions honoured here:
-//   - Hero CTAs route to the shared booking flow (useBookingFlow → Navbar's
-//     BookingGate/BookingModal). The inline 5-field form + BookingConfirmation
-//     conditional are gone (safety-grep confirmed confirmedBooking is produced
-//     /consumed centrally by BookingModal + LabTestBasket, not uniquely here).
-//   - Hero stats stay STATIC text (AnimatedCounter goes on StatsBar, not here).
-//   - QuickBookCard is the callback path only — no onBook prop.
+// PR2 stripped the "Book a Visit" + "Talk to us on WhatsApp" CTAs and
+// the trailing QuickBookCard mount. Per brief, the only homepage
+// booking entry points are the 4 coral CTAs inside ServiceSections,
+// the HomeStickyBar, the FloatingWhatsApp pill, and the Navbar button.
 //
-// Motion values come from the shared design tokens; everything degrades to a
-// static render under prefers-reduced-motion.
+// What stays:
+//   - single static hero image (4:5 on mobile, 16:9 on desktop),
+//   - badge + H1 + sub-headline (CMS-driven via useCmsSection),
+//   - the static micro-trust strip (rating + visits + response time).
+//
+// Removed in PR2:
+//   - CTA block (Book a Visit + WhatsApp button)
+//   - QuickBookCard mount and the `id="hero-booking-form"` anchor
+//     wrapper. **PR5 prep note**: three CMS-side surfaces still link to
+//     `#hero-booking-form` — `src/constants/cms/legal.ts`,
+//     `src/constants/cms/pages.ts`, `src/constants/cms/home.ts`. PR5
+//     audits + updates those anchor targets. The anchor is dead in the
+//     interim; landing on it scrolls to top of hero (acceptable degrade
+//     for CMS legacy links).
+//
+// Motion values still come from the shared design tokens; everything
+// degrades to a static render under prefers-reduced-motion.
 
 import Image from "next/image";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowRight, MessageCircle, Star, Clock, Users } from "lucide-react";
+import { Star, Clock, Users } from "lucide-react";
 
 import { useCmsSection } from "@/hooks/useCmsSection";
-import { useBookingFlow } from "@/hooks/useBookingFlow";
 import { HOME_CONTENT } from "@/constants/cms-content";
 import { tokens } from "@/lib/design/tokens";
-import { QuickBookCard } from "@/components/marketing/QuickBookCard";
 
 const HERO_IMAGE_SRC = "/banner/optimized/1-experienced-team.jpg";
-const WHATSAPP_HREF = `https://wa.me/919711977782?text=${encodeURIComponent(
-  "Hi, I'd like to book a Sanocare visit",
-)}`;
 
 export function Hero() {
   const { data: heroCopy } = useCmsSection("home", "hero", HOME_CONTENT.hero);
-  const { requestBooking } = useBookingFlow();
   const prefersReducedMotion = useReducedMotion();
 
   // Shared entrance: fade + small slide-up, eased on the token curve. Disabled
@@ -106,29 +105,9 @@ export function Hero() {
               {heroCopy.description}
             </motion.p>
 
-            {/* CTAs */}
-            <motion.div
-              {...reveal(prefersReducedMotion ? 0 : 0.15)}
-              className="flex flex-col sm:flex-row gap-3 pt-1"
-            >
-              <button
-                type="button"
-                onClick={requestBooking}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-primary/30 transition-all hover:bg-primary-dark hover:shadow-primary/50 active:scale-[0.97]"
-              >
-                Book a Visit
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <a
-                href={WHATSAPP_HREF}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-primary/30 px-6 py-3.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/5 active:scale-[0.97]"
-              >
-                <MessageCircle className="h-4 w-4" aria-hidden="true" />
-                Talk to us on WhatsApp
-              </a>
-            </motion.div>
+            {/* T85 PR2 — CTAs removed. Hero is informational only.
+                Booking entry points: 4 coral CTAs inside ServiceSections,
+                HomeStickyBar, FloatingWhatsApp pill, Navbar button. */}
 
             {/* Static micro-trust strip (per locked decision: no count-up here). */}
             <motion.div
@@ -152,18 +131,11 @@ export function Hero() {
           </div>
         </div>
 
-        {/* Quick Book — follow-on callback card below the hero CTAs.
-            id="hero-booking-form" aliases the legacy anchor: CMS CTAs across the
-            site still link to /#hero-booking-form (the old inline form). Keeping
-            the id here means those anchors scroll to the Quick Book card instead
-            of dead-ending. scroll-mt clears the sticky top nav. */}
-        <motion.div
-          id="hero-booking-form"
-          {...reveal(prefersReducedMotion ? 0 : 0.1)}
-          className="mt-8 lg:mt-12 scroll-mt-24"
-        >
-          <QuickBookCard />
-        </motion.div>
+        {/* T85 PR2 — QuickBookCard mount removed. PR5 prep note: three
+            CMS-side surfaces still link to `#hero-booking-form`
+            (`src/constants/cms/legal.ts`, `src/constants/cms/pages.ts`,
+            `src/constants/cms/home.ts`). PR5 audits + updates those
+            anchor targets. Anchor lands at top of hero in the interim. */}
       </div>
     </section>
   );

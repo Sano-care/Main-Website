@@ -12,7 +12,13 @@
 
   /* Coral accent — warmth, family-friendly CTA highlights */
   --color-accent-coral: #f4845a;
-  --color-accent-coral-dark: #dc6a40;
+  /* `--color-accent-coral-dark` reconciled to brand hex #E16A3D in T85
+     PR2; prior value #dc6a40 was unintended drift. Mirrors
+     `tokens.ts coral.dark`. Every `var(--color-accent-coral-dark)`
+     reader (Footer, Navbar, lab basket/search, reports, pulse
+     medications, SanocareAdvantage) picks the new hex up automatically
+     — no per-site edit needed. */
+  --color-accent-coral-dark: #E16A3D;
   --color-accent-coral-50: #fff1ec;
 
   /* Surfaces & ink */
