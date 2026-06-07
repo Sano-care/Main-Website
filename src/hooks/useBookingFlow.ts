@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useBookingStore } from "@/store/bookingStore";
+import type { ServiceSlug } from "@/lib/services/catalog";
 
 // Shared "Book a Visit" trigger for the T61 booking-density sweep.
 //
@@ -28,6 +29,7 @@ import { useBookingStore } from "@/store/bookingStore";
 export function useBookingFlow() {
   const openModal = useBookingStore((s) => s.openModal);
   const openGate = useBookingStore((s) => s.openGate);
+  const setServiceSlug = useBookingStore((s) => s.setServiceSlug);
   const phoneVerifiedUntil = useBookingStore((s) => s.phoneVerifiedUntil);
 
   const [pending, setPending] = useState(false);
@@ -55,5 +57,30 @@ export function useBookingFlow() {
     }
   }, [phoneVerifiedUntil, openModal, openGate]);
 
-  return { requestBooking };
+  /**
+   * T85 PR4a — service-led variant. Seeds bookingStore.serviceSlug
+   * before opening the gate or modal so the new ServiceLedBookingModal
+   * knows which service the patient tapped on. Used by the 4 coral
+   * CTAs in `ServiceSection`; replaces PR2.5's slug-blind stopgap.
+   *
+   * Lab Tests is still in scope for the slug seeding (so the lab path
+   * can later read it), but the modal mount in Navbar continues to be
+   * T61's BookingModal until PR4b ships the lab basket window.
+   */
+  const requestBookingForService = useCallback(
+    (slug: ServiceSlug) => {
+      setServiceSlug(slug);
+      const verified =
+        phoneVerifiedUntil !== null && phoneVerifiedUntil > Date.now();
+      if (verified) {
+        openModal();
+      } else {
+        setPending(true);
+        openGate();
+      }
+    },
+    [phoneVerifiedUntil, openModal, openGate, setServiceSlug],
+  );
+
+  return { requestBooking, requestBookingForService };
 }

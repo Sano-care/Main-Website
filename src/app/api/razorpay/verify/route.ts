@@ -6,6 +6,21 @@ import {
   normaliseIndianPhone,
   verifyToken,
 } from "@/lib/otp/token";
+import { sendAarogyaLeadAlert } from "@/lib/booking/rampwin";
+import {
+  dbToT85Slug,
+  t85ServiceDisplayName,
+  t85ToPricingKey,
+} from "@/lib/booking/serviceMapper";
+import { getServiceHalfRoundedUp } from "@/constants/pricing";
+import type { ServiceSlug } from "@/lib/services/catalog";
+
+const VALID_T85_SLUGS: ServiceSlug[] = [
+  "home-visit",
+  "teleconsultation",
+  "lab-tests",
+  "medic-at-home",
+];
 
 export const runtime = "nodejs";
 
@@ -113,13 +128,45 @@ export async function POST(req: NextRequest) {
       ? null
       : "📍 Location auto-capture declined or unavailable — confirm address with patient before dispatch.";
 
+    // T85 PR4a — if the booking carries a T85 slug, write that as the
+    // service_category (post-M039 widening accepts both legacy and T85
+    // values). booking_fee_paid_paise is server-computed from the slug
+    // via getServiceHalfRoundedUp so a tampered client value can't
+    // mark a booking as fully prepaid at a lower amount.
+    const t85SlugRaw = String(booking.t85Slug || "").trim();
+    const t85Slug = (VALID_T85_SLUGS as string[]).includes(t85SlugRaw)
+      ? (t85SlugRaw as ServiceSlug)
+      : null;
+    const persistedServiceCategory = t85Slug
+      ? t85Slug
+      : String(booking.service_category || "").trim();
+    const persistedFeePaise = t85Slug
+      ? getServiceHalfRoundedUp(t85ToPricingKey(t85Slug)) * 100
+      : 24_900; // Legacy ₹249 flat — unchanged for existing callers.
+
+    // T85 PR4a — schedule snapshot. ASAP rows get null in scheduled_for;
+    // slot rows get the ISO start of the 1-hour window. ops surfaces
+    // can read scheduled_for to dispatch correctly. Until M040 adds a
+    // typed column for this, we round-trip via ops_notes so PR4a doesn't
+    // need another migration.
+    const scheduledMarker =
+      booking.scheduledFor && typeof booking.scheduledFor === "object"
+        ? booking.scheduledFor.kind === "slot" && booking.scheduledFor.iso
+          ? `🗓 Scheduled: ${String(booking.scheduledFor.iso)}`
+          : "🗓 ASAP"
+        : "";
+
+    const composedOpsNotes = [opsNotesMarker, scheduledMarker]
+      .filter(Boolean)
+      .join("\n");
+
     const insertPayload = {
       patient_name: String(booking.patient_name || "").trim(),
       phone: String(booking.phone || "").trim(),
-      service_category: String(booking.service_category || "").trim(),
+      service_category: persistedServiceCategory,
       manual_address: String(booking.manual_address || "").trim(),
       gps_location: booking.gps_location ?? null,
-      ops_notes: opsNotesMarker,
+      ops_notes: composedOpsNotes || null,
       amount: typeof booking.amount === "number" ? booking.amount : null,
       status: "CONFIRMED",
       // Payment fields — see migration 007_razorpay_payments.sql for schema.
@@ -127,7 +174,7 @@ export async function POST(req: NextRequest) {
       razorpay_payment_id,
       razorpay_signature,
       payment_status: "CAPTURED",
-      booking_fee_paid_paise: 24_900,
+      booking_fee_paid_paise: persistedFeePaise,
       payment_captured_at: new Date().toISOString(),
       // From migration 011 — stamps the OTP-verified moment so ops can
       // audit which bookings went through the phone gate.
@@ -137,7 +184,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase
       .from("bookings")
       .insert(insertPayload)
-      .select("id")
+      .select("id, booking_code")
       .single();
 
     if (error) {
@@ -152,7 +199,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ ok: true, bookingId: data?.id });
+    // T85 PR4a — best-effort ops alert. `sendAarogyaLeadAlert` swallows
+    // its own errors (logged via console.error) and never throws here,
+    // so the booking response stays authoritative regardless of BSP
+    // hiccups. fire-and-forget is intentional: we don't await so we
+    // don't add 200–800ms BSP latency to the patient's wait. The
+    // function still returns synchronously enough that the response is
+    // sent before serverless runtime tears down the function in
+    // practice; if a future Next.js / Netlify edge change introduces
+    // teardown races, switch to `await` and accept the latency hit.
+    const displaySlug =
+      t85Slug ?? dbToT85Slug(persistedServiceCategory) ?? "home-visit";
+    void sendAarogyaLeadAlert({
+      patientName: insertPayload.patient_name,
+      // Age is not collected in PR4a Step 1 — defaults to "—y" in the
+      // sender. T64 (family-member picker) extends Step 1 with age and
+      // can pass `ageWithYearSuffix` here once it ships.
+      serviceDisplayName: t85ServiceDisplayName(displaySlug),
+      location: insertPayload.manual_address,
+      // PR4a doesn't surface a notes/symptoms input. Default "—" until
+      // the booking flow adds an optional notes field in a later
+      // iteration.
+      context: undefined,
+      patientPhone: insertPayload.phone,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      bookingId: data?.id,
+      bookingCode: data?.booking_code ?? null,
+    });
   } catch (err) {
     console.error("[razorpay/verify] error:", err);
     const message =

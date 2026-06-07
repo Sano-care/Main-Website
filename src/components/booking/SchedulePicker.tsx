@@ -1,0 +1,265 @@
+"use client";
+
+// T85 PR4a — shared schedule picker used by:
+//   - PR4a's WhereWhenStep (non-lab services: Home-Visit, Teleconsult,
+//     Medic at Home)
+//   - PR4b's Lab Tests Basket window (when it ships — same component,
+//     different "ASAP" copy injected via prop)
+//
+// Behaviour:
+//   - Defaults to ASAP. Tapping the "Schedule for later" affordance
+//     reveals the date strip + hour-slot grid inline (no separate
+//     screen — keeps the booking modal feeling fast).
+//   - Date strip: Today / Tomorrow / Day-After + N additional days,
+//     horizontally scrollable.
+//   - Hour slots: 1-hour windows from 9 AM through 8 PM. Past windows
+//     on Today are disabled (greyed out).
+//   - Founder note: "Arrival window: 30-min variance" disclaimer in
+//     grey-600 / 11px below the picker. Operational SLA = arrival
+//     within the booked window; missed bookings are ops-side escalation.
+//
+// State shape is `ScheduledFor` from bookingStore:
+//   { kind: 'asap' } | { kind: 'slot', iso: string }
+// The ISO string is the START of the 1-hour window in the local IST
+// timezone (e.g. "2026-06-07T10:00:00+05:30" for "10–11 AM today").
+
+import { useMemo, useState } from "react";
+import { Clock, ChevronRight } from "lucide-react";
+import type { ScheduledFor } from "@/store/bookingStore";
+
+// Hour slot start hours (24h). 9 AM through 7 PM gives 11 windows; the
+// last window ends at 8 PM per founder spec.
+const SLOT_START_HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+const NUM_DATES_VISIBLE = 7; // Today + 6 forward days
+
+interface SchedulePickerProps {
+  value: ScheduledFor;
+  onChange: (next: ScheduledFor) => void;
+  /**
+   * ASAP-tile copy. Caller controls the wording so a Home-Visit can say
+   * "We'll arrive in ~30 min" and a Teleconsult can say "~15 min".
+   */
+  asapLabel: string;
+}
+
+interface DateOption {
+  /** "Today" / "Tomorrow" / "Day After" / "Sat 14" etc. */
+  label: string;
+  /** The local-day Date for matching against the hour slot. */
+  date: Date;
+}
+
+function buildDateOptions(now: Date): DateOption[] {
+  const out: DateOption[] = [];
+  for (let i = 0; i < NUM_DATES_VISIBLE; i++) {
+    const d = new Date(now);
+    d.setDate(now.getDate() + i);
+    d.setHours(0, 0, 0, 0);
+    let label: string;
+    if (i === 0) label = "Today";
+    else if (i === 1) label = "Tomorrow";
+    else if (i === 2) label = "Day After";
+    else {
+      // "Sat 14"
+      label = d.toLocaleDateString("en-IN", {
+        weekday: "short",
+        day: "numeric",
+      });
+    }
+    out.push({ label, date: d });
+  }
+  return out;
+}
+
+function slotLabel(hour: number): string {
+  // 9 → "9–10 AM", 12 → "12–1 PM", 17 → "5–6 PM"
+  const format = (h: number) => {
+    const ampm = h >= 12 ? "PM" : "AM";
+    const display = h % 12 === 0 ? 12 : h % 12;
+    return { display, ampm };
+  };
+  const a = format(hour);
+  const b = format(hour + 1);
+  if (a.ampm === b.ampm) return `${a.display}–${b.display} ${b.ampm}`;
+  return `${a.display} ${a.ampm}–${b.display} ${b.ampm}`;
+}
+
+/** Build the ISO string for a slot, anchored to local IST. */
+function slotIso(date: Date, hour: number): string {
+  const d = new Date(date);
+  d.setHours(hour, 0, 0, 0);
+  // toISOString returns UTC; we want the local (IST) representation
+  // for ops display. Build manually so the offset is stable.
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}:00+05:30`
+  );
+}
+
+export function SchedulePicker({
+  value,
+  onChange,
+  asapLabel,
+}: SchedulePickerProps) {
+  // Anchor "now" once per render so the date strip is stable. (No
+  // Date.now() in render — instantiating Date() is fine; we just don't
+  // recompute on every state change.)
+  const now = useMemo(() => new Date(), []);
+  const dateOptions = useMemo(() => buildDateOptions(now), [now]);
+
+  const [expanded, setExpanded] = useState(value.kind === "slot");
+  const [selectedDateIndex, setSelectedDateIndex] = useState(() => {
+    if (value.kind !== "slot") return 0;
+    const target = new Date(value.iso);
+    target.setHours(0, 0, 0, 0);
+    const idx = dateOptions.findIndex(
+      (opt) => opt.date.getTime() === target.getTime(),
+    );
+    return idx === -1 ? 0 : idx;
+  });
+
+  const selectedDate = dateOptions[selectedDateIndex]?.date ?? now;
+  const selectedHour =
+    value.kind === "slot" ? new Date(value.iso).getHours() : null;
+
+  function pickAsap() {
+    setExpanded(false);
+    onChange({ kind: "asap" });
+  }
+  function pickSlot(date: Date, hour: number) {
+    onChange({ kind: "slot", iso: slotIso(date, hour) });
+  }
+
+  // Past-slot disabling — only Today's window has past hours; future
+  // dates are always pickable. The window is "past" once `now`'s hour
+  // is at or past the slot's end (window 9–10 disabled at 10:00 sharp).
+  const todayMidnight = new Date(now);
+  todayMidnight.setHours(0, 0, 0, 0);
+  function isPastSlot(date: Date, hour: number): boolean {
+    if (date.getTime() !== todayMidnight.getTime()) return false;
+    return hour <= now.getHours();
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      {/* ASAP tile — primary affordance */}
+      <button
+        type="button"
+        onClick={pickAsap}
+        aria-pressed={value.kind === "asap"}
+        className={`w-full flex items-start gap-3 rounded-xl p-3 transition-colors text-left ${
+          value.kind === "asap"
+            ? "bg-primary/5 ring-2 ring-primary"
+            : "bg-slate-50 hover:bg-slate-100"
+        }`}
+      >
+        <div
+          className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+            value.kind === "asap"
+              ? "bg-primary text-white"
+              : "bg-white text-slate-500"
+          }`}
+        >
+          <Clock className="w-5 h-5" aria-hidden="true" />
+        </div>
+        <div className="flex-1">
+          <div className="font-semibold text-text-main">ASAP</div>
+          <div className="text-[13px] text-text-secondary mt-0.5">
+            {asapLabel}
+          </div>
+        </div>
+      </button>
+
+      {/* Schedule-for-later toggle */}
+      <button
+        type="button"
+        onClick={() => setExpanded((s) => !s)}
+        aria-expanded={expanded}
+        className="w-full flex items-center justify-between mt-2 rounded-xl px-3 py-3 text-left bg-slate-50 hover:bg-slate-100 transition-colors"
+      >
+        <span className="text-sm font-semibold text-text-main">
+          Schedule for later
+        </span>
+        <ChevronRight
+          className={`w-4 h-4 text-slate-500 transition-transform motion-reduce:transition-none ${
+            expanded ? "rotate-90" : ""
+          }`}
+          aria-hidden="true"
+        />
+      </button>
+
+      {/* Expandable picker — date strip + hour grid */}
+      {expanded && (
+        <div className="mt-3 space-y-3 motion-reduce:animate-none">
+          {/* Date strip — horizontally scrollable */}
+          <div
+            className="flex gap-2 overflow-x-auto no-scrollbar pb-1"
+            role="tablist"
+            aria-label="Pick a date"
+          >
+            {dateOptions.map((opt, i) => {
+              const isSelected = i === selectedDateIndex;
+              return (
+                <button
+                  key={opt.date.toISOString()}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  onClick={() => setSelectedDateIndex(i)}
+                  className={`shrink-0 px-3 py-2 rounded-xl text-[13px] font-medium transition-colors ${
+                    isSelected
+                      ? "bg-primary text-white"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Hour-slot grid — 2 cols on narrow, 3 cols on wider */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {SLOT_START_HOURS.map((hour) => {
+              const past = isPastSlot(selectedDate, hour);
+              const isSelected =
+                value.kind === "slot" &&
+                selectedHour === hour &&
+                selectedDate.getTime() ===
+                  (() => {
+                    const v = new Date(value.iso);
+                    v.setHours(0, 0, 0, 0);
+                    return v.getTime();
+                  })();
+              return (
+                <button
+                  key={hour}
+                  type="button"
+                  disabled={past}
+                  onClick={() => pickSlot(selectedDate, hour)}
+                  aria-pressed={isSelected}
+                  className={`rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors ${
+                    past
+                      ? "bg-slate-50 text-slate-400 cursor-not-allowed"
+                      : isSelected
+                        ? "bg-primary text-white"
+                        : "bg-slate-100 text-slate-800 hover:bg-slate-200"
+                  }`}
+                >
+                  {slotLabel(hour)}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Variance disclaimer */}
+          <p className="text-[11px] text-text-secondary leading-snug">
+            Arrival window: 30-min variance. We commit to reach you within
+            the selected 1-hour window.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}

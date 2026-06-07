@@ -96,6 +96,43 @@ export function getServicePrice(serviceCategory: string): number {
   return sku.price;
 }
 
+/**
+ * T85 PR4a — 50% prepaid amount, rounded UP to the nearest ₹1.
+ *
+ * Examples (verified vs founder spec in T85 brief):
+ *   home-visit       → 499 → ceil(499/2) = 250
+ *   teleconsultation → 399 → ceil(399/2) = 200
+ *   medic-at-home    → 199 → ceil(199/2) = 100
+ *
+ * The caller passes the SERVICE_PRICING key (legacy slug). The T85 →
+ * pricing-key translation lives in `src/lib/booking/serviceMapper.ts`
+ * (`t85ToPricingKey`); UI callers pass the result of that mapper here.
+ *
+ * UPI doesn't handle paisa, so we round UP to ensure the patient is
+ * never under-charged and ops never has to chase a ₹0.50 reconciliation.
+ */
+export function getServiceHalfRoundedUp(pricingKey: string): number {
+  const sku = SERVICE_PRICING[pricingKey];
+  if (!sku) return Math.ceil(BASE_PRICE / 2);
+  return Math.ceil(sku.price / 2);
+}
+
+/**
+ * T85 PR4a — remaining balance shown above the Step 3 CTA. Mirrors
+ * `getServiceHalfRoundedUp` semantics so the two amounts always sum to
+ * the full price (no off-by-one due to two independent rounds).
+ *
+ *   full = half_rounded_up + remaining
+ *   ⇒ remaining = full - half_rounded_up
+ *
+ * For ₹399: half_rounded_up = 200, remaining = 199.
+ */
+export function getServiceRemainingAfterHalf(pricingKey: string): number {
+  const sku = SERVICE_PRICING[pricingKey];
+  const full = sku?.price ?? BASE_PRICE;
+  return full - getServiceHalfRoundedUp(pricingKey);
+}
+
 export function formatPrice(amount: number): string {
   return `₹${amount.toLocaleString("en-IN")}`;
 }
