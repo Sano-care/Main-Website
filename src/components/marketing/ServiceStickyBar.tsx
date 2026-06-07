@@ -44,8 +44,76 @@
 // (0.96); no entry animation. Safe to leave on under reduced motion.
 
 import { useEffect, useState } from "react";
-import { SERVICES } from "@/lib/services/catalog";
-import { getServiceIcon } from "./icons/ServiceIcons";
+import { SERVICES, type ServiceIconKey } from "@/lib/services/catalog";
+
+// T85 PR3 v1.1 — solid filled icons.
+//
+// Founder UAT flagged the lucide stroke icons as feeling "transparent
+// outline" on a real device. Brief calls for SOLID brand-blue. We
+// keep `getServiceIcon` (lucide line variants) in ServiceIcons.tsx for
+// ServiceSection's blue-ghost circle (the line set reads better at
+// 28px inside the soft-coloured tile), and inline a SECOND solid set
+// here for the sticky bar.
+//
+// Why hand-rolled instead of lucide-with-fill: lucide's Syringe (and
+// most of its medical icons) are composed of open path segments that
+// don't fill — they're designed to be stroked. Setting fill on lucide
+// works for Home / Video but disappears for Syringe + degrades for
+// FlaskConical. Cleanest path is 4 inline single-path SVGs.
+//
+// Active/default colour logic (per founder UAT):
+//   - Icon: ALWAYS brand blue (var(--color-primary)). No state change.
+//   - Pill bg: appears on active (bg-primary/8).
+//   - Label: slate-500 medium → primary semibold on active.
+// The active differentiator is therefore pill bg + label
+// colour/weight, not icon colour.
+
+interface IconProps {
+  className?: string;
+}
+
+const SolidIcons: Record<ServiceIconKey, (props: IconProps) => React.ReactElement> = {
+  home: ({ className }) => (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M12 3 2 12h3v8h5v-6h4v6h5v-8h3z" />
+    </svg>
+  ),
+  video: ({ className }) => (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M4 6h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm14 3.5 4-2v9l-4-2z" />
+    </svg>
+  ),
+  flask: ({ className }) => (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M9 2h6v2h-1v6.5l5.4 9A1.5 1.5 0 0 1 18.1 22H5.9a1.5 1.5 0 0 1-1.3-2.5L10 10.5V4H9z" />
+    </svg>
+  ),
+  syringe: ({ className }) => (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="m21 4.5-1.5-1.5-3 3 1 1-3 3 1 1-9.5 9.5L3 22l4.5-1.5 9.5-9.5 1 1 3-3 1 1z" />
+    </svg>
+  ),
+};
 
 const ACTIVE_THRESHOLD = 0.3;
 const STICKY_BAR_HEIGHT_PX = 96;
@@ -126,7 +194,7 @@ export function ServiceStickyBar() {
     >
       <ul className="flex">
         {SERVICES.map((service) => {
-          const Icon = getServiceIcon(service.iconKey);
+          const Icon = SolidIcons[service.iconKey];
           const isActive = active === service.slug;
           return (
             <li key={service.slug} className="flex-1">
@@ -139,14 +207,15 @@ export function ServiceStickyBar() {
                   isActive ? "bg-primary/8" : ""
                 }`}
               >
-                <Icon
-                  className={`w-5 h-5 [stroke-width:1.8] ${
-                    isActive ? "text-primary" : "text-slate-500"
-                  }`}
-                />
+                {/* Icon is ALWAYS brand blue — no state change. The
+                    active differentiator is the pill bg + label
+                    weight/colour. */}
+                <Icon className="w-5 h-5 text-primary" />
                 <span
-                  className={`text-[10.5px] font-medium leading-none ${
-                    isActive ? "text-primary" : "text-slate-600"
+                  className={`text-[10.5px] leading-none transition-colors ${
+                    isActive
+                      ? "text-primary font-semibold"
+                      : "text-slate-500 font-medium"
                   }`}
                 >
                   {service.shortName}
