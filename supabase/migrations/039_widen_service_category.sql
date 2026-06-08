@@ -25,6 +25,15 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_service_category_check
     -- Legacy (M003) — kept for back-compat with ops queries + historical rows.
     -- New writes don't use these; the runtime mapper translates display values.
     'homecare', 'teleconsult', 'chronic', 'diagnostics',
+    -- Pre-M003 orphan values found in live production data (PR4a recon
+    -- 2026-06-07): 3 rows with `nursing`, 3 with `lab`, 2 with `Home visit`.
+    -- M003 backfill UPDATE statements were supposed to migrate these to
+    -- canonical values (nursing/home-visit → homecare, lab → diagnostics)
+    -- but some rows survived with the original values. Widening the
+    -- CHECK preserves them for ops reads; a future cleanup migration
+    -- can backfill + drop these. NOT included in serviceMapper because
+    -- new writes should never produce them.
+    'nursing', 'lab', 'Home visit',
     -- T85 (M039) — service-led slugs. ServiceLedBookingModal writes these
     -- directly post-M039. medic-at-home becomes a top-level value here
     -- (was previously rolled into homecare per M003's data backfill).
@@ -36,7 +45,10 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_service_category_check
 -- values before deprecating them outright.
 CREATE INDEX IF NOT EXISTS idx_bookings_service_category_legacy
   ON bookings (service_category)
-  WHERE service_category IN ('homecare', 'teleconsult', 'chronic', 'diagnostics');
+  WHERE service_category IN (
+    'homecare', 'teleconsult', 'chronic', 'diagnostics',
+    'nursing', 'lab', 'Home visit'
+  );
 
 COMMENT ON CONSTRAINT bookings_service_category_check ON bookings IS
-  'T85 widening: both legacy (M003) and T85 slugs accepted. Legacy ages out post-T85 stabilisation.';
+  'T85 widening: legacy (M003) + pre-M003 orphan + T85 slugs accepted. Legacy ages out post-T85 stabilisation.';
