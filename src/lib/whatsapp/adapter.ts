@@ -40,6 +40,12 @@ import { sendTemplateMessage } from "@/lib/whatsapp/cloud-api";
 import { runAgentTurn } from "@/lib/agent/orchestrator";
 import { HISTORY_LIMIT } from "@/lib/agent/config";
 import { SERVICE_DISPLAY, type EscalateToOpsInput } from "@/lib/agent/types";
+import {
+  cancelBookingById,
+  findBookingsByPhone,
+  insertComplaint,
+  mapServiceCategory,
+} from "@/lib/agent/bookings";
 import { log, maskPhone } from "@/lib/whatsapp/log";
 import {
   extractInboundMessages,
@@ -150,6 +156,119 @@ async function executeSetOptOut(conversation: ConversationRow): Promise<void> {
     eventType: AuditEvent.OPT_OUT_SET,
     eventData: { source: "llm_tool" },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Slice 1 tool executors (booking-aware). Each returns the patient_message the
+// adapter sends. The conversation phone is injected — never trusted from the
+// model. cancel_booking / log_complaint also alert ops (escalation row + WA).
+// ---------------------------------------------------------------------------
+interface CancelBookingInput {
+  reason?: string;
+  patient_acknowledged_fee?: boolean;
+}
+interface LogComplaintInput {
+  category: string;
+  narrative: string;
+  severity?: "low" | "medium" | "high" | "critical";
+}
+
+const SERVICE_LABEL: Record<string, string> = {
+  home_visit: "Home Visit",
+  home_nursing: "Home Nursing",
+  lab: "Lab Test",
+  teleconsult: "Teleconsultation",
+};
+
+async function executeCheckMedicStatus(phone: string): Promise<string> {
+  const { latest } = await findBookingsByPhone(phone);
+  if (!latest) return "I don't see an active booking for this number — want me to set one up?";
+  const medic = latest.assigned_paramedic?.trim() || "your Medic";
+  switch (latest.status) {
+    case "PENDING":
+    case "PENDING_COLLECTION":
+      return "Your booking is in. Ops is matching a Medic to you now — you'll get an update within a few minutes.";
+    case "CONFIRMED":
+      return "Medic confirmed for your booking. They'll be on the way shortly.";
+    case "DISPATCHED":
+      return `Your Medic (${medic}) has been dispatched. They'll reach you within 30 minutes — call +91 97119 77782 if you need to coordinate.`;
+    case "COMPLETED":
+      return "Looks like that visit is already complete. Was there something specific from it I can help with?";
+    case "CANCELLED":
+      return "That booking was cancelled. Want me to set up a new one?";
+    default:
+      return "Your booking is in — you'll get an update shortly.";
+  }
+}
+
+async function executeCancelBooking(
+  conversation: ConversationRow,
+  phone: string,
+  input: CancelBookingInput,
+): Promise<string> {
+  const { latest, latestActive } = await findBookingsByPhone(phone);
+  const target = latestActive ?? latest;
+  if (!target) return "I don't see an active booking for this number.";
+  if (target.status === "CANCELLED") return "That booking was already cancelled.";
+  if (target.status === "COMPLETED") {
+    return "That visit is already complete, so I can't cancel it. If there's a quality concern, I can log a complaint instead — want me to do that?";
+  }
+  // cancellable (PENDING / PENDING_COLLECTION / CONFIRMED / DISPATCHED)
+  if (!input.patient_acknowledged_fee) {
+    return "Just to confirm — cancelling now is free, since the Medic hasn't completed the visit. Reply 'yes cancel' and I'll process it.";
+  }
+  const reason = input.reason?.trim() || "patient requested cancellation";
+  const ok = await cancelBookingById(target.id, reason);
+  if (!ok) return "Sorry, I hit a snag cancelling that. Please call +91 97119 77782 and we'll sort it out.";
+  const escId = await createEscalation({
+    conversationId: conversation.id,
+    escalationType: "cancellation",
+    priority: "p2",
+  });
+  await sendOpsHandoff({
+    conversationId: conversation.id,
+    escalationId: escId,
+    patientName: "(cancellation)",
+    patientAge: "—",
+    serviceDisplay: SERVICE_LABEL[mapServiceCategory(target.service_category)] ?? "Booking",
+    location: "—",
+    context: `CANCELLED: ${reason}`.slice(0, 60),
+    patientMobile: phone,
+  });
+  return "Done — booking cancelled, no charge. Sorry we couldn't help today. Message anytime if you need us again.";
+}
+
+async function executeLogComplaint(
+  conversation: ConversationRow,
+  phone: string,
+  input: LogComplaintInput,
+): Promise<string> {
+  const severity = input.severity ?? "medium";
+  const { latest } = await findBookingsByPhone(phone);
+  await insertComplaint({
+    phone,
+    bookingId: latest?.id ?? null,
+    category: input.category,
+    narrative: input.narrative,
+    severity,
+  });
+  const priority = severity === "high" || severity === "critical" ? "p1" : "p2";
+  const escId = await createEscalation({
+    conversationId: conversation.id,
+    escalationType: "complaint",
+    priority,
+  });
+  await sendOpsHandoff({
+    conversationId: conversation.id,
+    escalationId: escId,
+    patientName: "(complaint)",
+    patientAge: "—",
+    serviceDisplay: `Complaint: ${input.category}`,
+    location: "—",
+    context: input.narrative.slice(0, 60),
+    patientMobile: phone,
+  });
+  return "Got it — I've logged this for our team. Someone will respond within 4 hours. If anything's urgent, call +91 97119 77782.";
 }
 
 // ---------------------------------------------------------------------------
@@ -303,13 +422,44 @@ export async function handleInboundMessage(
     return;
   }
 
-  const willOptOut = toolCalls.some((t) => t.name === "set_opt_out");
-  const willEscalate = toolCalls.some((t) => t.name === "escalate_to_ops");
+  // Execute tools. Patient-message tools (status/cancel/complaint) run FIRST
+  // and produce the reply; set_opt_out is deferred until AFTER the reply is
+  // sent, so the opt-out confirmation isn't blocked by the permanent gate.
+  let toolPatientMsg: string | null = null;
+  let optOutCall = false;
+  let escalateCall = false;
+  for (const call of toolCalls) {
+    try {
+      switch (call.name) {
+        case "set_opt_out":
+          optOutCall = true; // deferred
+          break;
+        case "escalate_to_ops":
+          escalateCall = true;
+          await executeEscalateToOps(conversation, inbound.phone, call.input as unknown as EscalateToOpsInput);
+          break;
+        case "check_medic_status":
+          toolPatientMsg = await executeCheckMedicStatus(inbound.phone);
+          break;
+        case "cancel_booking":
+          toolPatientMsg = await executeCancelBooking(conversation, inbound.phone, call.input as unknown as CancelBookingInput);
+          break;
+        case "log_complaint":
+          toolPatientMsg = await executeLogComplaint(conversation, inbound.phone, call.input as unknown as LogComplaintInput);
+          break;
+        default:
+          log.warn("unknown tool call ignored", call.name);
+      }
+    } catch (err) {
+      log.error("tool execution failed", call.name, err);
+    }
+  }
 
-  // Pick the user-facing reply. It MUST be sent before set_opt_out flips the gate.
+  // Reply: a patient-message tool's message wins; else the model's text; else a closer.
+  if (toolPatientMsg) reply = toolPatientMsg;
   if (!reply) {
-    if (willOptOut) reply = OPT_OUT_CONFIRMATION;
-    else if (willEscalate) reply = "Got it — I've got everything I need. Our team will reach you shortly.";
+    if (optOutCall) reply = OPT_OUT_CONFIRMATION;
+    else if (escalateCall) reply = "Got it — I've got everything I need. Our team will reach you shortly.";
   }
   if (reply) {
     await dispatchTextMessage({
@@ -320,24 +470,8 @@ export async function handleInboundMessage(
     });
   }
 
-  // Execute tool calls AFTER the reply (so opt-out can't block the confirmation).
-  for (const call of toolCalls) {
-    try {
-      if (call.name === "escalate_to_ops") {
-        await executeEscalateToOps(
-          conversation,
-          inbound.phone,
-          call.input as unknown as EscalateToOpsInput,
-        );
-      } else if (call.name === "set_opt_out") {
-        await executeSetOptOut(conversation);
-      } else {
-        log.warn("unknown tool call ignored", call.name);
-      }
-    } catch (err) {
-      log.error("tool execution failed", call.name, err);
-    }
-  }
+  // opt-out flips the permanent gate AFTER the reply is dispatched.
+  if (optOutCall) await executeSetOptOut(conversation);
 
   await writeAudit({
     conversationId: conversation.id,

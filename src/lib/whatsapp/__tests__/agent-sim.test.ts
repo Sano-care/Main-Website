@@ -36,6 +36,30 @@ const rec = vi.hoisted(() => ({
     tokensOut: number;
   }>,
   optOutFlag: false, // simulated conversations.opt_out
+  bookingLookup: { latest: null, latestActive: null, activeCount: 0 } as {
+    latest: Record<string, unknown> | null;
+    latestActive: Record<string, unknown> | null;
+    activeCount: number;
+  },
+  cancelled: [] as Array<{ id: string; reason: string }>,
+  complaints: [] as Array<Record<string, unknown>>,
+}));
+
+// --- Booking/complaint data layer (Slice 1) --------------------------------
+vi.mock("@/lib/agent/bookings", () => ({
+  mapServiceCategory: () => "home_visit",
+  normalizePhoneLast10: (p: string) => (p ?? "").replace(/\D/g, "").slice(-10),
+  findBookingsByPhone: vi.fn(async () => rec.bookingLookup),
+  cancelBookingById: vi.fn(async (id: string, reason: string) => {
+    rec.cancelled.push({ id, reason });
+    rec.log.push(`  booking ${id} CANCELLED (${reason})`);
+    return true;
+  }),
+  insertComplaint: vi.fn(async (c: Record<string, unknown>) => {
+    rec.complaints.push(c);
+    rec.log.push(`  complaint logged: ${c.category} / ${c.severity}`);
+    return "cmp-1";
+  }),
 }));
 
 // --- Claude client: return the next scripted response -----------------------
@@ -158,7 +182,23 @@ beforeEach(() => {
   rec.optOuts = 0;
   rec.scripted = [];
   rec.optOutFlag = false;
+  rec.bookingLookup = { latest: null, latestActive: null, activeCount: 0 };
+  rec.cancelled = [];
+  rec.complaints = [];
 });
+
+// Helper: script a Claude turn that calls one tool (text is overridden by the
+// tool's patient_message for the Slice-1 tools).
+function scriptToolCall(name: string, input: Record<string, unknown> = {}) {
+  rec.scripted.push({
+    text: "",
+    toolUses: [{ id: "tu", name, input }],
+    stopReason: "tool_use",
+    model: "claude-sonnet-4-6",
+    tokensIn: 1500,
+    tokensOut: 60,
+  });
+}
 
 describe("Aarogya inbound chain — simulated end-to-end", () => {
   it("S1 greeting/triage — Claude replies, no tools", async () => {
@@ -246,5 +286,70 @@ describe("Aarogya inbound chain — simulated end-to-end", () => {
     expect(rec.replies[0]).toContain("won't message you again");
     expect(rec.optOuts).toBe(1);
     expect(rec.optOutFlag).toBe(true); // block now permanent
+  });
+
+  // ---- Slice 1: booking-aware tools ------------------------------------
+  it("S5 status check at DISPATCHED — returns the Medic name", async () => {
+    rec.bookingLookup = {
+      latest: { id: "b1", status: "DISPATCHED", assigned_paramedic: "Ravi Kumar", service_category: "homecare" },
+      latestActive: { id: "b1", status: "DISPATCHED" },
+      activeCount: 1,
+    };
+    scriptToolCall("check_medic_status");
+    await processWebhook(envelope(PATIENT, "where is my medic?"));
+    console.log("\n--- S5 status DISPATCHED ---\n" + rec.log.join("\n"));
+    expect(rec.replies[0]).toContain("Ravi Kumar");
+    expect(rec.replies[0]).toContain("dispatched");
+  });
+
+  it("S6 status check, no booking — offers a new one", async () => {
+    rec.bookingLookup = { latest: null, latestActive: null, activeCount: 0 };
+    scriptToolCall("check_medic_status");
+    await processWebhook(envelope(PATIENT, "any update on my visit?"));
+    console.log("\n--- S6 status none ---\n" + rec.log.join("\n"));
+    expect(rec.replies[0]).toContain("don't see an active booking");
+  });
+
+  it("S7 cancel at PENDING (fee acknowledged) — free, success, ops alerted", async () => {
+    rec.bookingLookup = {
+      latest: { id: "b2", status: "PENDING", service_category: "homecare" },
+      latestActive: { id: "b2", status: "PENDING", service_category: "homecare" },
+      activeCount: 1,
+    };
+    scriptToolCall("cancel_booking", { reason: "plans changed", patient_acknowledged_fee: true });
+    await processWebhook(envelope(PATIENT, "yes cancel please"));
+    console.log("\n--- S7 cancel PENDING ---\n" + rec.log.join("\n"));
+    expect(rec.replies[0]).toContain("cancelled, no charge");
+    expect(rec.cancelled).toEqual([{ id: "b2", reason: "plans changed" }]);
+    expect(rec.escalations).toContainEqual({ type: "cancellation", priority: "p2" });
+  });
+
+  it("S8 cancel at COMPLETED — refuses, offers complaint", async () => {
+    rec.bookingLookup = { latest: { id: "b3", status: "COMPLETED" }, latestActive: null, activeCount: 0 };
+    scriptToolCall("cancel_booking", { reason: "too late", patient_acknowledged_fee: true });
+    await processWebhook(envelope(PATIENT, "cancel it"));
+    console.log("\n--- S8 cancel COMPLETED ---\n" + rec.log.join("\n"));
+    expect(rec.replies[0]).toContain("already complete");
+    expect(rec.replies[0]).toContain("complaint");
+    expect(rec.cancelled).toHaveLength(0);
+  });
+
+  it("S9 complaint (billing, medium) — logged, p2, 4h SLA", async () => {
+    rec.bookingLookup = { latest: { id: "b4", status: "COMPLETED" }, latestActive: null, activeCount: 0 };
+    scriptToolCall("log_complaint", { category: "billing", narrative: "I was charged twice for one visit", severity: "medium" });
+    await processWebhook(envelope(PATIENT, "you billed me twice"));
+    console.log("\n--- S9 complaint billing ---\n" + rec.log.join("\n"));
+    expect(rec.replies[0]).toContain("4 hours");
+    expect(rec.complaints[0]).toMatchObject({ category: "billing", bookingId: "b4", severity: "medium" });
+    expect(rec.escalations).toContainEqual({ type: "complaint", priority: "p2" });
+  });
+
+  it("S10 complaint (safety, high) — escalates p1", async () => {
+    rec.bookingLookup = { latest: { id: "b5", status: "COMPLETED" }, latestActive: null, activeCount: 0 };
+    scriptToolCall("log_complaint", { category: "medic_behavior", narrative: "the medic was rough and hurt my mother", severity: "high" });
+    await processWebhook(envelope(PATIENT, "the medic hurt my mother"));
+    console.log("\n--- S10 complaint high ---\n" + rec.log.join("\n"));
+    expect(rec.complaints[0]).toMatchObject({ category: "medic_behavior", severity: "high" });
+    expect(rec.escalations).toContainEqual({ type: "complaint", priority: "p1" });
   });
 });

@@ -98,4 +98,75 @@ export const SET_OPT_OUT: ToolSchema = {
   },
 };
 
-export const AAROGYA_TOOLS: ToolSchema[] = [ESCALATE_TO_OPS, SET_OPT_OUT];
+// --- Slice 1 (Aarogya v2) — act on the patient's booking. ---------------
+// None take a phone: the adapter injects the conversation's number, so the
+// model can never act on a different patient's booking. Each returns a
+// ready-to-send patient_message (the executor's canned templates).
+
+export const CHECK_MEDIC_STATUS: ToolSchema = {
+  name: "check_medic_status",
+  description:
+    "Look up the status of this patient's current booking. Call IMMEDIATELY " +
+    "when the patient asks 'where is my Medic/doctor', 'how long until they " +
+    "arrive', 'has anyone been assigned', or 'status of my booking' — do NOT " +
+    "ask follow-up questions first. No arguments needed.",
+  input_schema: { type: "object", additionalProperties: false, properties: {}, required: [] },
+};
+
+export const CANCEL_BOOKING: ToolSchema = {
+  name: "cancel_booking",
+  description:
+    "Cancel this patient's current booking. TWO-STEP: first quote the fee policy " +
+    "(free unless the visit is already complete) and get an explicit 'yes, cancel' " +
+    "from the patient, THEN call this with patient_acknowledged_fee=true. If the " +
+    "cancellation reason sounds like a service failure (rude, no-show), prefer " +
+    "log_complaint instead.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      reason: { type: "string", description: "The patient's reason for cancelling (their words)." },
+      patient_acknowledged_fee: {
+        type: "boolean",
+        description: "TRUE only after the patient explicitly confirmed cancellation knowing the fee policy.",
+      },
+    },
+    required: ["reason", "patient_acknowledged_fee"],
+  },
+};
+
+export const LOG_COMPLAINT: ToolSchema = {
+  name: "log_complaint",
+  description:
+    "Log a complaint when the patient reports a service failure (Medic rude, " +
+    "wrong report, billed twice, no-show, doctor never called). Acknowledge with " +
+    "empathy, then call with the right category, the patient's own words as the " +
+    "narrative, and an inferred severity.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      category: {
+        type: "string",
+        enum: ["medic_behavior", "clinical_quality", "billing", "delay", "report_issue", "other"],
+        description: "Best-fit category for the complaint.",
+      },
+      narrative: { type: "string", description: "The patient's complaint in their own words." },
+      severity: {
+        type: "string",
+        enum: ["low", "medium", "high", "critical"],
+        description:
+          "Default medium. high if they mention safety/harm/refund demand; critical if clinical risk or hospitalisation.",
+      },
+    },
+    required: ["category", "narrative"],
+  },
+};
+
+export const AAROGYA_TOOLS: ToolSchema[] = [
+  ESCALATE_TO_OPS,
+  SET_OPT_OUT,
+  CHECK_MEDIC_STATUS,
+  CANCEL_BOOKING,
+  LOG_COMPLAINT,
+];
