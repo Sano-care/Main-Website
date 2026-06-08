@@ -20,8 +20,19 @@
 
 import { useEffect, useState } from "react";
 import { Tag, Loader2, Check } from "lucide-react";
-import { createClient } from "@supabase/supabase-js";
 import type { AppliedLabCoupon } from "./types";
+
+// Server-side shape from /api/lab/list-coupons (matches the route's
+// JSON response). Component computes applicability + discount against
+// the live subtotal — those change as the patient adds tests.
+interface CouponListItem {
+  code: string;
+  description: string | null;
+  minBasketInr: number;
+  discountType: "percent" | "flat";
+  discountValue: number;
+  maxDiscountInr: number | null;
+}
 
 interface SuggestedCoupon {
   code: string;
@@ -50,89 +61,70 @@ export function CouponSection({
   onApply,
   onRemove,
 }: CouponSectionProps) {
-  const [suggested, setSuggested] = useState<SuggestedCoupon[]>([]);
+  // Raw coupon list from server (stable across subtotal changes).
+  const [rawCoupons, setRawCoupons] = useState<CouponListItem[]>([]);
   const [manualCode, setManualCode] = useState("");
   const [busy, setBusy] = useState<string | null>(null); // code being applied
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch suggested coupons whenever subtotal crosses a threshold.
-  // We use a public Supabase anon-key path here — `lab_coupons` is
-  // intentionally readable (founder marks `is_active=true` to surface,
-  // false to hide). No PII. If anon key is missing the list is empty
-  // and patients still have manual entry.
+  // Fetch active coupons ONCE on mount. `lab_coupons` has RLS enabled
+  // with no policies (anon reads return empty silently), so we go
+  // through /api/lab/list-coupons which uses the service-role key
+  // server-side. Same pattern as /api/lab/search and the other lab
+  // routes.
   useEffect(() => {
-    if (subtotalInr <= 0) {
-      setSuggested([]);
-      return;
-    }
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!supabaseUrl || !anonKey) {
-      setSuggested([]);
-      return;
-    }
-    const supabase = createClient(supabaseUrl, anonKey, {
-      auth: { persistSession: false },
-    });
-
     let cancelled = false;
     (async () => {
-      const nowIso = new Date().toISOString();
-      const { data } = await supabase
-        .from("lab_coupons")
-        .select(
-          "code, description, discount_type, discount_value, min_basket_inr, max_discount_inr, max_uses, used_count, valid_from, valid_to",
-        )
-        .eq("is_active", true)
-        .or(`valid_from.is.null,valid_from.lte.${nowIso}`)
-        .or(`valid_to.is.null,valid_to.gte.${nowIso}`)
-        .order("created_at", { ascending: false })
-        .limit(10);
-
-      if (cancelled) return;
-      // T85 PR4b v3 — drop only max_uses-exhausted coupons; keep
-      // min_basket-inapplicable ones so they render greyed-out with
-      // the "Spend ₹X more to unlock" subline (AOV upsell pattern).
-      const usable = (data ?? [])
-        .filter((c) => {
-          if (c.max_uses != null && c.used_count >= c.max_uses) return false;
-          return true;
-        })
-        .map((c) => {
-          const minBasket = (c.min_basket_inr as number) ?? 0;
-          const isApplicable = subtotalInr >= minBasket;
-          // Compute potential discount AGAINST THE CURRENT SUBTOTAL
-          // even for inapplicable coupons — gives a stable basis for
-          // the "best" highlight ordering once the patient unlocks.
-          // (Discount is capped at subtotal anyway; for inapplicable
-          // tiles the value is informational only — Apply is disabled.)
-          let discount = 0;
-          if (c.discount_type === "percent") {
-            discount = Math.floor(
-              (subtotalInr * Number(c.discount_value)) / 100,
-            );
-          } else {
-            discount = Number(c.discount_value);
-          }
-          if (c.max_discount_inr != null) {
-            discount = Math.min(discount, c.max_discount_inr);
-          }
-          return {
-            code: c.code as string,
-            description: (c.description as string | null) ?? null,
-            minBasketInr: minBasket,
-            potentialDiscountInr: Math.max(0, Math.min(discount, subtotalInr)),
-            isApplicable,
-            unlockDiffInr: isApplicable ? 0 : Math.max(0, minBasket - subtotalInr),
-          };
-        })
-        .slice(0, 3);
-      setSuggested(usable);
+      try {
+        const res = await fetch("/api/lab/list-coupons", {
+          credentials: "include",
+        });
+        if (!res.ok) {
+          if (!cancelled) setRawCoupons([]);
+          return;
+        }
+        const json = (await res.json()) as { coupons?: CouponListItem[] };
+        if (!cancelled) setRawCoupons(json.coupons ?? []);
+      } catch (err) {
+        console.error("[CouponSection] list-coupons fetch failed", err);
+        if (!cancelled) setRawCoupons([]);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [subtotalInr]);
+  }, []);
+
+  // Derive `suggested` from rawCoupons + live subtotal. Re-computed on
+  // every subtotal change so the applicable/inapplicable state flips
+  // in real time as the patient adds tests (Zepto-style upsell).
+  // T85 PR4b v3 — keep min_basket-inapplicable rows so they render
+  // greyed-out with the "Spend ₹X more to unlock" subline.
+  const suggested: SuggestedCoupon[] = rawCoupons
+    .map((c) => {
+      const isApplicable = subtotalInr >= c.minBasketInr;
+      let discount = 0;
+      if (c.discountType === "percent") {
+        discount = Math.floor((subtotalInr * c.discountValue) / 100);
+      } else {
+        discount = c.discountValue;
+      }
+      if (c.maxDiscountInr != null) {
+        discount = Math.min(discount, c.maxDiscountInr);
+      }
+      const safeSubtotal = Math.max(0, subtotalInr);
+      return {
+        code: c.code,
+        description: c.description,
+        minBasketInr: c.minBasketInr,
+        potentialDiscountInr: Math.max(0, Math.min(discount, safeSubtotal)),
+        isApplicable,
+        unlockDiffInr: isApplicable
+          ? 0
+          : Math.max(0, c.minBasketInr - subtotalInr),
+      };
+    })
+    .slice(0, 3);
 
   async function tryApply(code: string) {
     setError(null);
