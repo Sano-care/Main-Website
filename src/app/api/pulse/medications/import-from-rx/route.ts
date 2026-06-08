@@ -99,9 +99,13 @@ export async function POST(req: NextRequest) {
     );
   }
   if (!items || items.length === 0) {
+    // Edge case: the Rx's items were deleted between the banner rendering and
+    // the import tap. Not an error — return a structured "nothing imported" so
+    // the client can show a friendly toast + steer the patient to "Add manually"
+    // rather than surface a red error.
     return NextResponse.json(
-      { error: "This prescription has no medicines to import." },
-      { status: 400 },
+      { imported: 0, intake_count: 0, medications: [], message: "no_items" },
+      { status: 200 },
     );
   }
 

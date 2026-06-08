@@ -16,6 +16,7 @@ import type { ReactNode } from "react";
 import { formatIST } from "@/lib/time/formatIST";
 import type { VitalKind } from "@/app/api/pulse/_lib/validation";
 import { PulseShell } from "./_components/PulseShell";
+import { ProfileMenu } from "./_components/ProfileMenu";
 import { SectionReveal } from "@/components/marketing/SectionReveal";
 import { AnimatedCounter } from "@/components/marketing/AnimatedCounter";
 import { getCurrentCustomer } from "./_lib/getCurrentCustomer";
@@ -99,9 +100,8 @@ async function PulseHomeBody() {
         <h1 className="mt-1 text-xl font-semibold tracking-tight">
           Hi {firstName} 👋
         </h1>
-        <div className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-white/15 px-3 py-1.5 text-xs font-medium">
-          <span>Viewing: {firstName} (you)</span>
-          <span className="text-white/60">— T64 adds switch ▾</span>
+        <div className="mt-3">
+          <ProfileMenu variant="chip" />
         </div>
       </div>
 
@@ -196,14 +196,19 @@ async function PulseHomeBody() {
                           </div>
                           <div
                             className={
-                              "text-sm font-semibold text-text-main " +
+                              "text-sm font-semibold " +
                               (visual === "missed"
-                                ? "line-through decoration-rose-300"
-                                : "")
+                                ? "text-slate-400 line-through decoration-2 decoration-rose-400"
+                                : "text-text-main")
                             }
                           >
                             {dose.name}{" "}
-                            <span className="font-normal text-text-secondary">
+                            <span
+                              className={
+                                "font-normal " +
+                                (visual === "missed" ? "" : "text-text-secondary")
+                              }
+                            >
                               {dose.dose}
                             </span>
                           </div>
