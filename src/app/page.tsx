@@ -14,6 +14,7 @@ import { HomeStickyBar } from "@/components/marketing/HomeStickyBar";
 import { ServiceSection } from "@/components/marketing/ServiceSection";
 import { AboutBand } from "@/components/marketing/AboutBand";
 import { SERVICES } from "@/lib/services/catalog";
+import { PaidConversionFire } from "@/components/PaidConversionFire";
 
 // T85 PR2 — homepage rewired to the brief's 8-section hierarchy:
 //
@@ -54,6 +55,9 @@ const SHOW_PULSE_BANNER =
 export default function Home() {
   return (
     <div className="relative min-h-screen overflow-x-hidden">
+      {/* Paid Google Ads conversion fire (gclid-gated; no-op for organic) */}
+      <PaidConversionFire />
+
       {/* Background */}
       <DNABackground />
 
