@@ -203,15 +203,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // T85 PR4a — best-effort ops alert. `sendAarogyaLeadAlert` swallows
-    // its own errors (logged via console.error) and never throws here,
-    // so the booking response stays authoritative regardless of BSP
-    // hiccups. fire-and-forget is intentional: we don't await so we
-    // don't add 200–800ms BSP latency to the patient's wait. The
-    // function still returns synchronously enough that the response is
-    // sent before serverless runtime tears down the function in
-    // practice; if a future Next.js / Netlify edge change introduces
-    // teardown races, switch to `await` and accept the latency hit.
+    // T85 PR4a + leadalert-hotfix — best-effort ops alert.
+    // `sendAarogyaLeadAlert` swallows its own errors (logged via
+    // console.error) and never throws here, so the booking response
+    // stays authoritative regardless of BSP hiccups.
+    //
+    // We `await` (not `void`) deliberately: PR4a originally fired this
+    // promise-style on the theory that Netlify Functions would honor the
+    // pending fetch before container teardown. Prod smoke on Case
+    // #SAN-B-00058 (2026-06-08) confirmed that theory is wrong — the
+    // serverless function freezes immediately on response, and the
+    // pending Rampwin fetch never executes. OTPs work because their send
+    // is already awaited (the response depends on send success). Same
+    // BSP creds, same wire shape — only call pattern differs. The
+    // ~200–800ms latency hit is acceptable; ops needs the alert.
     const displaySlug =
       t85Slug ?? dbToT85Slug(persistedServiceCategory) ?? "home-visit";
 
@@ -232,16 +237,29 @@ export async function POST(req: NextRequest) {
       mode: "partial-advance-50",
     });
 
-    void sendAarogyaLeadAlert({
-      patientName: insertPayload.patient_name,
-      // Age is not collected in PR4a Step 1 — defaults to "—y" in the
-      // sender. T64 (family-member picker) extends Step 1 with age and
-      // can pass `ageWithYearSuffix` here once it ships.
-      serviceDisplayName: t85ServiceDisplayName(displaySlug),
-      location: insertPayload.manual_address,
-      context: contextText,
-      patientPhone: insertPayload.phone,
-    });
+    try {
+      const { delivered } = await sendAarogyaLeadAlert({
+        patientName: insertPayload.patient_name,
+        // Age is not collected in PR4a Step 1 — defaults to "—y" in the
+        // sender. T64 (family-member picker) extends Step 1 with age
+        // and can pass `ageWithYearSuffix` here once it ships.
+        serviceDisplayName: t85ServiceDisplayName(displaySlug),
+        location: insertPayload.manual_address,
+        context: contextText,
+        patientPhone: insertPayload.phone,
+      });
+      console.log(
+        `[razorpay/verify] aarogya_lead_alert dispatch: delivered=${delivered} booking=${data?.booking_code ?? data?.id ?? "?"}`,
+      );
+    } catch (alertErr) {
+      // sendAarogyaLeadAlert is documented never to throw, but defense
+      // in depth: never let an alert error bubble into the booking
+      // response. The booking row is the source of truth.
+      console.error(
+        "[razorpay/verify] aarogya_lead_alert threw unexpectedly",
+        alertErr,
+      );
+    }
 
     return NextResponse.json({
       ok: true,
