@@ -1,4 +1,8 @@
--- Migration 040: paid_click_log.gclid
+-- Migration 041: paid_click_log.gclid
+--
+-- (Renumbered from 040 by T64 PR1 — see T64_BRIEF_PATCH.md divergence 4.
+-- Body unchanged from the original PR #43 authoring; only the file
+-- number moved to resolve the M040 collision.)
 --
 -- The /book-* landing pages beacon the Google Click ID (gclid) to
 -- /api/paid-click-log. Capturing it lets paid clicks be matched back to Google
