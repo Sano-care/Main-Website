@@ -7,12 +7,16 @@ import {
   verifyToken,
 } from "@/lib/otp/token";
 import { sendAarogyaLeadAlert } from "@/lib/booking/rampwin";
+import { formatLeadAlertContext } from "@/lib/booking/contextFormat";
 import {
   dbToT85Slug,
   t85ServiceDisplayName,
   t85ToPricingKey,
 } from "@/lib/booking/serviceMapper";
-import { getServiceHalfRoundedUp } from "@/constants/pricing";
+import {
+  getServiceHalfRoundedUp,
+  getServiceRemainingAfterHalf,
+} from "@/constants/pricing";
 import type { ServiceSlug } from "@/lib/services/catalog";
 
 const VALID_T85_SLUGS: ServiceSlug[] = [
@@ -210,6 +214,24 @@ export async function POST(req: NextRequest) {
     // teardown races, switch to `await` and accept the latency hit.
     const displaySlug =
       t85Slug ?? dbToT85Slug(persistedServiceCategory) ?? "home-visit";
+
+    // T85 PR4b v2 — `{{5}}` Context is now a standardized payment
+    // summary via formatLeadAlertContext (single source of truth in
+    // contextFormat.ts). Non-lab services use 'partial-advance-50':
+    // paid = half, total = full = half + remaining. The "notes" half
+    // of the format defaults to "—" since PR4a doesn't surface a
+    // notes input — when a future iteration adds one, pass it as the
+    // first arg.
+    const totalInr = t85Slug
+      ? getServiceHalfRoundedUp(t85ToPricingKey(t85Slug)) +
+        getServiceRemainingAfterHalf(t85ToPricingKey(t85Slug))
+      : Math.round(persistedFeePaise / 100) * 2;
+    const contextText = formatLeadAlertContext(undefined, {
+      paidPaise: persistedFeePaise,
+      totalPaise: totalInr * 100,
+      mode: "partial-advance-50",
+    });
+
     void sendAarogyaLeadAlert({
       patientName: insertPayload.patient_name,
       // Age is not collected in PR4a Step 1 — defaults to "—y" in the
@@ -217,10 +239,7 @@ export async function POST(req: NextRequest) {
       // can pass `ageWithYearSuffix` here once it ships.
       serviceDisplayName: t85ServiceDisplayName(displaySlug),
       location: insertPayload.manual_address,
-      // PR4a doesn't surface a notes/symptoms input. Default "—" until
-      // the booking flow adds an optional notes field in a later
-      // iteration.
-      context: undefined,
+      context: contextText,
       patientPhone: insertPayload.phone,
     });
 

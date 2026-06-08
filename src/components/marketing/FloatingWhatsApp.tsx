@@ -41,14 +41,14 @@ interface FloatingWhatsAppProps {
 export function FloatingWhatsApp({ hidden = false }: FloatingWhatsAppProps) {
   const prefersReducedMotion = useReducedMotion();
   const [mounted, setMounted] = useState(false);
-  // T85 PR4a bug 1 fix — hide while any booking surface is open. The
-  // floating FAB was overlapping Step 2's address input and Step 3's
-  // pay CTA on real devices. Both BookingModal and ServiceLedBookingModal
-  // are dispatched off `isModalOpen`; `isGateOpen` covers the OTP gate
-  // before either modal opens. Either flag → hide.
+  // T85 PR4a bug 1 fix + PR4b extension — hide while any booking
+  // surface is open. Covers BookingModal + ServiceLedBookingModal
+  // (`isModalOpen`), BookingGate OTP (`isGateOpen`), and PR4b's
+  // LabBasketWindow (`isLabBasketOpen`). Any one → hide.
   const isModalOpen = useBookingStore((s) => s.isModalOpen);
   const isGateOpen = useBookingStore((s) => s.isGateOpen);
-  const bookingSurfaceOpen = isModalOpen || isGateOpen;
+  const isLabBasketOpen = useBookingStore((s) => s.isLabBasketOpen);
+  const bookingSurfaceOpen = isModalOpen || isGateOpen || isLabBasketOpen;
   useEffect(() => {
     setMounted(true);
   }, []);

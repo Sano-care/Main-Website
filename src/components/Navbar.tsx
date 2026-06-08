@@ -23,6 +23,7 @@ import { Menu, Phone } from "lucide-react";
 import { Button } from "@/components/ui";
 import { BookingModal } from "@/components/BookingModal";
 import { ServiceLedBookingModal } from "@/components/booking/ServiceLedBookingModal";
+import { LabBasketWindow } from "@/components/booking/LabBasketWindow";
 import { BookingGate } from "@/components/booking/BookingGate";
 import { MobileMenu } from "@/components/marketing/MobileMenu";
 import { useBookingStore } from "@/store/bookingStore";
@@ -44,18 +45,21 @@ export function Navbar() {
   const closeModal = useBookingStore((s) => s.closeModal);
   const isGateOpen = useBookingStore((s) => s.isGateOpen);
   const closeGate = useBookingStore((s) => s.closeGate);
+  const isLabBasketOpen = useBookingStore((s) => s.isLabBasketOpen);
+  const closeLabBasket = useBookingStore((s) => s.closeLabBasket);
   const serviceSlug = useBookingStore((s) => s.serviceSlug);
   const { requestBooking } = useBookingFlow();
 
-  // T85 PR4a — modal dispatch:
-  //   - serviceSlug = 'lab-tests'  → keep T61's BookingModal (PR2.5 stopgap; PR4b replaces)
-  //   - serviceSlug = anything else → new ServiceLedBookingModal
+  // T85 PR4a + PR4b — modal dispatch:
+  //   - isLabBasketOpen=true → LabBasketWindow (PR4b service-led lab path)
+  //   - serviceSlug = non-lab T85 slug → ServiceLedBookingModal (PR4a)
   //   - serviceSlug = null (Navbar's "Book a Visit" pill, no slug) → T61 BookingModal
   //     (T61's modal collects everything inline; safe fallback when no service is preselected)
-  const useT85Modal =
-    isModalOpen &&
-    serviceSlug !== null &&
-    serviceSlug !== "lab-tests";
+  // Note: `isLabBasketOpen` and `isModalOpen` are independent flags by design
+  // — useBookingFlow.requestBookingForLab() calls openLabBasket() (not
+  // openModal()) so isModalOpen stays false on the lab path. The dispatch
+  // here doesn't need to special-case 'lab-tests' anymore.
+  const useT85Modal = isModalOpen && serviceSlug !== null;
   const useT61Modal = isModalOpen && !useT85Modal;
 
   const { data: navbarCopy } = useCmsSection(
@@ -199,6 +203,7 @@ export function Navbar() {
 
       <BookingModal isOpen={useT61Modal} onClose={closeModal} />
       <ServiceLedBookingModal isOpen={useT85Modal} onClose={closeModal} />
+      <LabBasketWindow isOpen={isLabBasketOpen} onClose={closeLabBasket} />
       <BookingGate
         isOpen={isGateOpen}
         onClose={closeGate}

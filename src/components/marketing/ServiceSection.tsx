@@ -70,7 +70,15 @@ export function ServiceSection({
   //   - Home-Visit / Teleconsult / Medic at Home → new ServiceLedBookingModal
   // Both dispatches happen in Navbar's mount; here we just seed the
   // slug + open the flow via the shared hook.
-  const { requestBookingForService } = useBookingFlow();
+  const { requestBookingForService, requestBookingForLab } = useBookingFlow();
+
+  // T85 PR4b — lab CTA opens the new LabBasketWindow via requestBookingForLab;
+  // all other services use requestBookingForService → ServiceLedBookingModal.
+  // Single per-row CTA still — dispatch is by slug at the handler.
+  const handleCtaTap =
+    config.slug === "lab-tests"
+      ? requestBookingForLab
+      : () => requestBookingForService(config.slug);
 
   const handleSchedule = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -198,7 +206,7 @@ export function ServiceSection({
           replaces the bare call with a slug-carrying variant. */}
       <button
         type="button"
-        onClick={() => requestBookingForService(config.slug)}
+        onClick={handleCtaTap}
         aria-label={`${config.ctaLabel} — opens booking flow`}
         className="block w-full text-center bg-accent-coral text-white py-4 px-4 rounded-[14px] text-[15px] font-semibold tracking-[-0.1px] transition-transform duration-100 active:scale-[0.985] shadow-[0_8px_18px_rgba(244,132,90,0.36),0_2px_4px_rgba(244,132,90,0.20)]"
       >

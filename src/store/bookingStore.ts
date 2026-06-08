@@ -69,6 +69,14 @@ export type BookingState = {
   isModalOpen: boolean;
   /** OTP-gate modal visibility (BookingGate). Independent of the booking modal. */
   isGateOpen: boolean;
+  /**
+   * T85 PR4b — LabBasketWindow visibility. Independent of `isModalOpen`
+   * so the lab basket can co-exist (mounted but hidden) alongside the
+   * non-lab ServiceLedBookingModal without interfering. Floating
+   * affordances (FloatingWhatsApp, ServiceStickyBar) hide whenever any
+   * of `isModalOpen | isGateOpen | isLabBasketOpen` is true.
+   */
+  isLabBasketOpen: boolean;
   isLocating: boolean;
   isSubmitting: boolean;
   locationError: string | null;
@@ -99,6 +107,9 @@ export type BookingState = {
   closeModal: () => void;
   openGate: () => void;
   closeGate: () => void;
+  /** T85 PR4b — open the LabBasketWindow (parallel to openModal). */
+  openLabBasket: () => void;
+  closeLabBasket: () => void;
   setLocating: (isLocating: boolean) => void;
   setSubmitting: (isSubmitting: boolean) => void;
   setLocationError: (error: string | null) => void;
@@ -124,6 +135,7 @@ const initialState = {
   confirmedBooking: null as ConfirmedBooking | null,
   isModalOpen: false,
   isGateOpen: false,
+  isLabBasketOpen: false,
   isLocating: false,
   isSubmitting: false,
   locationError: null as string | null,
@@ -167,6 +179,8 @@ export const useBookingStore = create<BookingState>()(
       closeModal: () => set({ isModalOpen: false }),
       openGate: () => set({ isGateOpen: true }),
       closeGate: () => set({ isGateOpen: false }),
+      openLabBasket: () => set({ isLabBasketOpen: true }),
+      closeLabBasket: () => set({ isLabBasketOpen: false }),
       setLocating: (isLocating) => set({ isLocating }),
       setSubmitting: (isSubmitting) => set({ isSubmitting }),
       setLocationError: (locationError) => set({ locationError }),
