@@ -16,8 +16,15 @@
 // appears/disappears with no transform/opacity animation.
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { ChevronDown, UserRound, LogOut, Loader2 } from "lucide-react";
+import {
+  ChevronDown,
+  UserRound,
+  LogOut,
+  Loader2,
+  Users,
+} from "lucide-react";
 
 import { useCurrentCustomer } from "../_lib/PulseCustomerContext";
 
@@ -113,6 +120,18 @@ export function ProfileMenu({ variant }: { variant: "chip" | "icon" }) {
                 {customer.full_name ?? customer.phone}
               </div>
             </div>
+            {/* T64: Family Members entry — between the identity header and
+                the destructive Sign-out action so a stray tap can't trigger
+                sign-out by mistake. */}
+            <Link
+              href="/pulse/family-members"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 border-b border-slate-100 px-4 py-3 text-left text-sm font-medium text-text-main transition-colors hover:bg-slate-50"
+            >
+              <Users className="h-4 w-4" aria-hidden="true" />
+              Family Members
+            </Link>
             <button
               type="button"
               role="menuitem"
