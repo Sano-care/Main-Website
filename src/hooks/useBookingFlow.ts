@@ -29,22 +29,29 @@ import type { ServiceSlug } from "@/lib/services/catalog";
 export function useBookingFlow() {
   const openModal = useBookingStore((s) => s.openModal);
   const openGate = useBookingStore((s) => s.openGate);
+  const openLabBasket = useBookingStore((s) => s.openLabBasket);
   const setServiceSlug = useBookingStore((s) => s.setServiceSlug);
+  const serviceSlug = useBookingStore((s) => s.serviceSlug);
   const phoneVerifiedUntil = useBookingStore((s) => s.phoneVerifiedUntil);
 
   const [pending, setPending] = useState(false);
 
   // `Date.now()` is read inside the effect / callback only (never during
   // render) so the hook stays render-pure. `phoneVerifiedUntil` changing is
-  // what re-runs the effect after a successful OTP, resuming into the modal.
+  // what re-runs the effect after a successful OTP, resuming into the
+  // correct surface — modal for non-lab, lab basket for `lab-tests`.
   useEffect(() => {
     const verified =
       phoneVerifiedUntil !== null && phoneVerifiedUntil > Date.now();
     if (pending && verified) {
       setPending(false);
-      openModal();
+      if (serviceSlug === "lab-tests") {
+        openLabBasket();
+      } else {
+        openModal();
+      }
     }
-  }, [pending, phoneVerifiedUntil, openModal]);
+  }, [pending, phoneVerifiedUntil, serviceSlug, openModal, openLabBasket]);
 
   const requestBooking = useCallback(() => {
     const verified =
@@ -82,5 +89,31 @@ export function useBookingFlow() {
     [phoneVerifiedUntil, openModal, openGate, setServiceSlug],
   );
 
-  return { requestBooking, requestBookingForService };
+  /**
+   * T85 PR4b — lab-basket variant. Seeds `bookingStore.serviceSlug =
+   * 'lab-tests'` and opens the LabBasketWindow (not the
+   * ServiceLedBookingModal). Same OTP-gate-then-modal dance as
+   * `requestBookingForService` but the resume target is the lab
+   * basket rather than the modal. Used by `ServiceSection`'s Lab
+   * Tests CTA via the same per-service routing the other 3 CTAs use.
+   *
+   * Note the duplicated pending-state plumbing — `useBookingFlow`
+   * carries a single `pending` flag, so a verified-mid-flight resume
+   * needs to know which window to open. We dispatch on serviceSlug
+   * inside the resume effect (see below) so a freshly-OTP-verified
+   * patient who tapped Lab Tests lands in the basket, not the modal.
+   */
+  const requestBookingForLab = useCallback(() => {
+    setServiceSlug("lab-tests");
+    const verified =
+      phoneVerifiedUntil !== null && phoneVerifiedUntil > Date.now();
+    if (verified) {
+      openLabBasket();
+    } else {
+      setPending(true);
+      openGate();
+    }
+  }, [phoneVerifiedUntil, openLabBasket, openGate, setServiceSlug]);
+
+  return { requestBooking, requestBookingForService, requestBookingForLab };
 }

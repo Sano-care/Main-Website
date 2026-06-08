@@ -188,14 +188,14 @@ export function ServiceStickyBar() {
   const [slugs] = useState(() => SERVICES.map((s) => s.slug));
   const active = useActiveService(slugs);
 
-  // T85 PR4a bug 1 fix — hide while any booking surface is open. The
-  // sticky bar was covering the "Continue" / "Proceed to Pay" CTAs at
-  // the bottom of each modal step on real devices. Both BookingModal
-  // and ServiceLedBookingModal are dispatched off `isModalOpen`;
-  // `isGateOpen` covers the OTP gate before either modal opens.
+  // T85 PR4a bug 1 fix + PR4b extension — hide while any booking
+  // surface is open. Covers BookingModal + ServiceLedBookingModal
+  // (`isModalOpen`), BookingGate OTP (`isGateOpen`), and PR4b's
+  // LabBasketWindow (`isLabBasketOpen`). Any one → hide.
   const isModalOpen = useBookingStore((s) => s.isModalOpen);
   const isGateOpen = useBookingStore((s) => s.isGateOpen);
-  if (isModalOpen || isGateOpen) return null;
+  const isLabBasketOpen = useBookingStore((s) => s.isLabBasketOpen);
+  if (isModalOpen || isGateOpen || isLabBasketOpen) return null;
 
   return (
     <nav

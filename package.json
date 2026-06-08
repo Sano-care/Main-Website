@@ -4,11 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "npm run validate:lab-catalog",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "validate:lab-catalog": "tsx scripts/validate-lab-catalog.ts",
     "lighthouse:audit": "npx -y lighthouse https://sanocare.in --form-factor=mobile --only-categories=performance,accessibility,seo --output html --output-path lighthouse-baseline.html"
   },
   "dependencies": {
