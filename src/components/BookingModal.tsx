@@ -1,5 +1,12 @@
 "use client";
 
+/**
+ * @deprecated T85 PR5 — kept ONLY for Navbar's "Book a Visit" pill
+ * fallback (no-slug case). All 4 service-led CTAs route through
+ * `ServiceLedBookingModal` (non-lab) or `LabBasketWindow` (lab). When
+ * Navbar's no-slug pill is removed or repointed to a service-led
+ * default, this file goes too. Until then, retired but mounted.
+ */
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";

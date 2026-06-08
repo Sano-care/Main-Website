@@ -7,13 +7,24 @@
 // minimum a visitor will be charged; specialist or extended-time visits
 // may exceed this. Healthcare services are GST-exempt.
 //
-// Payment model: ₹249 partial-prepay at booking + remaining balance auto-charged
-// when the doctor closes the case (per the Sanocare Pulse product spec).
-// Refund: full refund of the booking fee before medic dispatch.
+// Payment model (post-T85):
+//   - Home-Visit / Teleconsultation / Medic at Home: 50% rounded up at
+//     booking via getServiceHalfRoundedUp(), balance at case close
+//   - Lab Tests: full grand total prepaid OR ₹200 collection fee
+//     (PR4b dual mode); see /api/lab/create-booking-prepaid
+//   - Legacy fallback: flat ₹249 booking fee (BOOKING_FEE below) — still
+//     used by Navbar's "Book a Visit" pill via the @deprecated
+//     BookingModal. New code paths use getServiceHalfRoundedUp instead.
 
 export const BASE_PRICE = 499; // Standard home visit (medic + virtual doctor + e-Rx, first 15 min)
 export const ADDITIONAL_PRICE_PER_5MIN = 100; // Extended consult beyond 15 min
-export const BOOKING_FEE = 249; // ₹249 captured at booking; balance auto-charged on case close
+/**
+ * @deprecated T85 PR5 — legacy flat booking fee. Still used by Navbar's
+ * "Book a Visit" pill → BookingModal (no-slug fallback). New service-led
+ * flows use `getServiceHalfRoundedUp()` instead. Retire when Navbar's
+ * pill is repointed to a service-led default.
+ */
+export const BOOKING_FEE = 249; // legacy flat fee — see @deprecated above
 export const NIGHT_SURGE_PRICE = 799; // After 10 pm — +60% on the anchor SKU
 
 export interface ServicePricing {

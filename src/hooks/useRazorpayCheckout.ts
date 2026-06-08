@@ -45,7 +45,7 @@ export function useRazorpayCheckout() {
           amount: args.amount,
           currency: "INR",
           name: "Sanocare",
-          description: "Booking confirmation — ₹249 partial-prepay",
+          description: "Booking confirmation — partial-prepay",
           image: "/logo.svg",
           order_id: args.orderId,
           prefill: args.prefill,
