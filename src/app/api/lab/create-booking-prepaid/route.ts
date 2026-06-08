@@ -315,10 +315,14 @@ export async function POST(req: NextRequest) {
       // increment. Either way, don't fail the booking response.
     }
 
-    // T85 PR4b v2 — ops lead alert with standardized {{5}} Context
-    // format (single source of truth in contextFormat.ts). Mode A →
-    // 'lab-full'; Mode B → 'lab-partial' (the formatter computes the
-    // balance string automatically).
+    // T85 PR4b v2 + leadalert-hotfix — ops lead alert with standardized
+    // {{5}} Context format (single source of truth in
+    // contextFormat.ts). Mode A → 'lab-full'; Mode B → 'lab-partial'
+    // (the formatter computes the balance string automatically).
+    //
+    // Awaited (not `void`) — see razorpay/verify for the full rationale;
+    // tl;dr Netlify Functions freeze on response, fire-and-forget
+    // promises never run. Prod smoke 2026-06-08 confirmed.
     const contextText = formatLeadAlertContext(undefined, {
       paidPaise: paidNowInr * 100,
       totalPaise: grandTotalInr * 100,
@@ -328,13 +332,23 @@ export async function POST(req: NextRequest) {
     // composition in a future iteration that surfaces the at-door
     // balance to ops dashboards.
     void balanceAtDoorInr;
-    void sendAarogyaLeadAlert({
-      patientName,
-      serviceDisplayName: t85ServiceDisplayName("lab-tests"),
-      location: address,
-      context: contextText,
-      patientPhone: submittedPhone,
-    });
+    try {
+      const { delivered } = await sendAarogyaLeadAlert({
+        patientName,
+        serviceDisplayName: t85ServiceDisplayName("lab-tests"),
+        location: address,
+        context: contextText,
+        patientPhone: submittedPhone,
+      });
+      console.log(
+        `[lab/create-booking-prepaid] aarogya_lead_alert dispatch: delivered=${delivered} booking=${data?.booking_code ?? data?.id ?? "?"}`,
+      );
+    } catch (alertErr) {
+      console.error(
+        "[lab/create-booking-prepaid] aarogya_lead_alert threw unexpectedly",
+        alertErr,
+      );
+    }
 
     return NextResponse.json({
       ok: true,

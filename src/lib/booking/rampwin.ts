@@ -82,8 +82,20 @@ export async function sendAarogyaLeadAlert(
 ): Promise<{ delivered: boolean }> {
   const enabled = process.env.RAMPWIN_LEAD_ALERT_ENABLED !== "false";
   if (!enabled) {
+    // Explicit log so disabled state is visible in Netlify Functions
+    // logs — previously silent, which made debugging impossible during
+    // the 2026-06-08 silent-failure incident (Case #SAN-B-00058).
+    console.log(
+      "[aarogya_lead_alert] disabled via RAMPWIN_LEAD_ALERT_ENABLED=false",
+    );
     return { delivered: false };
   }
+
+  // Entry log — confirms the function was reached at all. Critical for
+  // distinguishing "call site never invoked sender" (e.g. fire-and-
+  // forget eaten by serverless teardown) from "sender ran but BSP
+  // rejected payload."
+  console.log("[aarogya_lead_alert] dispatch start");
 
   try {
     const apiKey = process.env.RAMPWIN_API_KEY;
