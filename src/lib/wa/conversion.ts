@@ -31,22 +31,60 @@ const SERVICE_MESSAGES: Record<string, string> = {
   other: "Hi Sanocare, I have a question about your services",
 };
 
-function normalizeService(raw: string | null | undefined): string {
+export function normalizeService(raw: string | null | undefined): string {
   return raw && SERVICE_MESSAGES[raw] ? raw : "other";
 }
 
-function hashIp(ip: string | null): string | null {
+export function hashIp(ip: string | null): string | null {
   const salt = process.env.IP_SALT;
   if (!ip || !salt) return null; // never store a raw or weakly-salted IP
   return createHash("sha256").update(ip + salt).digest("hex");
 }
 
-function clientIp(req: NextRequest): string | null {
+export function clientIp(req: NextRequest): string | null {
   return (
     req.headers.get("x-nf-client-connection-ip") ??
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
     null
   );
+}
+
+export interface PaidClickFields {
+  service: string;
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  utm_campaign?: string | null;
+  utm_content?: string | null;
+  utm_term?: string | null;
+  gclid?: string | null;
+  referrer?: string | null;
+  user_agent?: string | null;
+  ip_hash?: string | null;
+}
+
+/**
+ * Insert one paid-click row. Shared by /wa (server-rendered fire) and the
+ * /api/paid-click-log beacon endpoint from the /book-* landing pages.
+ * Best-effort: logs on failure, never throws.
+ */
+export async function recordPaidClick(f: PaidClickFields): Promise<void> {
+  try {
+    const { error } = await supabaseAdmin.from("paid_click_log").insert({
+      service: normalizeService(f.service),
+      utm_source: f.utm_source ?? null,
+      utm_medium: f.utm_medium ?? null,
+      utm_campaign: f.utm_campaign ?? null,
+      utm_content: f.utm_content ?? null,
+      utm_term: f.utm_term ?? null,
+      gclid: f.gclid ?? null,
+      referrer: f.referrer ?? null,
+      user_agent: f.user_agent ?? null,
+      ip_hash: f.ip_hash ?? null,
+    });
+    if (error) console.error("[paid-click] insert failed:", error.message);
+  } catch (err) {
+    console.error("[paid-click] insert threw:", err);
+  }
 }
 
 // Escape a JSON string so it is safe to embed inside an inline <script>.
@@ -90,24 +128,20 @@ export async function buildWaResponse(
   const ipHash = hashIp(clientIp(req));
   const referrer = req.headers.get("referer");
   const userAgent = req.headers.get("user-agent");
-  after(async () => {
-    try {
-      const { error } = await supabaseAdmin.from("paid_click_log").insert({
-        service,
-        utm_source: utm.source,
-        utm_medium: utm.medium,
-        utm_campaign: utm.campaign,
-        utm_content: utm.content,
-        utm_term: utm.term,
-        referrer,
-        user_agent: userAgent,
-        ip_hash: ipHash,
-      });
-      if (error) console.error("[wa] paid_click_log insert failed:", error.message);
-    } catch (err) {
-      console.error("[wa] paid_click_log insert threw:", err);
-    }
-  });
+  after(() =>
+    recordPaidClick({
+      service,
+      utm_source: utm.source,
+      utm_medium: utm.medium,
+      utm_campaign: utm.campaign,
+      utm_content: utm.content,
+      utm_term: utm.term,
+      gclid: params.get("gclid"),
+      referrer,
+      user_agent: userAgent,
+      ip_hash: ipHash,
+    }),
+  );
 
   // (2) XSS-safe config for the inline tracking script.
   const cfg = safeJson({
