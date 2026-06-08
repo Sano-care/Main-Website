@@ -23,6 +23,26 @@
 -- apply_migration wraps its own transaction.
 
 -- ====================================================================
+-- M042 prologue: retire the v0 universe.
+-- ====================================================================
+-- These four tables are from a May 2026 Supabase-Auth-pattern prototype that
+-- predates the current customers + bookings architecture (M013+). Zero src/
+-- references. 28 test rows total. Founder confirms no external dependencies +
+-- no plan to re-adopt Supabase Auth (Sanocare stays on cookie-OTP). Dropping
+-- CASCADE is safe.
+--
+-- v0 universe being retired:
+--   profiles       (11 rows) — Supabase-Auth-style multi-role profile table
+--   consultations  ( 8 rows) — v0 booking surface (predates bookings + consultation_sessions)
+--   family_members ( 3 rows) — v0 family list (collides with T64 canonical name)
+--   vitals         ( 6 rows) — v0 vitals (predates vital_readings M035)
+
+DROP TABLE IF EXISTS public.vitals CASCADE;
+DROP TABLE IF EXISTS public.consultations CASCADE;
+DROP TABLE IF EXISTS public.family_members CASCADE;
+DROP TABLE IF EXISTS public.profiles CASCADE;
+
+-- ====================================================================
 -- family_members
 -- ====================================================================
 
