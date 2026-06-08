@@ -22,6 +22,7 @@ import Image from "next/image";
 import { Menu, Phone } from "lucide-react";
 import { Button } from "@/components/ui";
 import { BookingModal } from "@/components/BookingModal";
+import { ServiceLedBookingModal } from "@/components/booking/ServiceLedBookingModal";
 import { BookingGate } from "@/components/booking/BookingGate";
 import { MobileMenu } from "@/components/marketing/MobileMenu";
 import { useBookingStore } from "@/store/bookingStore";
@@ -43,7 +44,19 @@ export function Navbar() {
   const closeModal = useBookingStore((s) => s.closeModal);
   const isGateOpen = useBookingStore((s) => s.isGateOpen);
   const closeGate = useBookingStore((s) => s.closeGate);
+  const serviceSlug = useBookingStore((s) => s.serviceSlug);
   const { requestBooking } = useBookingFlow();
+
+  // T85 PR4a — modal dispatch:
+  //   - serviceSlug = 'lab-tests'  → keep T61's BookingModal (PR2.5 stopgap; PR4b replaces)
+  //   - serviceSlug = anything else → new ServiceLedBookingModal
+  //   - serviceSlug = null (Navbar's "Book a Visit" pill, no slug) → T61 BookingModal
+  //     (T61's modal collects everything inline; safe fallback when no service is preselected)
+  const useT85Modal =
+    isModalOpen &&
+    serviceSlug !== null &&
+    serviceSlug !== "lab-tests";
+  const useT61Modal = isModalOpen && !useT85Modal;
 
   const { data: navbarCopy } = useCmsSection(
     "shared",
@@ -184,7 +197,8 @@ export function Navbar() {
         phoneDisplay={PHONE_DISPLAY}
       />
 
-      <BookingModal isOpen={isModalOpen} onClose={closeModal} />
+      <BookingModal isOpen={useT61Modal} onClose={closeModal} />
+      <ServiceLedBookingModal isOpen={useT85Modal} onClose={closeModal} />
       <BookingGate
         isOpen={isGateOpen}
         onClose={closeGate}

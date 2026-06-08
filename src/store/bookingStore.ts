@@ -1,8 +1,20 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AppliedCoupon } from '@/types/lab-coupon';
+import type { ServiceSlug } from '@/lib/services/catalog';
 
 export type GPSLocation = { lat: number; lng: number; accuracy: number };
+
+/**
+ * T85 PR4a — schedule selection. ASAP means "dispatch now"; slot means
+ * the patient picked a specific 1-hour window. The slot ISO string is
+ * the START of the window (e.g. "2026-06-07T10:00:00+05:30" for "10–11 AM").
+ * The 30-min variance disclaimer is rendered next to the picker, not
+ * stored in state.
+ */
+export type ScheduledFor =
+  | { kind: 'asap' }
+  | { kind: 'slot'; iso: string };
 
 export type SelectedLabTest = {
   code: string;
@@ -31,6 +43,24 @@ export type BookingState = {
   location: string;
   gpsLocation: GPSLocation | null;
   serviceCategory: string;
+  /**
+   * T85 PR4a — service-led pre-select. Seeded by
+   * `requestBookingForService(slug)` before the modal opens; consumed
+   * by ServiceLedBookingModal to drive the step header, the payment
+   * amount, and the Step 4 WhatsApp deep link.
+   *
+   * `serviceCategory` (legacy) co-exists for back-compat with the lab
+   * basket and the existing useBookingSubmit / Razorpay verify path;
+   * during the T85 widening period both fields can hold values. The
+   * new modal writes the T85 slug to bookings.service_category post
+   * M039 widening.
+   */
+  serviceSlug: ServiceSlug | null;
+  /**
+   * T85 PR4a — schedule pick. Defaults to ASAP; the user may switch to
+   * a 1-hour window. Cleared on resetForNewBooking.
+   */
+  scheduledFor: ScheduledFor;
   isBookingForOther: boolean;
   selectedTests: SelectedLabTest[];
   /** Coupon applied at the time of booking. Null until validated. */
@@ -55,6 +85,10 @@ export type BookingState = {
 
   setDetails: (details: Partial<BookingState>) => void;
   setGPSLocation: (gps: GPSLocation | null) => void;
+  /** T85 PR4a — pre-select a service slug before opening the modal. */
+  setServiceSlug: (slug: ServiceSlug | null) => void;
+  /** T85 PR4a — set ASAP vs a specific 1-hour window. */
+  setScheduledFor: (scheduledFor: ScheduledFor) => void;
   setBookingForOther: (value: boolean) => void;
   addSelectedTest: (test: SelectedLabTest) => void;
   removeSelectedTest: (code: string) => void;
@@ -82,6 +116,8 @@ const initialState = {
   location: '',
   gpsLocation: null as GPSLocation | null,
   serviceCategory: '',
+  serviceSlug: null as ServiceSlug | null,
+  scheduledFor: { kind: 'asap' } as ScheduledFor,
   isBookingForOther: false,
   selectedTests: [] as SelectedLabTest[],
   appliedCoupon: null as AppliedCoupon | null,
@@ -103,6 +139,8 @@ export const useBookingStore = create<BookingState>()(
       ...initialState,
       setDetails: (details) => set((state) => ({ ...state, ...details })),
       setGPSLocation: (gpsLocation) => set({ gpsLocation }),
+      setServiceSlug: (serviceSlug) => set({ serviceSlug }),
+      setScheduledFor: (scheduledFor) => set({ scheduledFor }),
       setBookingForOther: (isBookingForOther) =>
         set({
           isBookingForOther,
@@ -146,6 +184,8 @@ export const useBookingStore = create<BookingState>()(
           location: '',
           gpsLocation: null,
           serviceCategory: '',
+          serviceSlug: null,
+          scheduledFor: { kind: 'asap' },
           isBookingForOther: false,
           selectedTests: [],
           appliedCoupon: null,
@@ -162,6 +202,8 @@ export const useBookingStore = create<BookingState>()(
         phone: state.phone,
         location: state.location,
         serviceCategory: state.serviceCategory,
+        serviceSlug: state.serviceSlug,
+        scheduledFor: state.scheduledFor,
         selectedTests: state.selectedTests,
         appliedCoupon: state.appliedCoupon,
         confirmedBooking: state.confirmedBooking,

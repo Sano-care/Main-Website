@@ -65,11 +65,12 @@ export function ServiceSection({
 }: ServiceSectionProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const Icon = getServiceIcon(config.iconKey);
-  // T85 PR2.5 — CTA opens T61's gate→modal flow. `requestBooking()`
-  // takes no args today; PR4 extends `bookingStore` with a
-  // `preselectService` field, then this callsite threads
-  // `config.slug` through.
-  const { requestBooking } = useBookingFlow();
+  // T85 PR4a — CTA opens the gate (if not verified) then routes to:
+  //   - Lab Tests           → T61 BookingModal (PR2.5 stopgap, PR4b replaces)
+  //   - Home-Visit / Teleconsult / Medic at Home → new ServiceLedBookingModal
+  // Both dispatches happen in Navbar's mount; here we just seed the
+  // slug + open the flow via the shared hook.
+  const { requestBookingForService } = useBookingFlow();
 
   const handleSchedule = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -197,7 +198,7 @@ export function ServiceSection({
           replaces the bare call with a slug-carrying variant. */}
       <button
         type="button"
-        onClick={requestBooking}
+        onClick={() => requestBookingForService(config.slug)}
         aria-label={`${config.ctaLabel} — opens booking flow`}
         className="block w-full text-center bg-accent-coral text-white py-4 px-4 rounded-[14px] text-[15px] font-semibold tracking-[-0.1px] transition-transform duration-100 active:scale-[0.985] shadow-[0_8px_18px_rgba(244,132,90,0.36),0_2px_4px_rgba(244,132,90,0.20)]"
       >

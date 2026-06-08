@@ -28,6 +28,7 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { useBookingStore } from "@/store/bookingStore";
 
 const WHATSAPP_NUMBER = "919711977782"; // E.164 without + (matches Navbar PHONE_TEL)
 const PREFILL_MESSAGE = "Hi, I'd like to book a Sanocare visit";
@@ -40,11 +41,19 @@ interface FloatingWhatsAppProps {
 export function FloatingWhatsApp({ hidden = false }: FloatingWhatsAppProps) {
   const prefersReducedMotion = useReducedMotion();
   const [mounted, setMounted] = useState(false);
+  // T85 PR4a bug 1 fix — hide while any booking surface is open. The
+  // floating FAB was overlapping Step 2's address input and Step 3's
+  // pay CTA on real devices. Both BookingModal and ServiceLedBookingModal
+  // are dispatched off `isModalOpen`; `isGateOpen` covers the OTP gate
+  // before either modal opens. Either flag → hide.
+  const isModalOpen = useBookingStore((s) => s.isModalOpen);
+  const isGateOpen = useBookingStore((s) => s.isGateOpen);
+  const bookingSurfaceOpen = isModalOpen || isGateOpen;
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  if (!mounted || hidden) return null;
+  if (!mounted || hidden || bookingSurfaceOpen) return null;
 
   const href = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(PREFILL_MESSAGE)}`;
 

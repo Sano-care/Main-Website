@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ShieldCheck, X, Phone as PhoneIcon, Loader2, ArrowRight, AlertCircle, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui";
 import { useBookingStore } from "@/store/bookingStore";
+import { useScrollLock } from "@/hooks/useScrollLock";
 
 // Keep in sync with token.ts. Duplicated here so the gate doesn't need to
 // import a server-only module.
@@ -91,6 +92,11 @@ type Step = "phone" | "otp";
 export function BookingGate({ isOpen, onClose, onVerified }: BookingGateProps) {
   const setPhoneVerified = useBookingStore((s) => s.setPhoneVerified);
   const setDetails = useBookingStore((s) => s.setDetails);
+
+  // T85 PR4a bug 2 fix — body scroll lock. Shared ref-counted hook
+  // means the gate→modal handoff (gate releases at the same instant
+  // the modal acquires) is glitch-free.
+  useScrollLock(isOpen);
 
   const [step, setStep] = useState<Step>("phone");
   const [phoneDigits, setPhoneDigits] = useState(""); // 10 local digits only
