@@ -12,7 +12,7 @@
 // collapses to an "Applied ✓" pill with a Remove link.
 
 import { useEffect, useState } from "react";
-import { Tag, Loader2, Check, X } from "lucide-react";
+import { Tag, Loader2, Check } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import type { AppliedLabCoupon } from "./types";
 
@@ -39,7 +39,6 @@ export function CouponSection({
   onRemove,
 }: CouponSectionProps) {
   const [suggested, setSuggested] = useState<SuggestedCoupon[]>([]);
-  const [showManual, setShowManual] = useState(false);
   const [manualCode, setManualCode] = useState("");
   const [busy, setBusy] = useState<string | null>(null); // code being applied
   const [error, setError] = useState<string | null>(null);
@@ -140,7 +139,6 @@ export function CouponSection({
         description: json.description ?? null,
       });
       setManualCode("");
-      setShowManual(false);
     } finally {
       setBusy(null);
     }
@@ -183,6 +181,16 @@ export function CouponSection({
     );
   }
 
+  // T85 PR4b v2 — UI reorder. Manual entry input + Apply button live
+  // at the top (always visible); suggested tiles act as quick-tap
+  // fills below. Tapping a suggested tile copies its code into the
+  // manual input + applies in one step. Inapplicable-hidden rule +
+  // dynamic-add-on-threshold-cross logic unchanged.
+  function quickFill(code: string) {
+    setManualCode(code);
+    void tryApply(code);
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
@@ -190,91 +198,76 @@ export function CouponSection({
         <h3 className="text-sm font-bold text-text-main">Apply Coupon</h3>
       </div>
 
-      {suggested.length > 0 && (
-        <ul className="space-y-2">
-          {suggested.map((c) => {
-            const isBest = c.code === bestCode;
-            return (
-              <li
-                key={c.code}
-                className={`flex items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2.5 ${
-                  isBest
-                    ? "border-[color:var(--color-accent-coral)]"
-                    : "border-slate-200"
-                }`}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-bold text-text-main">
-                    {c.code}
-                  </div>
-                  {c.description && (
-                    <div className="text-[11px] text-text-secondary truncate">
-                      {c.description}
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => tryApply(c.code)}
-                  disabled={busy === c.code}
-                  className="inline-flex items-center justify-center rounded-lg bg-[color:var(--color-accent-coral)] hover:bg-[color:var(--color-accent-coral-dark)] text-white text-[12px] font-semibold px-3 py-1.5 disabled:opacity-60"
-                >
-                  {busy === c.code ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    "Apply"
-                  )}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {!showManual ? (
+      {/* Manual entry — always visible at the top */}
+      <div className="flex items-stretch gap-2">
+        <input
+          type="text"
+          placeholder="Enter coupon code"
+          value={manualCode}
+          onChange={(e) => setManualCode(e.target.value.toUpperCase())}
+          className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm uppercase tracking-wider outline-none focus:border-primary focus:ring-4 focus:ring-primary/10"
+        />
         <button
           type="button"
-          onClick={() => setShowManual(true)}
-          className="text-[12px] font-semibold text-primary hover:underline"
+          disabled={!manualCode.trim() || busy !== null}
+          onClick={() => tryApply(manualCode.trim())}
+          className="inline-flex items-center justify-center rounded-xl bg-[color:var(--color-accent-coral)] hover:bg-[color:var(--color-accent-coral-dark)] text-white text-sm font-semibold px-4 disabled:opacity-60"
         >
-          Have a code? Enter manually
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Apply"}
         </button>
-      ) : (
-        <div className="flex items-stretch gap-2">
-          <input
-            type="text"
-            placeholder="Enter coupon code"
-            value={manualCode}
-            onChange={(e) => setManualCode(e.target.value.toUpperCase())}
-            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm uppercase tracking-wider outline-none focus:border-primary focus:ring-4 focus:ring-primary/10"
-          />
-          <button
-            type="button"
-            disabled={!manualCode.trim() || busy !== null}
-            onClick={() => tryApply(manualCode.trim())}
-            className="inline-flex items-center justify-center rounded-xl bg-[color:var(--color-accent-coral)] hover:bg-[color:var(--color-accent-coral-dark)] text-white text-sm font-semibold px-4 disabled:opacity-60"
-          >
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Apply"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setShowManual(false);
-              setManualCode("");
-              setError(null);
-            }}
-            aria-label="Cancel manual entry"
-            className="inline-flex items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 px-2"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+      </div>
 
       {error && (
         <p className="text-[11.5px] text-rose-700" role="alert">
           {error}
         </p>
+      )}
+
+      {/* Suggested coupons — quick-tap fills below the manual input */}
+      {suggested.length > 0 && (
+        <div className="space-y-2 pt-1">
+          <h4 className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">
+            Suggested
+          </h4>
+          <ul className="space-y-2">
+            {suggested.map((c) => {
+              const isBest = c.code === bestCode;
+              return (
+                <li
+                  key={c.code}
+                  className={`flex items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2.5 ${
+                    isBest
+                      ? "border-[color:var(--color-accent-coral)]"
+                      : "border-slate-200"
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-bold text-text-main">
+                      {c.code}
+                    </div>
+                    {c.description && (
+                      <div className="text-[11px] text-text-secondary truncate">
+                        {c.description}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => quickFill(c.code)}
+                    disabled={busy === c.code}
+                    className="inline-flex items-center justify-center rounded-lg bg-[color:var(--color-accent-coral)] hover:bg-[color:var(--color-accent-coral-dark)] text-white text-[12px] font-semibold px-3 py-1.5 disabled:opacity-60"
+                  >
+                    {busy === c.code ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      "Apply"
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </div>
   );
