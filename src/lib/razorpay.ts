@@ -66,9 +66,14 @@ export function verifyPaymentSignature(args: {
  * Mirrors src/constants/pricing.ts but here as integers for the gateway.
  */
 export const RAZORPAY_AMOUNTS = {
-  // ₹249 partial-prepay at booking
+  // @deprecated T85 PR5 — legacy flat ₹249 booking fee. Still used by
+  // /api/razorpay/create-order's legacy mode (no t85Slug) which is hit
+  // by Navbar's no-slug "Book a Visit" pill via the @deprecated
+  // BookingModal. New service-led flows compute amount server-side
+  // via getServiceHalfRoundedUp(t85ToPricingKey(slug)). Retires when
+  // Navbar's pill is repointed.
   BOOKING_FEE_PAISE: 24_900,
-  // ₹499 full upfront (if customer chooses)
+  // @deprecated T85 PR5 — legacy full-upfront option. Same caveat.
   FULL_VISIT_PAISE: 49_900,
   // ₹250 balance auto-charged at case close
   BALANCE_PAISE: 25_000,

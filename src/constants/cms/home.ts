@@ -35,7 +35,7 @@ export const HOME_CONTENT = {
     },
     bookingForm: {
       title: "Book a visit in 60 seconds",
-      subtitle: "₹249 to confirm. Balance auto-charged on case close.",
+      subtitle: "Pay 50% to confirm. Balance auto-charged on case close.",
       fields: {
         patientNameLabel: "Patient Name",
         patientNamePlaceholder: "Enter Full Name",
@@ -177,7 +177,7 @@ export const HOME_CONTENT = {
         number: 1,
         title: "Book your visit",
         description:
-          "Pick a service and time. ₹249 confirms the booking; the balance auto-charges on case close. Full refund before the medic is dispatched.",
+          "Pick a service and time. 50% confirms the booking (or full collection fee for Lab Tests); the balance auto-charges on case close. Full refund before the medic is dispatched.",
         image:
           "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=800&auto=format&fit=crop",
       },
@@ -340,7 +340,8 @@ export const SANOCARE_ADVANTAGE_CONTENT = {
         { icon: Activity, text: "Diagnostics at home" },
       ],
       cta: "Book a Visit",
-      ctaLink: "/#hero-booking-form",
+      // PR2 stripped Hero CTAs; anchor repointed to first service section per T85 PR5
+      ctaLink: "/#service-home-visit",
       learnMore: "/now",
     },
     {
@@ -384,7 +385,7 @@ export const SANOCARE_ADVANTAGE_CONTENT = {
     {
       title: "Transparent pricing",
       description:
-        "Starting-from prices on every SKU. ₹249 captured at booking, balance auto-charged on case close. No hidden fees. GST-exempt clinical healthcare.",
+        "Starting-from prices on every SKU. 50% captured at booking for home-visit / teleconsult / medic-at-home; full grand total prepaid for Lab Tests. Balance (where applicable) auto-charged on case close. No hidden fees. GST-exempt clinical healthcare.",
       icon: IndianRupee,
     },
   ],

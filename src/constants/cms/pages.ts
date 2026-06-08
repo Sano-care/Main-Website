@@ -1,3 +1,8 @@
+// PR2 stripped Hero CTAs; the `#hero-booking-form` anchor in this file
+// was repointed to `#service-home-visit` (the first service section) per
+// T85 PR5. Existing inbound bookmarks land on the Home-Visit card
+// instead of dead-anchoring. The 6 cta hrefs below are the repointed
+// targets.
 import {
   Activity,
   Baby,
@@ -38,7 +43,7 @@ export const SERVICES_PAGE_CONTENT = {
       description:
         "From preventive diagnostics to home nursing care, our team of paramedics, nurses, and doctors provides a seamless continuum of healthcare services-right at your doorstep.",
       primaryCtaLabel: "Book a Consultation",
-      primaryCtaHref: "/#hero-booking-form",
+      primaryCtaHref: "/#service-home-visit",
       secondaryCtaLabel: "View Pricing",
       secondaryCtaHref: "/now",
       imageSrc:
@@ -74,7 +79,7 @@ export const SERVICES_PAGE_CONTENT = {
       description:
         "Book a consultation now and get professional medical care at your doorstep within 30 minutes.",
       primaryCtaLabel: "Book a Visit",
-      primaryCtaHref: "/#hero-booking-form",
+      primaryCtaHref: "/#service-home-visit",
       secondaryCtaLabel: "Call: +91-9711977782",
       secondaryCtaHref: "tel:+919711977782",
     },
@@ -189,7 +194,7 @@ export const NOW_PAGE_CONTENT = {
       description:
         "Healthcare that comes to you. Get paramedics, nurses, and diagnostics at your doorstep within 30 minutes. No appointments, no waiting rooms.",
       primaryCtaLabel: "Book a Visit Now",
-      primaryCtaHref: "/#hero-booking-form",
+      primaryCtaHref: "/#service-home-visit",
       secondaryCtaLabel: "+91-9711977782",
       secondaryCtaHref: "tel:+919711977782",
       imageSrc:
@@ -221,7 +226,7 @@ export const NOW_PAGE_CONTENT = {
       price: "₹499",
       subtitle: "for 15-minute consultation",
       ctaLabel: "Book Your Visit",
-      ctaHref: "/#hero-booking-form",
+      ctaHref: "/#service-home-visit",
     },
     trustSection: {
       badge: "Trust & Safety",
@@ -237,7 +242,7 @@ export const NOW_PAGE_CONTENT = {
       description:
         "Don't wait in queues. Get professional medical care at your doorstep within 30 minutes.",
       primaryCtaLabel: "Book a Visit",
-      primaryCtaHref: "/#hero-booking-form",
+      primaryCtaHref: "/#service-home-visit",
       secondaryCtaLabel: "Emergency? Call Now",
       secondaryCtaHref: "tel:+919711977782",
     },
@@ -630,7 +635,7 @@ export const RESEARCH_PAGE_CONTENT = {
       title: "Stay Updated on Health Insights",
       description: "Get the latest health tips, articles, and updates delivered to your inbox.",
       primaryCtaLabel: "Book a Health Checkup",
-      primaryCtaHref: "/#hero-booking-form",
+      primaryCtaHref: "/#service-home-visit",
       secondaryCtaLabel: "Contact Us",
       secondaryCtaHref: "/contact",
     },

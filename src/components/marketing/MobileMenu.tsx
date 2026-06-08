@@ -25,6 +25,7 @@ import { X, Phone, ArrowRight, MessageCircle } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect } from "react";
+import { useScrollLock } from "@/hooks/useScrollLock";
 
 type NavLink = {
   href: string;
@@ -62,15 +63,11 @@ export function MobileMenu({
 }: MobileMenuProps) {
   const prefersReducedMotion = useReducedMotion();
 
-  // Lock body scroll while menu open.
-  useEffect(() => {
-    if (!isOpen) return;
-    const original = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = original;
-    };
-  }, [isOpen]);
+  // T85 PR5 — body scroll lock via shared useScrollLock hook
+  // (position:fixed pattern, ref-counted, iOS-safe). Replaces the
+  // prior `overflow: hidden` which was known-broken on iOS Safari
+  // rubber-band scroll.
+  useScrollLock(isOpen);
 
   // Close on Escape key.
   useEffect(() => {

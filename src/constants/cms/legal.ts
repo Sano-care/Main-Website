@@ -193,7 +193,7 @@ You confirm that the personal data you provide is true and accurate to the best 
 
 ## 5. Booking and cancellation
 
-By placing a booking, you create a contract with Sanocare for the specific Service requested, at the price displayed at the time of booking. Bookings are confirmed only after payment of the booking fee (₹249 by default; or ₹499 full upfront, at your option) via our payment gateway partner Razorpay.
+By placing a booking, you create a contract with Sanocare for the specific Service requested, at the price displayed at the time of booking. Bookings are confirmed only after payment of the booking fee via our payment gateway partner Razorpay. The booking fee varies by service: 50% of the displayed price (rounded up to the nearest rupee) for Home-Visit, Teleconsultation, and Medic at Home; the full grand total (tests + collection fee, less any coupon) for Lab Tests booked under the full-prepaid mode, or a fixed ₹200 collection fee for Lab Tests booked under the partial-payment mode with balance collected at the door via UPI.
 
 Cancellation and refund terms are governed by our **Refund & Cancellation Policy**.
 
@@ -205,10 +205,10 @@ Healthcare consultations provided by Sanocare are exempt from Goods and Services
 
 A typical home visit transaction works as follows:
 
-1. ₹249 is captured at booking confirmation.
+1. 50% of the displayed Home-Visit price (rounded up to the nearest rupee) is captured at booking confirmation.
 2. The case proceeds; the medic visits, vitals are captured, the doctor consults via video, the prescription is issued.
-3. When the doctor closes the case, the remaining balance (typically ₹250 for a standard visit) is auto-charged to the same payment instrument.
-4. If the consultation extends beyond 15 minutes, additional time is billed at ₹100 per additional 5 minutes.
+3. When the doctor closes the case, the remaining 50% is auto-charged to the same payment instrument.
+4. If the consultation extends beyond the included consult window, additional time is billed at the rate displayed at the time of booking.
 
 Receipts and invoices are sent via SMS and stored within your Sanocare account.
 
@@ -267,7 +267,7 @@ For any questions about these Terms, write to **contact@sanocare.in** or to our 
 
 const REFUND_BODY = `## 1. Booking confirmation and the booking fee
 
-When you book a Service, ₹249 is charged at the moment of confirmation (or ₹499 if you choose the full upfront option). This is the "booking fee." The booking is confirmed only after the booking fee is successfully captured.
+When you book a Service, a booking fee is charged at the moment of confirmation. The amount varies by service: 50% of the displayed price (rounded up to the nearest rupee) for Home-Visit, Teleconsultation, and Medic at Home; the full grand total for Lab Tests under the full-prepaid mode, or a fixed ₹200 collection fee for Lab Tests under the partial-payment mode. This is the "booking fee." The booking is confirmed only after the booking fee is successfully captured.
 
 ## 2. Cancellation by you, before medic dispatch
 
@@ -278,9 +278,9 @@ You may cancel a booking at any time before our system marks a medic as "Dispatc
 
 ## 3. Cancellation by you, after medic dispatch
 
-Once a medic has been dispatched, the booking fee (₹249) is non-refundable, as we have already committed clinician time and travel to your case.
+Once a medic has been dispatched, the booking fee is non-refundable, as we have already committed clinician time and travel to your case.
 
-- The remaining balance (typically ₹250) is **not** charged if the case is cancelled after dispatch but before the consultation begins.
+- The remaining balance is **not** charged if the case is cancelled after dispatch but before the consultation begins.
 - If the medic has arrived at your address but you decline the visit, only the booking fee is forfeited; the balance is not charged.
 
 ## 4. Cancellation by Sanocare
