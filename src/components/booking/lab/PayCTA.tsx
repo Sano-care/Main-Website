@@ -12,6 +12,13 @@ interface PayCTAProps {
   disabled: boolean;
   submitting: boolean;
   onClick: () => void;
+  /**
+   * T85 PR4b v2 — when > 0, indicates partial-payment mode (Mode B).
+   * The CTA label remains "Proceed to Pay ₹{grandTotalInr}" (which is
+   * the ₹200 collection fee in Mode B), and the reassurance note
+   * below switches to spell out the at-door balance.
+   */
+  balanceAtDoorInr?: number;
 }
 
 export function PayCTA({
@@ -19,7 +26,9 @@ export function PayCTA({
   disabled,
   submitting,
   onClick,
+  balanceAtDoorInr = 0,
 }: PayCTAProps) {
+  const partial = balanceAtDoorInr > 0;
   return (
     <div className="flex-shrink-0 border-t border-slate-100 bg-white px-5 lg:px-6 py-3 space-y-1.5">
       <button
@@ -41,7 +50,11 @@ export function PayCTA({
         )}
       </button>
       <p className="text-center text-[11px] text-text-secondary">
-        Tests process only after payment confirmed
+        {partial
+          ? `Tests process after ₹${balanceAtDoorInr.toLocaleString(
+              "en-IN",
+            )} is collected at the door via UPI`
+          : "Tests process only after payment confirmed"}
       </p>
     </div>
   );

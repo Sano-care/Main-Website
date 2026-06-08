@@ -7,6 +7,7 @@ import {
   verifyToken,
 } from "@/lib/otp/token";
 import { sendAarogyaLeadAlert } from "@/lib/booking/rampwin";
+import { formatLeadAlertContext } from "@/lib/booking/contextFormat";
 import { t85ServiceDisplayName } from "@/lib/booking/serviceMapper";
 import { LAB_COLLECTION_FEE_INR } from "@/lib/services/labCatalog";
 
@@ -169,9 +170,19 @@ export async function POST(req: NextRequest) {
       auth: { persistSession: false },
     });
 
+    // T85 PR4b v2 — payment mode. 'full' = full grand total prepaid;
+    // 'partial' = ₹200 collection fee prepaid + balance at door via
+    // UPI. Defaults to 'full' for back-compat with any caller that
+    // pre-dates the v2 wire shape.
+    const paymentMode =
+      booking.paymentMode === "partial" ? "partial" : "full";
+
     let discountInr = 0;
     let couponDiscountPercent: number | null = null;
-    if (couponCode) {
+    // Coupons apply only in Mode A (full). Mode B's prepaid amount is
+    // a flat ₹200 collection fee with no discount — see /create-order
+    // route for matching server-side logic.
+    if (couponCode && paymentMode === "full") {
       const { data: coupon } = await supabase
         .from("lab_coupons")
         .select(
@@ -209,6 +220,12 @@ export async function POST(req: NextRequest) {
       0,
       Math.ceil(subtotalInr - discountInr + LAB_COLLECTION_FEE_INR),
     );
+    // T85 PR4b v2 — per-mode billed-now amount.
+    //   Mode A: bill the full grand total at Razorpay capture
+    //   Mode B: bill only the ₹200 collection fee; balance owed at door
+    const paidNowInr =
+      paymentMode === "full" ? grandTotalInr : LAB_COLLECTION_FEE_INR;
+    const balanceAtDoorInr = Math.max(0, grandTotalInr - paidNowInr);
 
     // === Build insert payload ===
     const opsNotesParts: string[] = [];
@@ -230,13 +247,12 @@ export async function POST(req: NextRequest) {
       manual_address: address,
       gps_location: booking.gps_location ?? null,
       ops_notes: opsNotesParts.join("\n") || null,
-      // status = PENDING_COLLECTION matches M008's lab lifecycle. Even
-      // though payment is captured at booking, the booking still needs
-      // phlebotomist dispatch + collection before lab processing.
+      // status = PENDING_COLLECTION matches M008's lab lifecycle.
       status: "PENDING_COLLECTION",
       // === Money fields (per M008/M009 columns) ===
-      // `amount` mirrors the existing legacy pattern — total cost the
-      // patient was billed in rupees. For PR4b that's the grand total.
+      // `amount` is the total cost in rupees (grand total — what the
+      // patient ultimately owes for the booking, whether prepaid or
+      // due at door).
       amount: grandTotalInr,
       selected_tests: selectedTests,
       test_total_paise: subtotalInr * 100,
@@ -245,25 +261,31 @@ export async function POST(req: NextRequest) {
       coupon_discount_paise: discountInr * 100,
       final_amount_paise: grandTotalInr * 100,
       lab_partner: "pathcore",
-      // === Payment lifecycle ===
-      // PR4b new model: patient paid the full grand total at booking
-      // via Razorpay, so report_payment_status starts at CAPTURED.
-      // The `/reports/[token]` unlock path checks this and skips the
-      // paywall — token is the auth, payment already verified.
-      report_payment_status: "CAPTURED",
+      // === Payment lifecycle (T85 PR4b v2 — dual mode) ===
+      //   Mode A (full):    report_payment_status = 'CAPTURED'
+      //                     paid_amount_paise     = grandTotalInr * 100
+      //                     balance_due_paise     = 0
+      //   Mode B (partial): report_payment_status = 'PARTIAL_PAID'
+      //                     paid_amount_paise     = 20000 (₹200)
+      //                     balance_due_paise     = (grand - 200) * 100
+      // The `/reports/[token]` unlock path treats both as "no paywall"
+      // — token is the auth, payment is tracked by ops. Mode B
+      // bookings have a doorstep collection event ops needs to fire.
+      report_payment_status: paymentMode === "full" ? "CAPTURED" : "PARTIAL_PAID",
       report_razorpay_order_id: razorpay_order_id,
       report_razorpay_payment_id: razorpay_payment_id,
       report_paid_at: new Date().toISOString(),
       // === Booking-fee fields (mirrors razorpay/verify pattern) ===
-      // The Razorpay payment IS the full payment for PR4b — populate
-      // both the booking-fee fields (M007) and the report-payment
-      // fields (M008) with the same ids so ops queries that union
-      // both flows still find this row.
+      // For Mode A the Razorpay capture IS the full payment; we
+      // populate both the booking-fee (M007) and report-payment (M008)
+      // fields so ops queries that union both flows still find this
+      // row. For Mode B only the ₹200 was captured at Razorpay —
+      // `booking_fee_paid_paise` reflects that.
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
       payment_status: "CAPTURED",
-      booking_fee_paid_paise: grandTotalInr * 100,
+      booking_fee_paid_paise: paidNowInr * 100,
       payment_captured_at: new Date().toISOString(),
       otp_verified_at: new Date(verified.verifiedAt * 1000).toISOString(),
     };
@@ -293,12 +315,24 @@ export async function POST(req: NextRequest) {
       // increment. Either way, don't fail the booking response.
     }
 
-    // T85 PR4b — ops lead alert (best-effort, mirrors PR4a pattern).
+    // T85 PR4b v2 — ops lead alert with standardized {{5}} Context
+    // format (single source of truth in contextFormat.ts). Mode A →
+    // 'lab-full'; Mode B → 'lab-partial' (the formatter computes the
+    // balance string automatically).
+    const contextText = formatLeadAlertContext(undefined, {
+      paidPaise: paidNowInr * 100,
+      totalPaise: grandTotalInr * 100,
+      mode: paymentMode === "full" ? "lab-full" : "lab-partial",
+    });
+    // Suppress unused-var warning for balance — captured for ops_notes
+    // composition in a future iteration that surfaces the at-door
+    // balance to ops dashboards.
+    void balanceAtDoorInr;
     void sendAarogyaLeadAlert({
       patientName,
       serviceDisplayName: t85ServiceDisplayName("lab-tests"),
       location: address,
-      context: undefined,
+      context: contextText,
       patientPhone: submittedPhone,
     });
 

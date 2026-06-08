@@ -55,6 +55,11 @@ export async function POST(req: NextRequest) {
       // PR4b lab-prepaid fields
       subtotalInr?: number;
       couponCode?: string;
+      // T85 PR4b v2 — payment mode. 'full' = full grand total via
+      // Razorpay; 'partial' = ₹200 collection fee via Razorpay (balance
+      // collected at door via UPI). Defaults to 'full' for back-compat
+      // with any client that doesn't yet pass the field.
+      paymentMode?: "full" | "partial";
     };
 
     const VALID_T85_SLUGS: ServiceSlug[] = [
@@ -81,8 +86,8 @@ export async function POST(req: NextRequest) {
       // Server re-validates coupon and computes grand total. Never
       // trust the client's `grandTotalInr` — patient could tamper with
       // form state to under-charge themselves. We accept subtotal +
-      // coupon code, validate both, and emit a server-authoritative
-      // amount.
+      // coupon code + paymentMode, validate everything, and emit a
+      // server-authoritative amount.
       const subtotalInr = Number(body.subtotalInr);
       if (!Number.isFinite(subtotalInr) || subtotalInr <= 0) {
         return NextResponse.json(
@@ -90,13 +95,25 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
+      // T85 PR4b v2 — paymentMode dispatch. 'full' is the default for
+      // back-compat with clients that don't yet pass the field.
+      const paymentMode =
+        body.paymentMode === "partial" ? "partial" : "full";
       const couponCode =
         typeof body.couponCode === "string" && body.couponCode.trim().length > 0
           ? body.couponCode.trim().toUpperCase()
           : null;
 
       let discountInr = 0;
-      if (couponCode) {
+      // Coupons apply to Mode A (full) only. In Mode B the prepaid
+      // amount is a flat ₹200 collection fee; the test-side balance
+      // (which a coupon would discount) is collected at the door so
+      // any coupon discount applies at collection time, not at
+      // booking-side Razorpay capture. For PR4b v2 simplicity we
+      // ignore the coupon in Mode B — patient still sees the
+      // promised discount land in the basket math, but it doesn't
+      // reduce the ₹200 they pay now.
+      if (couponCode && paymentMode === "full") {
         // Inline coupon revalidation — mirrors `/api/lab/validate-coupon`
         // logic but on the server-trusted subtotal we just received.
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -146,17 +163,22 @@ export async function POST(req: NextRequest) {
         // failure.
       }
 
-      const grandTotalInr = Math.max(
+      const fullGrandTotalInr = Math.max(
         0,
         Math.ceil(subtotalInr - discountInr + LAB_COLLECTION_FEE_INR),
       );
-      amount = grandTotalInr * 100;
-      receiptToken = "lab";
+      // Mode A bills the full grand total; Mode B bills the ₹200
+      // collection fee. Balance for Mode B = full grand total − 200,
+      // captured at the door via UPI (no Razorpay event).
+      const billedNowInr =
+        paymentMode === "full" ? fullGrandTotalInr : LAB_COLLECTION_FEE_INR;
+      amount = billedNowInr * 100;
+      receiptToken = paymentMode === "full" ? "lab" : "labp";
       labBreakdown = {
         subtotalInr,
         discountInr,
         collectionFeeInr: LAB_COLLECTION_FEE_INR,
-        grandTotalInr,
+        grandTotalInr: fullGrandTotalInr,
         couponCode,
       };
     } else if (body.t85Slug && VALID_T85_SLUGS.includes(body.t85Slug)) {
@@ -193,6 +215,7 @@ export async function POST(req: NextRequest) {
     const orderNotes: Record<string, string> = labBreakdown
       ? {
           flow: "t85_lab_prepaid",
+          payment_mode: body.paymentMode === "partial" ? "partial" : "full",
           source: "sanocare.in/t85-lab-basket",
           subtotal_inr: String(labBreakdown.subtotalInr),
           discount_inr: String(labBreakdown.discountInr),

@@ -38,6 +38,10 @@ import { BasketSection } from "./lab/BasketSection";
 import { CouponSection } from "./lab/CouponSection";
 import { SubtotalBlock } from "./lab/SubtotalBlock";
 import { PayCTA } from "./lab/PayCTA";
+import {
+  PaymentModeSelector,
+  type LabPaymentMode,
+} from "./lab/PaymentModeSelector";
 import type { BasketLine, AppliedLabCoupon } from "./lab/types";
 import type { SearchResult } from "./lab/SearchBar";
 
@@ -87,6 +91,10 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
   // Local basket state — see types.ts for the BasketLine shape.
   const [basket, setBasket] = useState<BasketLine[]>([]);
   const [applied, setApplied] = useState<AppliedLabCoupon | null>(null);
+  // T85 PR4b v2 — payment mode. Founder decision: 'full' is the
+  // default (full grand total prepaid via Razorpay). 'partial' = ₹200
+  // collection fee prepaid + balance UPI at the door.
+  const [paymentMode, setPaymentMode] = useState<LabPaymentMode>("full");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState<{
@@ -100,6 +108,7 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
     if (!isOpen) return;
     setBasket([]);
     setApplied(null);
+    setPaymentMode("full");
     setSubmitError(null);
     setConfirmed(null);
   }, [isOpen]);
@@ -176,10 +185,20 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
 
   const subtotalInr = basket.reduce((s, l) => s + l.priceInr * l.qty, 0);
   const discountInr = applied?.discountInr ?? 0;
-  const grandTotalInr = Math.max(
+  // Mode A "full" grand total: subtotal − coupon + ₹200 collection fee
+  // (rounded UP). Mode B "partial" charges only ₹200 at booking
+  // regardless of basket / coupon; balance is collected at the door.
+  const fullGrandTotalInr = Math.max(
     0,
     Math.ceil(subtotalInr - discountInr + LAB_COLLECTION_FEE_INR),
   );
+  const grandTotalInr = fullGrandTotalInr;
+  const payNowInr =
+    paymentMode === "full" ? fullGrandTotalInr : LAB_COLLECTION_FEE_INR;
+  const balanceAtDoorInr =
+    paymentMode === "partial"
+      ? Math.max(0, fullGrandTotalInr - LAB_COLLECTION_FEE_INR)
+      : 0;
 
   const trimmedAddr = location.trim();
   const canPay =
@@ -191,12 +210,16 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
     setSubmitting(true);
     try {
       // 1. Create Razorpay order with server-computed amount.
+      //    paymentMode drives the amount: 'full' = full grand total
+      //    (coupon applies), 'partial' = ₹200 fixed (coupon ignored
+      //    server-side).
       const orderRes = await fetch("/api/razorpay/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           kind: "lab-prepaid",
+          paymentMode,
           subtotalInr,
           couponCode: applied?.code,
         }),
@@ -266,6 +289,7 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
             })),
             subtotalInr,
             couponCode: applied?.code ?? null,
+            paymentMode,
             scheduledFor,
           },
         }),
@@ -476,6 +500,13 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
                             slotAnnotations={annotations}
                           />
                         </div>
+
+                        {/* T85 PR4b v2 — payment mode selector */}
+                        <PaymentModeSelector
+                          value={paymentMode}
+                          onChange={setPaymentMode}
+                          fullGrandTotalInr={fullGrandTotalInr}
+                        />
                       </>
                     )}
 
@@ -490,13 +521,18 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
               </div>
 
               {/* Sticky-bottom Pay CTA — only when basket has items
-                  and we're not on the confirmation screen. */}
+                  and we're not on the confirmation screen. CTA amount
+                  reflects payment mode (full vs partial); Mode B
+                  appends a small balance-at-door note via the
+                  selector's own subtitle, and we duplicate the note
+                  below the CTA per founder spec. */}
               {!confirmed && basket.length > 0 && (
                 <PayCTA
-                  grandTotalInr={grandTotalInr}
+                  grandTotalInr={payNowInr}
                   disabled={!canPay}
                   submitting={submitting}
                   onClick={handlePay}
+                  balanceAtDoorInr={balanceAtDoorInr}
                 />
               )}
             </motion.div>
