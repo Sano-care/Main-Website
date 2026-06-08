@@ -24,9 +24,6 @@ export default function robots(): MetadataRoute.Robots {
           "/_next/",
           "/private/",
           "/wa", // paid conversion redirect — noindex, keep out of search
-          "/book-home-visit", // paid alias → /wa (noindex)
-          "/book-teleconsult", // paid alias → /wa (noindex)
-          "/book-lab-test", // paid alias → /wa (noindex)
         ],
       },
       // Slow down the more aggressive crawlers
