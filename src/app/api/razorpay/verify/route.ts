@@ -9,6 +9,10 @@ import {
 import { sendAarogyaLeadAlert } from "@/lib/booking/rampwin";
 import { formatLeadAlertContext } from "@/lib/booking/contextFormat";
 import {
+  validatePatientName,
+  lookupCustomerIdByPhone,
+} from "@/lib/booking/customerLink";
+import {
   dbToT85Slug,
   t85ServiceDisplayName,
   t85ToPricingKey,
@@ -164,9 +168,31 @@ export async function POST(req: NextRequest) {
       .filter(Boolean)
       .join("\n");
 
+    // customer-link-hotpatch: validate patient_name server-side. The
+    // client (LabBasketWindow / IdentifyStep) gates on the same rules,
+    // but server validation is the actual contract — silent corruption
+    // beats a 400, but a 400 beats writing "Patient" into the DB.
+    const nameValidation = validatePatientName(booking.patient_name);
+    if (!nameValidation.ok) {
+      return NextResponse.json(
+        { error: nameValidation.error, razorpay_payment_id },
+        { status: 400 },
+      );
+    }
+
+    // customer-link-hotpatch: look up existing customer by phone and link
+    // it. SAN-B-00058/00059 both had matching customers that this path
+    // was never querying. customer_id stays NULL when no match exists
+    // (T64 PR1 adds the auto-create path).
+    const insertCustomerId = await lookupCustomerIdByPhone(
+      supabase,
+      String(booking.phone || "").trim(),
+    );
+
     const insertPayload = {
-      patient_name: String(booking.patient_name || "").trim(),
+      patient_name: nameValidation.name,
       phone: String(booking.phone || "").trim(),
+      customer_id: insertCustomerId,
       service_category: persistedServiceCategory,
       manual_address: String(booking.manual_address || "").trim(),
       gps_location: booking.gps_location ?? null,
