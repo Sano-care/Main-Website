@@ -1,14 +1,21 @@
 "use client";
 
-// T85 PR4b — coupon section. 3 suggested coupon tiles + manual entry
-// fallback (per founder Q3 = a). The 3 tiles surface the
-// most-applicable active coupons given the current basket subtotal:
-//   - Inapplicable coupons (basket < min) are HIDDEN (founder Q2 rule)
-//   - Capped at 3 tiles, newest first if there are more
-//   - Best/most-relevant tile gets a coral border (highest discount
-//     applied to the current basket post-validation)
+// T85 PR4b — coupon section. Manual entry (top) + 3 suggested coupon
+// tiles (below) per founder direction. The 3 tiles surface ALL active
+// coupons (capped at 3, newest first) regardless of basket subtotal —
+// per founder UAT preview-42 reversal of Q2 (2026-06-08 v3):
+//   - Applicable tiles render with full opacity. Best applied to
+//     current basket gets a coral border.
+//   - Inapplicable tiles (basket < `min_basket_inr`) render greyed out
+//     with a "Spend ₹{remaining_inr} more to unlock" subline. This is
+//     the Zepto/Blinkit AOV-upsell pattern — never hide an existing
+//     offer, surface the gap to the next threshold instead.
 //
-// Apply tap → /api/lab/validate-coupon → on success, the tile
+// `max_uses` exhaustion is still a hard hide — an exhausted coupon
+// literally cannot be applied even if the basket grows. Only the
+// min-basket threshold drives the greyed-state.
+//
+// Apply tap → /api/lab/validate-coupon → on success, the section
 // collapses to an "Applied ✓" pill with a Remove link.
 
 import { useEffect, useState } from "react";
@@ -21,8 +28,13 @@ interface SuggestedCoupon {
   description: string | null;
   minBasketInr: number;
   // Pre-computed potential discount for the current subtotal, used
-  // for the "best" highlighting.
+  // for the "best" highlighting among applicable tiles.
   potentialDiscountInr: number;
+  // T85 PR4b v3 — basket < min_basket_inr triggers the greyed state
+  // with the unlock-threshold subline. Computed at fetch time so the
+  // render path stays simple.
+  isApplicable: boolean;
+  unlockDiffInr: number;
 }
 
 interface CouponSectionProps {
@@ -78,13 +90,22 @@ export function CouponSection({
         .limit(10);
 
       if (cancelled) return;
+      // T85 PR4b v3 — drop only max_uses-exhausted coupons; keep
+      // min_basket-inapplicable ones so they render greyed-out with
+      // the "Spend ₹X more to unlock" subline (AOV upsell pattern).
       const usable = (data ?? [])
         .filter((c) => {
-          if (subtotalInr < (c.min_basket_inr ?? 0)) return false;
           if (c.max_uses != null && c.used_count >= c.max_uses) return false;
           return true;
         })
         .map((c) => {
+          const minBasket = (c.min_basket_inr as number) ?? 0;
+          const isApplicable = subtotalInr >= minBasket;
+          // Compute potential discount AGAINST THE CURRENT SUBTOTAL
+          // even for inapplicable coupons — gives a stable basis for
+          // the "best" highlight ordering once the patient unlocks.
+          // (Discount is capped at subtotal anyway; for inapplicable
+          // tiles the value is informational only — Apply is disabled.)
           let discount = 0;
           if (c.discount_type === "percent") {
             discount = Math.floor(
@@ -99,8 +120,10 @@ export function CouponSection({
           return {
             code: c.code as string,
             description: (c.description as string | null) ?? null,
-            minBasketInr: (c.min_basket_inr as number) ?? 0,
+            minBasketInr: minBasket,
             potentialDiscountInr: Math.max(0, Math.min(discount, subtotalInr)),
+            isApplicable,
+            unlockDiffInr: isApplicable ? 0 : Math.max(0, minBasket - subtotalInr),
           };
         })
         .slice(0, 3);
@@ -144,8 +167,12 @@ export function CouponSection({
     }
   }
 
-  // Highlight the highest-discount tile.
+  // Highlight the highest-discount APPLICABLE tile. Inapplicable
+  // tiles don't compete for the "best" coral border — they're
+  // greyed out anyway, so giving them a highlight would conflict
+  // with the muted-state styling.
   const bestCode = suggested.reduce<string | null>((acc, c) => {
+    if (!c.isApplicable) return acc;
     if (acc === null) return c.code;
     const prev = suggested.find((s) => s.code === acc);
     return prev && c.potentialDiscountInr > prev.potentialDiscountInr
@@ -223,7 +250,10 @@ export function CouponSection({
         </p>
       )}
 
-      {/* Suggested coupons — quick-tap fills below the manual input */}
+      {/* Suggested coupons — all 3 always rendered. Applicable tiles
+          are full-opacity with active Apply button; inapplicable tiles
+          render greyed-out with a "Spend ₹X more to unlock" subline
+          (AOV upsell pattern). */}
       {suggested.length > 0 && (
         <div className="space-y-2 pt-1">
           <h4 className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">
@@ -232,13 +262,16 @@ export function CouponSection({
           <ul className="space-y-2">
             {suggested.map((c) => {
               const isBest = c.code === bestCode;
+              const isApplicable = c.isApplicable;
               return (
                 <li
                   key={c.code}
-                  className={`flex items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2.5 ${
-                    isBest
-                      ? "border-[color:var(--color-accent-coral)]"
-                      : "border-slate-200"
+                  className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 transition-opacity ${
+                    isApplicable
+                      ? isBest
+                        ? "border-[color:var(--color-accent-coral)] bg-white"
+                        : "border-slate-200 bg-white"
+                      : "border-slate-200 bg-slate-100 opacity-60"
                   }`}
                 >
                   <div className="flex-1 min-w-0">
@@ -250,12 +283,18 @@ export function CouponSection({
                         {c.description}
                       </div>
                     )}
+                    {!isApplicable && (
+                      <div className="text-[11px] text-text-secondary mt-0.5">
+                        Spend ₹{c.unlockDiffInr.toLocaleString("en-IN")} more
+                        to unlock
+                      </div>
+                    )}
                   </div>
                   <button
                     type="button"
                     onClick={() => quickFill(c.code)}
-                    disabled={busy === c.code}
-                    className="inline-flex items-center justify-center rounded-lg bg-[color:var(--color-accent-coral)] hover:bg-[color:var(--color-accent-coral-dark)] text-white text-[12px] font-semibold px-3 py-1.5 disabled:opacity-60"
+                    disabled={!isApplicable || busy === c.code}
+                    className="inline-flex items-center justify-center rounded-lg bg-[color:var(--color-accent-coral)] hover:bg-[color:var(--color-accent-coral-dark)] text-white text-[12px] font-semibold px-3 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[color:var(--color-accent-coral)]"
                   >
                     {busy === c.code ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
