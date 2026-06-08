@@ -24,8 +24,9 @@ export const ESCALATE_TO_OPS: ToolSchema = {
     "Hand this conversation to the Sanocare ops team. Call when a lead is fully " +
     "qualified (name + location + service + context captured), when the user asks " +
     "for a human, when an emergency is detected, on a complaint, or when the " +
-    "conversation has run 10+ turns without progress. Emit a clear summary so the " +
-    "coordinator can pick up without re-asking.",
+    "conversation has run 10+ turns without progress. Emit a clear summary so ops " +
+    "can pick up without re-asking. This alerts ops via the live dashboard — it is " +
+    "NOT a human-coordinator call-back; you remain the patient's point of contact.",
   input_schema: {
     type: "object",
     additionalProperties: false,
@@ -60,11 +61,11 @@ export const ESCALATE_TO_OPS: ToolSchema = {
       },
       context: {
         type: "string",
-        description: "Brief symptom/need summary (~30-60 chars) for the coordinator.",
+        description: "Brief symptom/need summary (~30-60 chars) for ops.",
       },
       summary_for_ops: {
         type: "string",
-        description: "One or two line summary for the coordinator picking up the lead.",
+        description: "One or two line summary for ops picking up the lead.",
       },
     },
     required: [

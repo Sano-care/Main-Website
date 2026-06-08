@@ -49,8 +49,8 @@ import {
 
 const LEAD_ALERT_TEMPLATE = "aarogya_lead_alert";
 const AGENT_FALLBACK =
-  "Sorry, I'm having a brief issue on my end. A Sanocare coordinator will " +
-  "reach out shortly. — Aarogya";
+  "Sorry, I'm having a brief issue on my end. Our team will reach out " +
+  "shortly, or you can call +91 97119 77782 anytime. — Aarogya";
 
 // ---------------------------------------------------------------------------
 // Ops handoff (WhatsApp template to the founder's number). NOT gated by the
@@ -309,7 +309,7 @@ export async function handleInboundMessage(
   // Pick the user-facing reply. It MUST be sent before set_opt_out flips the gate.
   if (!reply) {
     if (willOptOut) reply = OPT_OUT_CONFIRMATION;
-    else if (willEscalate) reply = "Got it — a Sanocare coordinator will call you shortly. 🙏";
+    else if (willEscalate) reply = "Got it — I've got everything I need. Our team will reach you shortly.";
   }
   if (reply) {
     await dispatchTextMessage({

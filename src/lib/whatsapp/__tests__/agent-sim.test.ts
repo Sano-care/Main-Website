@@ -179,7 +179,7 @@ describe("Aarogya inbound chain — simulated end-to-end", () => {
 
   it("S2 qualified lead — Claude emits escalate_to_ops → template would send", async () => {
     rec.scripted.push({
-      text: "Thank you 🙏 — a Sanocare coordinator will call you within 30 minutes to confirm the Medic, exact time, and pricing.",
+      text: "Thank you. A Medic will reach you within 30 minutes; the exact amount is settled at the door.",
       toolUses: [
         {
           id: "tu_1",
@@ -209,7 +209,7 @@ describe("Aarogya inbound chain — simulated end-to-end", () => {
     console.log("\n--- S2 qualified lead ---\n" + rec.log.join("\n"));
 
     // reply queued to the patient
-    expect(rec.replies[0]).toContain("coordinator will call");
+    expect(rec.replies[0]).toContain("Medic will reach you");
     // escalation row created
     expect(rec.escalations).toEqual([{ type: "qualified_lead", priority: "p2" }]);
     // lead profile updated with captured fields
