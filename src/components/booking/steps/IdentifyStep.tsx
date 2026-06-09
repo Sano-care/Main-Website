@@ -37,14 +37,31 @@ interface IdentifyStepProps {
 export function IdentifyStep({ onComplete }: IdentifyStepProps) {
   const storeName = useBookingStore((s) => s.name);
   const phone = useBookingStore((s) => s.phone);
+  const verifiedFullName = useBookingStore((s) => s.verifiedFullName);
   const setDetails = useBookingStore((s) => s.setDetails);
 
-  const [name, setName] = useState(storeName);
+  // T64: pre-fill from customers.full_name (returned by /api/auth/verify-otp
+  // when the phone is a known customer). storeName wins when present — a
+  // returning patient who back-out + re-enters keeps their last typed value.
+  const initialName = storeName || verifiedFullName || "";
+  const wasPrefilledFromCustomer = !storeName && Boolean(verifiedFullName);
+
+  const [name, setName] = useState(initialName);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const trimmed = name.trim();
-  const canSubmit = trimmed.length >= 2 && !submitting;
+  const trimmedLower = trimmed.toLowerCase();
+  // T64 + customer-link-hotpatch: server-side validatePatientName mirrors
+  // these rules. Keep them in sync — if you add a placeholder here, add
+  // it to src/lib/booking/customerLink.ts too.
+  const canSubmit =
+    trimmed.length >= 2 &&
+    !submitting &&
+    trimmedLower !== "patient" &&
+    trimmedLower !== "user" &&
+    trimmedLower !== "test" &&
+    trimmedLower !== "name";
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -87,15 +104,20 @@ export function IdentifyStep({ onComplete }: IdentifyStepProps) {
           <input
             type="text"
             autoComplete="name"
-            autoFocus
+            autoFocus={!wasPrefilledFromCustomer}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Rajesh Kumar"
+            placeholder={
+              wasPrefilledFromCustomer
+                ? `Booking for ${verifiedFullName}? Edit if different.`
+                : "e.g. Rajesh Kumar"
+            }
             className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-slate-400"
           />
           <p className="mt-1.5 text-[11px] text-text-secondary">
-            Minimum 2 characters. We&apos;ll confirm with this name on
-            arrival.
+            {wasPrefilledFromCustomer
+              ? "Pre-filled from your last booking. Change if booking for someone else."
+              : "Minimum 2 characters. We'll confirm with this name on arrival."}
           </p>
         </div>
 
