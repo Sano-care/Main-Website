@@ -229,6 +229,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // T64: customer first-write-wins. Sets the customer's display name
+    // on their FIRST booking only. Subsequent bookings for family
+    // members or under different names don't overwrite (the
+    // `is('full_name', null)` filter is the gate). Patient can later
+    // update via Pulse profile editing (T70/T71). Soft-fail discipline
+    // matches the lead-alert pattern — logged + swallowed.
+    if (insertCustomerId) {
+      try {
+        const { error: nameWriteErr } = await supabase
+          .from("customers")
+          .update({ full_name: nameValidation.name })
+          .eq("id", insertCustomerId)
+          .is("full_name", null);
+        if (nameWriteErr) {
+          console.error(
+            "[razorpay/verify] customer first-write full_name failed:",
+            nameWriteErr,
+          );
+        }
+      } catch (cause) {
+        console.error(
+          "[razorpay/verify] customer first-write threw unexpectedly",
+          cause,
+        );
+      }
+    }
+
     // T85 PR4a + leadalert-hotfix — best-effort ops alert.
     // `sendAarogyaLeadAlert` swallows its own errors (logged via
     // console.error) and never throws here, so the booking response

@@ -71,3 +71,19 @@ repo. Lives in-repo so every session sees the same source-of-truth.
   `customer_id = NULL` until the auto-upsert on
   `/api/auth/verify-otp` runs (which happens the first time the
   patient OTPs through the booking gate).
+
+- **Entity:** SANOCARE TECH INNOVATIONS PRIVATE LIMITED. Registered
+  office: Basement, 1899/18, Gali No. 18, Govindpuri, Kalkaji, New
+  Delhi 110019. Constitution: Private Limited Company.
+
+- **GST registration:** GSTIN `07ABPCS9713B1Z5`. Regular registration
+  (not Composition). Effective 07/06/2026. The ENTITY is GST-registered
+  (compliance-required for a Pvt Ltd); the SERVICES (clinical healthcare)
+  are GST-exempt under the relevant notification, so customer invoices
+  carry no tax line. Both facts are true simultaneously.
+
+- **Directors:** Shashwat Arora + Aayushi Shishodia (founder + co-founder).
+  Aayushi is NOT an external patient even if her phone +918210508846
+  (customer record SAN-C-00006) shows up as a booking — that's her
+  co-founder personal/test usage, not a customer outreach situation.
+  Same for Shashwat (+919711977782, +919760059900).
