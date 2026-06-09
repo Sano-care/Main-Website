@@ -200,9 +200,20 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
       ? Math.max(0, fullGrandTotalInr - LAB_COLLECTION_FEE_INR)
       : 0;
 
+  // customer-link-hotpatch: name is required at booking time. Previously
+  // an empty store.name passed `|| "Patient"` straight into the booking
+  // row (root cause of SAN-B-00059 patient_name="Patient"). Now we gate
+  // the Pay CTA on a >=2-char trimmed name and capture it inline in this
+  // window (the lab flow never went through IdentifyStep, so the store
+  // value started empty for new patients).
+  const trimmedName = name.trim();
   const trimmedAddr = location.trim();
   const canPay =
-    !submitting && basket.length > 0 && trimmedAddr.length >= 10;
+    !submitting &&
+    basket.length > 0 &&
+    trimmedAddr.length >= 10 &&
+    trimmedName.length >= 2 &&
+    trimmedName.toLowerCase() !== "patient";
 
   async function handlePay() {
     if (!canPay) return;
@@ -244,12 +255,12 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
           amount,
           keyId,
           prefill: {
-            name: name.trim() || "Patient",
+            name: trimmedName,
             contact: phoneDigits.slice(-10),
           },
           notes: {
             t85_slug: "lab-tests",
-            patient_name: name.trim() || "Patient",
+            patient_name: trimmedName,
           },
         });
       } catch (err) {
@@ -270,7 +281,7 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
         body: JSON.stringify({
           ...payment,
           booking: {
-            patient_name: name.trim() || "Patient",
+            patient_name: trimmedName,
             phone: phone.trim(),
             manual_address: location.trim(),
             gps_location: gpsLocation
@@ -402,6 +413,35 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
                   />
                 ) : (
                   <>
+                    {/* customer-link-hotpatch: Name capture for the lab
+                        flow. Previously the lab flow had no name input
+                        and the code defaulted to literal "Patient" on
+                        empty store.name — root cause of SAN-B-00059's
+                        patient_name="Patient". Now required, gates Pay. */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary">
+                        Patient name
+                      </label>
+                      <input
+                        type="text"
+                        autoComplete="name"
+                        placeholder="Who is the test for?"
+                        value={name}
+                        maxLength={80}
+                        onChange={(e) =>
+                          setDetails({ name: e.target.value })
+                        }
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-slate-400"
+                      />
+                      {trimmedName.length > 0 &&
+                        (trimmedName.length < 2 ||
+                          trimmedName.toLowerCase() === "patient") && (
+                          <p className="text-[11.5px] text-amber-800">
+                            Please enter the patient&apos;s actual name.
+                          </p>
+                        )}
+                    </div>
+
                     {/* Address — required for the phlebotomist; uses
                         the same useGeolocation-backed bookingStore
                         fields as the non-lab WhereWhenStep. */}

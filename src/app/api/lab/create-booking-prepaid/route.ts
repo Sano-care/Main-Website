@@ -9,6 +9,10 @@ import {
 import { sendAarogyaLeadAlert } from "@/lib/booking/rampwin";
 import { formatLeadAlertContext } from "@/lib/booking/contextFormat";
 import { t85ServiceDisplayName } from "@/lib/booking/serviceMapper";
+import {
+  validatePatientName,
+  lookupCustomerIdByPhone,
+} from "@/lib/booking/customerLink";
 import { LAB_COLLECTION_FEE_INR } from "@/lib/services/labCatalog";
 
 export const runtime = "nodejs";
@@ -108,14 +112,18 @@ export async function POST(req: NextRequest) {
     }
 
     // === Field validation ===
-    const patientName = String(booking.patient_name ?? "").trim();
-    const address = String(booking.manual_address ?? "").trim();
-    if (!patientName) {
+    // customer-link-hotpatch: full name validation (rejects empty / <2
+    // chars / placeholder strings like "Patient"). LabBasketWindow gates
+    // on the same rules client-side; this is the actual contract.
+    const nameValidation = validatePatientName(booking.patient_name);
+    if (!nameValidation.ok) {
       return NextResponse.json(
-        { error: "Patient name is required." },
+        { error: nameValidation.error },
         { status: 400 },
       );
     }
+    const patientName = nameValidation.name;
+    const address = String(booking.manual_address ?? "").trim();
     if (address.length < 10) {
       return NextResponse.json(
         { error: "Address is too short." },
@@ -240,9 +248,21 @@ export async function POST(req: NextRequest) {
       opsNotesParts.push("🗓 ASAP");
     }
 
+    // customer-link-hotpatch: look up existing customer by phone so the
+    // booking row gets its customer_id assigned. SAN-B-00058/00059 had
+    // matching customers but this path was never querying. Auto-create
+    // for unmatched phones lands in T64 PR1's M043 (requires NOT-NULL
+    // drop on customers.full_name + customer_code); until then NULL is
+    // the existing-behavior fallback.
+    const linkedCustomerId = await lookupCustomerIdByPhone(
+      supabase,
+      submittedPhone,
+    );
+
     const insertPayload = {
       patient_name: patientName,
       phone: submittedPhone,
+      customer_id: linkedCustomerId,
       service_category: "lab-tests",
       manual_address: address,
       gps_location: booking.gps_location ?? null,
