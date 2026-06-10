@@ -7,6 +7,7 @@ import {
   verifyToken,
 } from "@/lib/otp/token";
 import { sendAarogyaLeadAlert } from "@/lib/booking/rampwin";
+import { sendBookingConfirmed } from "@/lib/aarogya/rampwin";
 import { formatLeadAlertContext } from "@/lib/booking/contextFormat";
 import { t85ServiceDisplayName } from "@/lib/booking/serviceMapper";
 import {
@@ -352,20 +353,38 @@ export async function POST(req: NextRequest) {
     // composition in a future iteration that surfaces the at-door
     // balance to ops dashboards.
     void balanceAtDoorInr;
+    // Slice 2a — ops lead alert + patient booking confirmation fired
+    // concurrently (both best-effort, never throw). allSettled keeps one
+    // failure from blocking the other. {{4}} next-step for lab resolves
+    // to the phlebotomist-slot line via getBookingNextStep('lab-tests').
+    const bookingRef = data?.booking_code ?? data?.id ?? "?";
     try {
-      const { delivered } = await sendAarogyaLeadAlert({
-        patientName,
-        serviceDisplayName: t85ServiceDisplayName("lab-tests"),
-        location: address,
-        context: contextText,
-        patientPhone: submittedPhone,
-      });
-      console.log(
-        `[lab/create-booking-prepaid] aarogya_lead_alert dispatch: delivered=${delivered} booking=${data?.booking_code ?? data?.id ?? "?"}`,
-      );
+      await Promise.allSettled([
+        sendAarogyaLeadAlert({
+          patientName,
+          serviceDisplayName: t85ServiceDisplayName("lab-tests"),
+          location: address,
+          context: contextText,
+          patientPhone: submittedPhone,
+        }).then(({ delivered }) =>
+          console.log(
+            `[lab/create-booking-prepaid] aarogya_lead_alert dispatch: delivered=${delivered} booking=${bookingRef}`,
+          ),
+        ),
+        sendBookingConfirmed({
+          patientName,
+          serviceSlug: "lab-tests",
+          bookingCode: data?.booking_code ?? "",
+          patientPhone: submittedPhone,
+        }).then(({ delivered }) =>
+          console.log(
+            `[lab/create-booking-prepaid] sanocare_booking_confirmed dispatch: delivered=${delivered} booking=${bookingRef}`,
+          ),
+        ),
+      ]);
     } catch (alertErr) {
       console.error(
-        "[lab/create-booking-prepaid] aarogya_lead_alert threw unexpectedly",
+        "[lab/create-booking-prepaid] template dispatch threw unexpectedly",
         alertErr,
       );
     }
