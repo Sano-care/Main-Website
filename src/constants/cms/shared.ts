@@ -75,10 +75,10 @@ export const SHARED_CONTENT = {
     ],
     links: {
       services: [
-        { label: "Home visit (from ₹499)", href: "/services#homecare" },
-        { label: "Nursing-only (from ₹199)", href: "/services#nursing" },
-        { label: "Teleconsultation (from ₹399)", href: "/services#teleconsult" },
-        { label: "Lab sample at home (1,900+ tests)", href: "/lab-tests" },
+        { label: "Doctor home visit in Delhi (from ₹499)", href: "/services/doctor-home-visit-delhi" },
+        { label: "Home nurse in Delhi NCR (from ₹199)", href: "/services/home-nurse-delhi-ncr" },
+        { label: "Online doctor consultation (from ₹399)", href: "/services/online-doctor-consultation-india" },
+        { label: "Lab tests at home in Delhi", href: "/services/lab-tests-at-home-delhi" },
         { label: "CareHub for Societies", href: "/carehub" },
       ],
       resources: [
