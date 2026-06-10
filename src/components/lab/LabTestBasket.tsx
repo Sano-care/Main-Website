@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { useBookingStore } from "@/store/bookingStore";
 import type { AppliedCoupon } from "@/types/lab-coupon";
-import { PathcoreCoBrandStrip } from "@/components/PathcoreCoBrandStrip";
+import { PathcoreCoBrandStrip } from "@/components/lab-tests/PathcoreCoBrandStrip";
 
 interface Props {
   /** When true, basket renders as a sticky right-rail panel (desktop).
