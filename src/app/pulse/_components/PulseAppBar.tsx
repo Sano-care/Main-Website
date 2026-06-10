@@ -4,6 +4,10 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { useCurrentCustomer } from "../_lib/PulseCustomerContext";
+import {
+  useViewingFirstName,
+  useViewingMember,
+} from "../_lib/MemberViewingContext";
 
 /**
  * T90 Pulse v1 Phase 1 — Top app bar (Surface 2).
@@ -15,30 +19,43 @@ import { useCurrentCustomer } from "../_lib/PulseCustomerContext";
  * Visual:
  *   - White background, 1px bottom border `#E5E7EB`
  *   - Lockup is the canonical `/sanocare-lockup.svg`; tap routes to /pulse
- *   - Member chip: button-shaped, displays the current viewing member's
- *     first name (Phase 1 = always self). Tap is a structural placeholder
- *     until Step 07 wires <MemberSwitcherSheet />.
- *   - Avatar: 36px circle with first/last-initial. Tap is a structural
- *     placeholder until Step 07 wires <PulseAvatarMenu />.
+ *   - Member chip: button-shaped, displays the active viewing member's
+ *     first name (Step 06: now wired via useViewingFirstName). Chevron
+ *     dims when the family-members list is empty AND we know it (i.e.,
+ *     fetch settled) — visual cue that the switcher is sparse.
+ *   - Avatar: 36px circle with first/last-initial of the ACCOUNT HOLDER
+ *     (not the viewing target — the avatar is the account, not the view).
+ *     Tap is still a structural placeholder until Step 07 wires
+ *     <PulseAvatarMenu />.
  *
  * Hamburger is `lg:hidden` because on desktop ≥1024px the drawer becomes
  * an inline left rail (always visible) — no toggle needed. PulseChrome
  * passes onMenuClick which only fires on the mobile/tablet variant.
  *
  * Auth context: this is a client component nested under
- * <PulseCustomerProvider /> (from PulseChrome). useCurrentCustomer() is
- * safe here — PulseChrome only mounts the AppBar when a customer exists,
- * so the throw-on-null path never triggers on the login surface.
+ * <PulseCustomerProvider /> + <MemberViewingProvider /> (both from
+ * PulseChrome). PulseChrome only mounts the AppBar when a customer
+ * exists, so the throw-on-null paths never trigger on the login surface.
  */
 
 interface PulseAppBarProps {
   onMenuClick: () => void;
+  onMemberChipClick: () => void;
 }
 
-export default function PulseAppBar({ onMenuClick }: PulseAppBarProps) {
+export default function PulseAppBar({
+  onMenuClick,
+  onMemberChipClick,
+}: PulseAppBarProps) {
   const customer = useCurrentCustomer();
-  const firstName = deriveFirstName(customer.full_name);
+  const viewingFirstName = useViewingFirstName();
+  const { members, membersLoading } = useViewingMember();
   const initials = deriveInitials(customer.full_name);
+
+  // Dim the chevron when the user has no family members AND we've
+  // confirmed it (post-fetch). Pre-fetch, keep the chevron at full
+  // contrast so it doesn't flicker dim → bright on hydration.
+  const chevronDimmed = !membersLoading && members.length === 0;
 
   return (
     <header
@@ -94,11 +111,11 @@ export default function PulseAppBar({ onMenuClick }: PulseAppBarProps) {
       <div className="flex items-center gap-2 lg:gap-3">
         <button
           type="button"
-          onClick={handleMemberChipClick}
-          aria-label={`Viewing care for ${firstName}. Member switcher coming next.`}
+          onClick={onMemberChipClick}
+          aria-label={`Viewing care for ${viewingFirstName}. Tap to switch.`}
           className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
-          <span className="max-w-[8rem] truncate">{firstName}</span>
+          <span className="max-w-[8rem] truncate">{viewingFirstName}</span>
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
@@ -107,7 +124,7 @@ export default function PulseAppBar({ onMenuClick }: PulseAppBarProps) {
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="h-4 w-4 text-gray-500"
+            className={`h-4 w-4 ${chevronDimmed ? "text-gray-300" : "text-gray-500"}`}
             aria-hidden="true"
           >
             <polyline points="6 9 12 15 18 9" />
@@ -127,36 +144,13 @@ export default function PulseAppBar({ onMenuClick }: PulseAppBarProps) {
   );
 }
 
-// Step-07 placeholders. Console-warn so a tap during dev is visible without
-// throwing. The handlers are non-throwing no-ops in prod (console.warn is
-// harmless). Step 07 replaces these with sheet/menu open calls.
-function handleMemberChipClick() {
-  if (process.env.NODE_ENV !== "production") {
-    console.warn(
-      "[PulseAppBar] member chip — MemberSwitcherSheet wires in Step 07",
-    );
-  }
-}
-
+// Avatar handler is still a placeholder in Step 06 — the chip is now
+// wired (via onMemberChipClick), but the avatar menu lands in Step 07
+// (Step 7 of my sequence = brief's Step 8). Console-warn in dev only.
 function handleAvatarClick() {
   if (process.env.NODE_ENV !== "production") {
     console.warn("[PulseAppBar] avatar — PulseAvatarMenu wires in Step 07");
   }
-}
-
-/**
- * First word of full_name (e.g., "Shashwat Arora" → "Shashwat").
- * Falls back to "You" when full_name is null — the onboarding flow
- * (Step 09) captures the name on welcome, so this fallback only
- * surfaces for the edge case of a pre-name-capture session reaching
- * an authenticated page.
- */
-function deriveFirstName(fullName: string | null): string {
-  if (!fullName) return "You";
-  const trimmed = fullName.trim();
-  if (!trimmed) return "You";
-  const first = trimmed.split(/\s+/)[0];
-  return first.length > 0 ? first : "You";
 }
 
 /**

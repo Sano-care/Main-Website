@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { useCurrentCustomer } from "../_lib/PulseCustomerContext";
+import { useViewingFirstName } from "../_lib/MemberViewingContext";
 
 /**
  * T90 Pulse v1 Phase 1 — Hamburger drawer (Surface 4).
@@ -39,12 +39,14 @@ interface PulseDrawerProps {
 }
 
 export default function PulseDrawer({ isOpen, onClose }: PulseDrawerProps) {
-  const customer = useCurrentCustomer();
   const pathname = usePathname();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
 
-  const profileSubtitle = deriveFirstName(customer.full_name);
+  // T90 Step 06: subtitle tracks the active viewing target — the entire
+  // profile tab is scoped to whoever the user is currently viewing, so
+  // the subtitle reflects that (was: account-holder first name in Step 05).
+  const profileSubtitle = useViewingFirstName();
 
   // Close on Escape (mobile drawer only — the lg-rail is always open).
   useEffect(() => {
@@ -240,7 +242,7 @@ export default function PulseDrawer({ isOpen, onClose }: PulseDrawerProps) {
         {/* ships as v1, but the footer marker says v0.1 per the spec). */}
         <div className="border-t border-gray-200 px-4 py-3">
           <p className="text-[11px] leading-none text-gray-400">
-            Pulse v0.1 · sanocare.in
+            Pulse v1 · sanocare.in
           </p>
         </div>
       </aside>
@@ -322,10 +324,3 @@ function DimmedSubItem({
   );
 }
 
-function deriveFirstName(fullName: string | null): string {
-  if (!fullName) return "You";
-  const trimmed = fullName.trim();
-  if (!trimmed) return "You";
-  const first = trimmed.split(/\s+/)[0];
-  return first.length > 0 ? first : "You";
-}
