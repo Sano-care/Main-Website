@@ -7,6 +7,7 @@ import {
   verifyToken,
 } from "@/lib/otp/token";
 import { sendAarogyaLeadAlert } from "@/lib/booking/rampwin";
+import { sendBookingConfirmed } from "@/lib/aarogya/rampwin";
 import { formatLeadAlertContext } from "@/lib/booking/contextFormat";
 import { t85ServiceDisplayName } from "@/lib/booking/serviceMapper";
 import {

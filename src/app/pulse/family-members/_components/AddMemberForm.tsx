@@ -279,7 +279,7 @@ export function AddMemberForm({ open, editing, onClose, onSaved }: Props) {
                 type="button"
                 disabled={!canSave}
                 onClick={handleSave}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-coral px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-coral/30 disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-accent-coral px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-accent-coral/30 hover:bg-accent-coral-dark disabled:opacity-50"
               >
                 {saving ? (
                   <>

@@ -129,7 +129,7 @@ export function FamilyMembersSurface({ initial }: Props) {
         <button
           type="button"
           onClick={openAdd}
-          className="fixed bottom-6 right-6 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-coral text-white shadow-lg shadow-coral/40 transition-transform active:scale-95"
+          className="fixed bottom-6 right-6 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-accent-coral text-white shadow-lg shadow-accent-coral/40 transition-transform active:scale-95 hover:bg-accent-coral-dark"
           aria-label="Add a family member"
         >
           <Plus className="h-6 w-6" />
@@ -175,7 +175,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
       <button
         type="button"
         onClick={onAdd}
-        className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-coral px-5 py-3 text-sm font-bold text-white shadow-lg shadow-coral/30 active:scale-95"
+        className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-accent-coral px-5 py-3 text-sm font-bold text-white shadow-lg shadow-accent-coral/30 active:scale-95 hover:bg-accent-coral-dark"
       >
         <Plus className="h-4 w-4" />
         Add first member
