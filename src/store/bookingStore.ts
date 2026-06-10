@@ -90,6 +90,16 @@ export type BookingState = {
   phoneVerifiedUntil: number | null;
   /** The E.164 phone the cookie was issued for, for prefilling forms. */
   verifiedPhone: string | null;
+  /**
+   * T64: full_name read from `customers` for the verified phone, returned
+   * by /api/auth/verify-otp on success. Used to pre-fill the name input
+   * in IdentifyStep + LabBasketWindow so returning patients don't re-type
+   * their name on every booking. Null when the phone is new (no customers
+   * row yet) — the auto-upsert path leaves full_name NULL until the
+   * patient types it. Cleared on clearPhoneVerified (same lifecycle as
+   * verifiedPhone).
+   */
+  verifiedFullName: string | null;
 
   setDetails: (details: Partial<BookingState>) => void;
   setGPSLocation: (gps: GPSLocation | null) => void;
@@ -115,7 +125,11 @@ export type BookingState = {
   setLocationError: (error: string | null) => void;
   setConfirmedBooking: (booking: ConfirmedBooking | null) => void;
   clearConfirmedBooking: () => void;
-  setPhoneVerified: (phone: string, untilMs: number) => void;
+  setPhoneVerified: (
+    phone: string,
+    untilMs: number,
+    fullName?: string | null,
+  ) => void;
   clearPhoneVerified: () => void;
   reset: () => void;
   resetForNewBooking: () => void;
@@ -141,6 +155,7 @@ const initialState = {
   locationError: null as string | null,
   phoneVerifiedUntil: null as number | null,
   verifiedPhone: null as string | null,
+  verifiedFullName: null as string | null,
 };
 
 const BOOKING_EXPIRY_TIME = 30 * 60 * 1000;
@@ -186,10 +201,22 @@ export const useBookingStore = create<BookingState>()(
       setLocationError: (locationError) => set({ locationError }),
       setConfirmedBooking: (confirmedBooking) => set({ confirmedBooking }),
       clearConfirmedBooking: () => set({ confirmedBooking: null }),
-      setPhoneVerified: (phone, untilMs) =>
-        set({ verifiedPhone: phone, phoneVerifiedUntil: untilMs }),
+      setPhoneVerified: (phone, untilMs, fullName) =>
+        set({
+          verifiedPhone: phone,
+          phoneVerifiedUntil: untilMs,
+          // Only overwrite verifiedFullName when an explicit value is
+          // passed. `undefined` (the old 2-arg call shape) preserves
+          // whatever was there — callers that don't know about T64 stay
+          // back-compatible.
+          ...(fullName !== undefined ? { verifiedFullName: fullName } : {}),
+        }),
       clearPhoneVerified: () =>
-        set({ verifiedPhone: null, phoneVerifiedUntil: null }),
+        set({
+          verifiedPhone: null,
+          phoneVerifiedUntil: null,
+          verifiedFullName: null,
+        }),
       reset: () => set(initialState),
       resetForNewBooking: () =>
         set({
@@ -223,6 +250,7 @@ export const useBookingStore = create<BookingState>()(
         confirmedBooking: state.confirmedBooking,
         phoneVerifiedUntil: state.phoneVerifiedUntil,
         verifiedPhone: state.verifiedPhone,
+        verifiedFullName: state.verifiedFullName,
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.confirmedBooking) {

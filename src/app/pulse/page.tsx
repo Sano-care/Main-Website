@@ -10,6 +10,7 @@ import {
   ChevronRight,
   FileText,
   Check,
+  Users,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -25,6 +26,7 @@ import {
   getRecentActivity,
   getTodaySchedule,
 } from "./_lib/pulseData";
+import { supabaseAdmin } from "@/lib/supabase-server";
 import type { VitalReading } from "./_lib/pulseTypes";
 import {
   VITAL_META,
@@ -73,10 +75,17 @@ async function PulseHomeBody() {
   if (!customer) return null; // guaranteed inside PulseShell; type guard
   const firstName = customer.full_name?.trim().split(/\s+/)[0] ?? "there";
 
-  const [latestVitals, todaySchedule, recent] = await Promise.all([
+  const [latestVitals, todaySchedule, recent, familyCount] = await Promise.all([
     getLatestVitalsByKind(customer.id),
     getTodaySchedule(customer.id),
     getRecentActivity(customer.id),
+    // T64: count of family members for the home tile. count='exact' +
+    // head=true means we get the count without payload.
+    supabaseAdmin
+      .from("family_members")
+      .select("id", { count: "exact", head: true })
+      .eq("customer_id", customer.id)
+      .then(({ count }) => count ?? 0),
   ]);
 
   // For the vitals tile: latest BP + latest sugar (any sugar kind).
@@ -233,9 +242,46 @@ async function PulseHomeBody() {
           </section>
         </SectionReveal>
 
+        {/* T64: Family Members tile — between Medications and Recent. */}
+        <SectionReveal delay={160}>
+          <section className="rounded-2xl bg-white p-4 shadow-md">
+            <TileHeader title="Family">
+              <Link
+                href="/pulse/family-members"
+                className="inline-flex items-center gap-0.5 rounded-lg bg-primary-50 px-2.5 py-1 text-xs font-bold text-primary"
+              >
+                Manage
+                <ChevronRight className="h-3 w-3" />
+              </Link>
+            </TileHeader>
+
+            {familyCount === 0 ? (
+              <Link
+                href="/pulse/family-members"
+                className="block py-2 text-sm text-text-secondary"
+              >
+                Add family members to book on their behalf.
+              </Link>
+            ) : (
+              <Link
+                href="/pulse/family-members"
+                className="flex items-center gap-3 py-2 text-sm font-medium text-text-main hover:opacity-90"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary">
+                  <Users className="h-4 w-4" />
+                </span>
+                <span>
+                  {familyCount} family member
+                  {familyCount === 1 ? "" : "s"}
+                </span>
+              </Link>
+            )}
+          </section>
+        </SectionReveal>
+
         {/* Recent activity */}
         {recent.length > 0 && (
-          <SectionReveal delay={160}>
+          <SectionReveal delay={240}>
             <section>
               <h2 className="mb-2 ml-1 text-sm font-bold text-text-main">
                 Recent activity

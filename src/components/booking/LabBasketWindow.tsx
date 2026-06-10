@@ -78,6 +78,7 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
   const phone = useBookingStore((s) => s.phone);
   const location = useBookingStore((s) => s.location);
   const setDetails = useBookingStore((s) => s.setDetails);
+  const verifiedFullName = useBookingStore((s) => s.verifiedFullName);
   const gpsLocation = useBookingStore((s) => s.gpsLocation);
   const scheduledFor = useBookingStore((s) => s.scheduledFor);
   const setScheduledFor = useBookingStore((s) => s.setScheduledFor);
@@ -111,7 +112,21 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
     setPaymentMode("full");
     setSubmitError(null);
     setConfirmed(null);
+    // T64: pre-fill name from customers.full_name (cached by BookingGate
+    // after /api/auth/verify-otp success) when the field is empty. A
+    // returning patient never re-types their name. Skipped when name is
+    // already set — preserves any in-progress typing from a prior open.
+    if (name.trim().length === 0 && verifiedFullName) {
+      setDetails({ name: verifiedFullName });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
+
+  // Track whether the current value of `name` was pre-filled (vs. typed).
+  // Drives the placeholder + helper-text variants below.
+  const wasPrefilledFromCustomer = Boolean(
+    verifiedFullName && name.trim() === verifiedFullName.trim(),
+  );
 
   useScrollLock(isOpen);
 
@@ -425,7 +440,11 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
                       <input
                         type="text"
                         autoComplete="name"
-                        placeholder="Who is the test for?"
+                        placeholder={
+                          wasPrefilledFromCustomer
+                            ? `Booking for ${verifiedFullName}? Edit if different.`
+                            : "Who is the test for?"
+                        }
                         value={name}
                         maxLength={80}
                         onChange={(e) =>
@@ -433,6 +452,12 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
                         }
                         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-slate-400"
                       />
+                      {wasPrefilledFromCustomer && (
+                        <p className="text-[11.5px] text-text-secondary">
+                          Pre-filled from your last booking. Change if
+                          booking for someone else.
+                        </p>
+                      )}
                       {trimmedName.length > 0 &&
                         (trimmedName.length < 2 ||
                           trimmedName.toLowerCase() === "patient") && (

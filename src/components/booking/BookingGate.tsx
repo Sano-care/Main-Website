@@ -188,6 +188,11 @@ export function BookingGate({ isOpen, onClose, onVerified }: BookingGateProps) {
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         phone?: string;
+        // T64: verify-otp now also returns the resolved customers row
+        // identity (auto-upserted for fresh phones; null full_name when
+        // no name has ever been captured).
+        customer_id?: string | null;
+        full_name?: string | null;
         error?: string;
       };
       if (!res.ok || !json.ok) {
@@ -196,7 +201,12 @@ export function BookingGate({ isOpen, onClose, onVerified }: BookingGateProps) {
       }
       const verifiedPhone = json.phone ?? e164;
       const untilMs = Date.now() + TOKEN_TTL_MS;
-      setPhoneVerified(verifiedPhone, untilMs);
+      // T64: pass full_name through so IdentifyStep + LabBasketWindow can
+      // pre-fill their name input for returning patients. null is the
+      // explicit "no name yet" signal (vs. undefined which would preserve
+      // a stale value from a previous session).
+      const verifiedFullName = json.full_name ?? null;
+      setPhoneVerified(verifiedPhone, untilMs, verifiedFullName);
       // Mirror the verified phone into the booking form's phone field so
       // the next step renders with phone pre-filled and locked.
       setDetails({ phone: formatPhoneForDisplay(verifiedPhone) });

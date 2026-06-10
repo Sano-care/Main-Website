@@ -27,10 +27,23 @@ export const runtime = "nodejs";
  * brute-force across multiple OTPs bounded.
  *
  * Returns:
- *   200 { ok: true, phone }
+ *   200 { ok: true, phone, customer_id, full_name }
+ *           - customer_id: UUID of the customers row for this phone (resolved
+ *             after OTP success; auto-upserted if the phone is new). Used by
+ *             clients to seed the bookingStore identity cache.
+ *           - full_name: customers.full_name when the row pre-existed and was
+ *             populated by Pulse signup / ops UI. NULL for fresh auto-upserts
+ *             OR for legacy rows that never captured a name. Clients use a
+ *             non-null value to pre-fill the IdentifyStep / LabBasketWindow
+ *             name input.
  *   400 { error }
  *   401 { error, attemptsRemaining? }   — wrong / expired / locked
  *   500 { error }
+ *
+ * The customer auto-upsert lands here (rather than at booking-insert time)
+ * so T64's MemberPicker (PR2) can show family_members for the customer
+ * BEFORE the patient submits a booking. Requires M043 (drop NOT NULL on
+ * customers.full_name + customer_code) — applied 2026-06-09.
  */
 export async function POST(req: NextRequest) {
   let body: { phone?: string; otp?: string };
@@ -146,7 +159,51 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Server is misconfigured." }, { status: 500 });
   }
 
-  const response = NextResponse.json({ ok: true, phone });
+  // T64 + customer-link-hotpatch follow-up: resolve (or create) the
+  // customers row for this phone and surface its id + name to the client.
+  // Soft-fail: any error in this block degrades gracefully (response
+  // returns customer_id/full_name as null) — the OTP cookie is the actual
+  // gate; the customer linkage is convenience for pre-fill + MemberPicker.
+  let customerId: string | null = null;
+  let customerFullName: string | null = null;
+  try {
+    const { data: existing, error: lookupErr } = await supabase
+      .from("customers")
+      .select("id, full_name")
+      .eq("phone", phone)
+      .maybeSingle();
+    if (lookupErr) {
+      console.error("[verify-otp] customer lookup failed:", lookupErr);
+    } else if (existing?.id) {
+      customerId = existing.id as string;
+      customerFullName = (existing.full_name as string | null) ?? null;
+    } else {
+      // No existing row — auto-upsert with phone only. M043 dropped NOT
+      // NULL on full_name + customer_code so this minimal insert succeeds;
+      // both columns stay NULL until the patient types their name (booking
+      // form / Pulse signup) or ops fills them in.
+      const { data: created, error: insertErr } = await supabase
+        .from("customers")
+        .insert({ phone })
+        .select("id, full_name")
+        .single();
+      if (insertErr) {
+        console.error("[verify-otp] customer auto-upsert failed:", insertErr);
+      } else if (created?.id) {
+        customerId = created.id as string;
+        customerFullName = (created.full_name as string | null) ?? null;
+      }
+    }
+  } catch (cause) {
+    console.error("[verify-otp] customer resolve threw unexpectedly", cause);
+  }
+
+  const response = NextResponse.json({
+    ok: true,
+    phone,
+    customer_id: customerId,
+    full_name: customerFullName,
+  });
   response.cookies.set({
     name: VERIFY_COOKIE_NAME,
     value: token,

@@ -328,6 +328,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // T64: customer first-write-wins. Sets the customer's display name
+    // on their FIRST booking only. Subsequent bookings for family
+    // members or under different names don't overwrite (the
+    // `is('full_name', null)` filter is the gate). Patient can later
+    // update via Pulse profile editing (T70/T71). Soft-fail discipline
+    // matches the lead-alert pattern — logged + swallowed.
+    if (linkedCustomerId) {
+      try {
+        const { error: nameWriteErr } = await supabase
+          .from("customers")
+          .update({ full_name: patientName })
+          .eq("id", linkedCustomerId)
+          .is("full_name", null);
+        if (nameWriteErr) {
+          console.error(
+            "[lab/create-booking-prepaid] customer first-write full_name failed:",
+            nameWriteErr,
+          );
+        }
+      } catch (cause) {
+        console.error(
+          "[lab/create-booking-prepaid] customer first-write threw unexpectedly",
+          cause,
+        );
+      }
+    }
+
     // Increment coupon usage (best-effort — booking is authoritative).
     if (couponCode && discountInr > 0) {
       void supabase.rpc("increment_lab_coupon_usage", { _code: couponCode });
