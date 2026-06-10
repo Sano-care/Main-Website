@@ -123,7 +123,9 @@ const structuredData = {
   email: "contact@sanocare.in",
   description:
     "Home healthcare in South Delhi. A GNM / B.Sc Nursing-qualified medic arrives at your home, supervised in real time by an MBBS doctor on live video, who issues a signed e-prescription per MoHFW Telemedicine Practice Guidelines 2020.",
-  priceRange: "₹₹",
+  // Visible homepage pricing spans ₹199 (home nursing) to full lab
+  // checkups (~₹4,500). Explicit range > the opaque "₹₹" band.
+  priceRange: "₹199 - ₹4500",
   address: {
     "@type": "PostalAddress",
     streetAddress: "1666/B2, 3rd Floor, Gali 2, Govindpuri Extension, Kalkaji",
@@ -132,12 +134,44 @@ const structuredData = {
     postalCode: "110019",
     addressCountry: "IN",
   },
+  // Approximate Kalkaji coordinates (~200m); founder to refine with an
+  // exact office pin in a follow-up. Acceptable offset, no penalty risk.
+  geo: {
+    "@type": "GeoCoordinates",
+    latitude: 28.534,
+    longitude: 77.258,
+  },
   areaServed: [
+    { "@type": "City", name: "New Delhi" },
+    { "@type": "AdministrativeArea", name: "Delhi NCR" },
     { "@type": "Place", name: "Kalkaji, New Delhi" },
     { "@type": "Place", name: "Govindpuri Extension, New Delhi" },
   ],
-  openingHours: "Mo-Su 00:00-23:59",
-  medicalSpecialty: ["PrimaryCare", "Geriatric", "Pediatric", "Nursing"],
+  // Standard hours are 9 AM-9 PM (KB: never promise 24/7). The previous
+  // "Mo-Su 00:00-23:59" wrongly declared round-the-clock availability —
+  // corrected here to the real service window via OpeningHoursSpecification
+  // (the structured form Google reads for "open now" rich treatment).
+  openingHoursSpecification: {
+    "@type": "OpeningHoursSpecification",
+    dayOfWeek: [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+    ],
+    opens: "09:00",
+    closes: "21:00",
+  },
+  medicalSpecialty: [
+    "PrimaryCare",
+    "Geriatric",
+    "Pediatric",
+    "Nursing",
+    "LaboratoryScience",
+  ],
   aggregateRating: {
     "@type": "AggregateRating",
     ratingValue: "4.7",
@@ -150,6 +184,11 @@ const structuredData = {
     propertyID: "CIN",
     value: "U86904DL2025PTC446725",
   },
+  sameAs: [
+    "https://www.instagram.com/sanocare.in/",
+    "https://www.linkedin.com/company/sanocare-tech-innovations-private-limited/",
+    "https://www.facebook.com/profile.php?id=61587546362097",
+  ],
 };
 
 export default async function RootLayout({
