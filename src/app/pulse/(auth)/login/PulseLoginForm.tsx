@@ -174,15 +174,29 @@ export function PulseLoginForm({ next }: { next: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ phone: e164, otp: code }),
+        // T90 Step 09: explicit stay_signed_in=true matches the server
+        // default. The login form deliberately omits a toggle — the
+        // welcome page Step 1 surfaces the user's deliberate consent
+        // and re-issues the cookie via /api/auth/stay-signed-in-preference
+        // if they uncheck it.
+        body: JSON.stringify({ phone: e164, otp: code, stay_signed_in: true }),
       });
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         phone?: string;
         error?: string;
+        is_new_customer?: boolean;
       };
       if (!res.ok || !json.ok) {
         setError(json.error || "That code didn't match.");
+        return;
+      }
+      // T90 Step 09: first-Pulse-signin (M047 pulse_first_signin_at was
+      // null pre-verify) routes to the welcome onboarding flow instead
+      // of safeNext. Full-page navigation so the (onboarding) layout
+      // server-reads the fresh cookie.
+      if (json.is_new_customer) {
+        window.location.assign("/pulse/welcome");
         return;
       }
       await routeAfterVerify();
