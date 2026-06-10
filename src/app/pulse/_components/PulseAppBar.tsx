@@ -41,11 +41,13 @@ import {
 interface PulseAppBarProps {
   onMenuClick: () => void;
   onMemberChipClick: () => void;
+  onAvatarClick: () => void;
 }
 
 export default function PulseAppBar({
   onMenuClick,
   onMemberChipClick,
+  onAvatarClick,
 }: PulseAppBarProps) {
   const customer = useCurrentCustomer();
   const viewingFirstName = useViewingFirstName();
@@ -133,8 +135,8 @@ export default function PulseAppBar({
 
         <button
           type="button"
-          onClick={handleAvatarClick}
-          aria-label={`Account menu for ${customer.full_name ?? "your account"}. Coming next.`}
+          onClick={onAvatarClick}
+          aria-label={`Account menu for ${customer.full_name ?? "your account"}`}
           className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-accent-coral text-sm font-semibold text-white hover:opacity-90"
         >
           {initials}
@@ -142,15 +144,6 @@ export default function PulseAppBar({
       </div>
     </header>
   );
-}
-
-// Avatar handler is still a placeholder in Step 06 — the chip is now
-// wired (via onMemberChipClick), but the avatar menu lands in Step 07
-// (Step 7 of my sequence = brief's Step 8). Console-warn in dev only.
-function handleAvatarClick() {
-  if (process.env.NODE_ENV !== "production") {
-    console.warn("[PulseAppBar] avatar — PulseAvatarMenu wires in Step 07");
-  }
 }
 
 /**
