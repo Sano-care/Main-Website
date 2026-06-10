@@ -7,6 +7,7 @@ import {
   verifyToken,
 } from "@/lib/otp/token";
 import { sendAarogyaLeadAlert } from "@/lib/booking/rampwin";
+import { sendBookingConfirmed } from "@/lib/aarogya/rampwin";
 import { formatLeadAlertContext } from "@/lib/booking/contextFormat";
 import {
   validatePatientName,
@@ -290,26 +291,45 @@ export async function POST(req: NextRequest) {
       mode: "partial-advance-50",
     });
 
+    // Slice 2a — fire the ops lead alert AND the patient booking
+    // confirmation concurrently. Both senders are best-effort (never
+    // throw); Promise.allSettled keeps one failure from blocking the
+    // other and parallelizes the two BSP round-trips so the patient
+    // template adds no extra sequential latency on top of the alert.
+    const bookingRef = data?.booking_code ?? data?.id ?? "?";
     try {
-      const { delivered } = await sendAarogyaLeadAlert({
-        patientName: insertPayload.patient_name,
-        // Age is not collected in PR4a Step 1 — defaults to "—y" in the
-        // sender. T64 (family-member picker) extends Step 1 with age
-        // and can pass `ageWithYearSuffix` here once it ships.
-        serviceDisplayName: t85ServiceDisplayName(displaySlug),
-        location: insertPayload.manual_address,
-        context: contextText,
-        patientPhone: insertPayload.phone,
-      });
-      console.log(
-        `[razorpay/verify] aarogya_lead_alert dispatch: delivered=${delivered} booking=${data?.booking_code ?? data?.id ?? "?"}`,
-      );
+      await Promise.allSettled([
+        sendAarogyaLeadAlert({
+          patientName: insertPayload.patient_name,
+          // Age is not collected in PR4a Step 1 — defaults to "—y" in the
+          // sender. T64 (family-member picker) extends Step 1 with age
+          // and can pass `ageWithYearSuffix` here once it ships.
+          serviceDisplayName: t85ServiceDisplayName(displaySlug),
+          location: insertPayload.manual_address,
+          context: contextText,
+          patientPhone: insertPayload.phone,
+        }).then(({ delivered }) =>
+          console.log(
+            `[razorpay/verify] aarogya_lead_alert dispatch: delivered=${delivered} booking=${bookingRef}`,
+          ),
+        ),
+        sendBookingConfirmed({
+          patientName: insertPayload.patient_name,
+          serviceSlug: displaySlug,
+          bookingCode: data?.booking_code ?? "",
+          patientPhone: insertPayload.phone,
+        }).then(({ delivered }) =>
+          console.log(
+            `[razorpay/verify] sanocare_booking_confirmed dispatch: delivered=${delivered} booking=${bookingRef}`,
+          ),
+        ),
+      ]);
     } catch (alertErr) {
-      // sendAarogyaLeadAlert is documented never to throw, but defense
-      // in depth: never let an alert error bubble into the booking
-      // response. The booking row is the source of truth.
+      // Both senders are documented never to throw, and allSettled never
+      // rejects — defense in depth so no dispatch path can bubble into
+      // the booking response. The booking row is the source of truth.
       console.error(
-        "[razorpay/verify] aarogya_lead_alert threw unexpectedly",
+        "[razorpay/verify] template dispatch threw unexpectedly",
         alertErr,
       );
     }

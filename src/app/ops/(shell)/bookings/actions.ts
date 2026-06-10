@@ -15,6 +15,12 @@ import {
   defaultJoinTokenExpiry,
 } from "@/lib/consult/tokens";
 import { sendConsultJoinLink } from "@/lib/consult/rampwin";
+import {
+  sendVisitComplete,
+  sendLabCollectionScheduled,
+  labTimeWindowFromDate,
+} from "@/lib/aarogya/rampwin";
+import { serviceCategoryToSlug } from "@/lib/aarogya/labels";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SAN_C_RE = /^SAN-C-\d+$/i;
@@ -281,9 +287,11 @@ export async function changeStatus(formData: FormData) {
   const supabase = await createOpsRSCClient();
 
   // Read current row to decide whether to stamp assigned_at (one-shot).
+  // patient_name / phone / service_category are pulled for the Slice 2a
+  // visit-complete WhatsApp send on the COMPLETED transition.
   const { data: current, error: readErr } = await supabase
     .from("bookings")
-    .select("status, assigned_at")
+    .select("status, assigned_at, patient_name, phone, service_category")
     .eq("id", bookingId)
     .maybeSingle();
   if (readErr || !current) {
@@ -316,6 +324,30 @@ export async function changeStatus(formData: FormData) {
   // directly and this side-effect can be removed then.
   if (newStatus === "COMPLETED") {
     await mirrorSessionStatus(supabase, bookingId, "completed");
+  }
+
+  // Slice 2a — notify the patient when their visit is marked COMPLETED,
+  // carrying the 3 satisfaction Quick-Reply buttons. Best-effort: never
+  // blocks the status transition (the booking row is authoritative).
+  // NOTE: receiving the button taps requires a Rampwin inbound webhook,
+  // which does not exist yet — this only sends. The `feedback_response`
+  // column (M045) is the storage target for when that inbound lands.
+  if (newStatus === "COMPLETED" && current.phone) {
+    try {
+      const { delivered } = await sendVisitComplete({
+        patientName: current.patient_name ?? "",
+        serviceSlug: serviceCategoryToSlug(current.service_category),
+        patientPhone: current.phone,
+      });
+      console.log(
+        `[changeStatus] aarogya_visit_complete dispatch: delivered=${delivered} booking=${bookingId}`,
+      );
+    } catch (sendErr) {
+      console.error(
+        "[changeStatus] aarogya_visit_complete threw unexpectedly",
+        sendErr,
+      );
+    }
   }
 
   revalidateBooking(bookingId);
@@ -372,6 +404,81 @@ export async function reschedule(formData: FormData) {
     .update({ scheduled_for })
     .eq("id", bookingId);
   if (error) throw new Error(`Could not reschedule: ${error.message}`);
+
+  revalidateBooking(bookingId);
+}
+
+/**
+ * Slice 2a — confirm the phlebotomist + collection slot for a lab booking
+ * and notify the patient (sanocare_lab_collection_scheduled).
+ *
+ * Lab bookings don't flow through assignParamedic (that gates to homecare
+ * / chronic only), so the phlebotomist is recorded on the legacy text
+ * column `bookings.assigned_paramedic`. This action writes that +
+ * scheduled_for, guards that the row is a lab/diagnostics booking, then
+ * fires the patient template best-effort (never blocks the DB write).
+ * The time window (7-10 AM / 5-8 PM) is derived from the slot's IST hour.
+ *
+ * Form fields: booking_id (uuid), phlebotomist_name (text),
+ * scheduled_for (datetime-local).
+ */
+export async function confirmLabCollection(formData: FormData) {
+  await getCurrentOpsUser();
+  const bookingId = getRequired(formData, "booking_id");
+  const phlebotomistName = getRequired(formData, "phlebotomist_name");
+  const slotRaw = getRequired(formData, "scheduled_for");
+
+  const slot = new Date(slotRaw);
+  if (Number.isNaN(slot.getTime())) {
+    throw new Error("Invalid collection slot time.");
+  }
+
+  const supabase = await createOpsRSCClient();
+
+  const { data: booking, error: readErr } = await supabase
+    .from("bookings")
+    .select("patient_name, phone, service_category")
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (readErr || !booking) {
+    throw new Error(
+      `Could not read booking: ${readErr?.message ?? "not found"}`,
+    );
+  }
+  if (serviceCategoryToSlug(booking.service_category) !== "lab-tests") {
+    throw new Error("Collection scheduling is only for lab-test bookings.");
+  }
+
+  const { error } = await supabase
+    .from("bookings")
+    .update({
+      assigned_paramedic: phlebotomistName,
+      scheduled_for: slot.toISOString(),
+    })
+    .eq("id", bookingId);
+  if (error) {
+    throw new Error(`Could not confirm collection: ${error.message}`);
+  }
+
+  if (booking.phone) {
+    try {
+      const { delivered } = await sendLabCollectionScheduled({
+        patientName: booking.patient_name ?? "",
+        phlebotomistName,
+        scheduledFor: slot,
+        timeWindow: labTimeWindowFromDate(slot),
+        patientPhone: booking.phone,
+      });
+      console.log(
+        `[confirmLabCollection] sanocare_lab_collection_scheduled dispatch: delivered=${delivered} booking=${bookingId}`,
+      );
+    } catch (sendErr) {
+      console.error(
+        "[confirmLabCollection] lab collection send threw unexpectedly",
+        sendErr,
+      );
+    }
+  }
 
   revalidateBooking(bookingId);
 }
