@@ -11,10 +11,10 @@
 // Brief copy (verbatim):
 //   eyebrow — "Numbers that matter" (lowercase "matter", no italics)
 //   H2      — "Built on real care."
-//   stats (4, in order):
-//     1,000+   →  Home-Visits delivered
-//     4.7★     →  75 Google reviews
-//     <30 min  →  Median response
+//   stats (3, verifiable only — fabricated visit count + 4.7/75-review
+//   figures removed; see the STATS const note):
+//     5.0★     →  Rating on Google
+//     <30 min  →  Median time-to-medic
 //     1,892    →  Lab tests catalogued
 //
 // AnimatedNumber parses a numeric value from the leading "value" string
@@ -36,10 +36,13 @@ interface Stat {
   label: string;
 }
 
+// Verifiable counts only. "Home-Visits delivered" and "4.7★/75 reviews"
+// were fabricated and removed; the real GBP rating is 5.0★ and home-visit
+// volume isn't shown until it's a strong signal (500+). Each value here
+// traces to a single auditable source (GBP / brand SLA / Pathcore catalog).
 const STATS: ReadonlyArray<Stat> = [
-  { value: "1,000", suffix: "+", label: "Home-Visits delivered" },
-  { value: "4.7", suffix: "★", label: "75 Google reviews" },
-  { value: "<30", suffix: "min", label: "Median response" },
+  { value: "5.0", suffix: "★", label: "Rating on Google" },
+  { value: "<30", suffix: "min", label: "Median time-to-medic" },
   { value: "1,892", suffix: "", label: "Lab tests catalogued" },
 ];
 
@@ -115,8 +118,8 @@ export function StatsBar() {
           </h2>
         </motion.div>
 
-        {/* 4-stat grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
+        {/* 3-stat grid (verifiable metrics only) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 lg:gap-12">
           {STATS.map((stat, index) => (
             <motion.div
               key={stat.label}

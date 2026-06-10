@@ -26,7 +26,7 @@
 // degrades to a static render under prefers-reduced-motion.
 
 import { motion, useReducedMotion } from "framer-motion";
-import { Star, Clock, Users } from "lucide-react";
+import { Star, Clock, ShieldCheck } from "lucide-react";
 
 import { useCmsSection } from "@/hooks/useCmsSection";
 import { HOME_CONTENT } from "@/constants/cms-content";
@@ -111,16 +111,16 @@ export function Hero() {
           >
             <span className="inline-flex items-center gap-1.5 font-semibold text-text-main">
               <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" aria-hidden="true" />
-              4.7
-              <span className="font-normal text-text-secondary">(75 reviews)</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Users className="h-4 w-4 text-primary" aria-hidden="true" />
-              1,000+ visits
+              5.0
+              <span className="font-normal text-text-secondary">on Google</span>
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
               &lt;30 min response
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <ShieldCheck className="h-4 w-4 text-primary" aria-hidden="true" />
+              MoHFW 2020 compliant
             </span>
           </motion.div>
         </div>

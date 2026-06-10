@@ -173,13 +173,11 @@ const structuredData = {
     "Nursing",
     "LaboratoryScience",
   ],
-  aggregateRating: {
-    "@type": "AggregateRating",
-    ratingValue: "4.7",
-    reviewCount: "75",
-    bestRating: "5",
-    worstRating: "1",
-  },
+  // aggregateRating intentionally omitted: the only verifiable source is
+  // the Google Business Profile (currently 5.0★ from 6 reviews). Declaring
+  // a rating in schema with such a thin, single-source count risks a
+  // Google structured-data manual action and overstates social proof.
+  // Re-add honestly once the GBP review count reaches ~25+.
   identifier: {
     "@type": "PropertyValue",
     propertyID: "CIN",
