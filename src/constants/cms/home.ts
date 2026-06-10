@@ -26,11 +26,11 @@ export const HOME_CONTENT = {
       "GNM / B.Sc Nursing-qualified medics arrive, capture vitals, and execute treatment — supervised in real time by a dedicated MBBS doctor on live video, who diagnoses the case and issues a signed e-prescription under MoHFW 2020. Starting from ₹499 per visit.",
     stats: [
       { value: "<30 min", label: "Median time-to-medic" },
-      { value: "1,000+", label: "Home visits delivered" },
-      { value: "★ 4.7", label: "75 Google reviews" },
+      { value: "★ 5.0", label: "Rating on Google" },
+      { value: "1,892", label: "Lab tests catalogued" },
     ],
     trust: {
-      badgeLabel: "1k+",
+      badgeLabel: "✓",
       text: "MoHFW 2020 compliant",
     },
     bookingForm: {
@@ -78,8 +78,8 @@ export const HOME_CONTENT = {
       ],
       stats: [
         { value: "<30", label: "Min to medic" },
-        { value: "1,000+", label: "Visits delivered" },
-        { value: "★ 4.7", label: "75 Google reviews" },
+        { value: "★ 5.0", label: "On Google" },
+        { value: "1,892", label: "Lab tests" },
       ],
     },
     form: {
@@ -161,8 +161,8 @@ export const HOME_CONTENT = {
   statsBar: {
     stats: [
       { value: "<30", suffix: "min", label: "Median time-to-medic", subtext: "From booking to medic at your door" },
-      { value: "1,000", suffix: "+", label: "Home visits delivered", subtext: "Across Kalkaji & Govindpuri Ext." },
-      { value: "4.7", suffix: "★", label: "From 75 Google reviews", subtext: "Sanocare – Home Healthcare Services" },
+      { value: "5.0", suffix: "★", label: "Rating on Google", subtext: "Sanocare – Home Healthcare Services" },
+      { value: "1,892", suffix: "", label: "Lab tests catalogued", subtext: "Via our partner Pathcore Diagnostics" },
     ],
   },
   journey: {
@@ -254,8 +254,8 @@ export const HOME_CONTENT = {
       },
     ],
     metrics: [
-      "1,000+ home visits delivered",
-      "★ 4.7 from 75 verified Google reviews",
+      "★ 5.0 on Google",
+      "1,892 lab tests catalogued via Pathcore",
       "Serving Kalkaji & Govindpuri Extension",
     ],
   },
