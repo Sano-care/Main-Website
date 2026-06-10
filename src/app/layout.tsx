@@ -100,11 +100,12 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
-  icons: {
-    icon: [{ url: "/logo.svg", type: "image/svg+xml" }],
-    shortcut: "/logo.svg",
-    apple: "/logo.svg",
-  },
+  // Favicon/app icons are served via the App Router file convention —
+  // src/app/icon.png + src/app/apple-icon.png (the square Sanocare brand
+  // mark). Next.js auto-injects the <link rel="icon"> / apple-touch-icon
+  // tags, so no `icons` metadata override here (it would take precedence
+  // over the convention files). logo.svg is the wordmark — kept only as
+  // the schema `logo` below, not as the favicon.
   manifest: "/manifest.json",
   verification: {
     other: { "facebook-domain-verification": "kfszus13qiekuol0cdt8784x8bdgb6" },
@@ -216,7 +217,6 @@ export default async function RootLayout({
           not here. */}
       <GoogleTagManager gtmId={GTM_CONTAINER_ID} />
       <head>
-        <link rel="icon" href="/logo.svg" type="image/svg+xml" />
         <meta name="theme-color" content="#2B81FF" />
         <meta name="geo.region" content="IN-DL" />
         <meta name="geo.placename" content="New Delhi" />
