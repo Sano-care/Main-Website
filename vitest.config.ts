@@ -1,13 +1,16 @@
-import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import path from "node:path";
 
-// Resolve the `@/*` -> `src/*` path alias (mirrors tsconfig.json) so unit
-// tests can exercise modules that import via the alias, the way the rest
-// of the codebase does. Additive: relative-import tests are unaffected.
+// Unit/integration tests for the WhatsApp agent. Node environment (these are
+// server-side modules); `@/` resolves to ./src to match tsconfig paths.
 export default defineConfig({
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts"],
+  },
   resolve: {
     alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "@": path.resolve(__dirname, "./src"),
     },
   },
 });

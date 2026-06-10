@@ -14,6 +14,7 @@
     "lighthouse:audit": "npx -y lighthouse https://sanocare.in --form-factor=mobile --only-categories=performance,accessibility,seo --output html --output-path lighthouse-baseline.html"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.102.0",
     "@daily-co/daily-js": "^0.90.0",
     "@next/third-parties": "^16.2.6",
     "@react-pdf/renderer": "^4.5.1",
@@ -31,6 +32,7 @@
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
     "tailwind-merge": "^3.4.0",
+    "zod": "^3.25.76",
     "zustand": "^5.0.10"
   },
   "devDependencies": {
