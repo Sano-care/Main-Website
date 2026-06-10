@@ -352,4 +352,104 @@ describe("Aarogya inbound chain — simulated end-to-end", () => {
     expect(rec.complaints[0]).toMatchObject({ category: "medic_behavior", severity: "high" });
     expect(rec.escalations).toContainEqual({ type: "complaint", priority: "p1" });
   });
+
+  // ---- Slice 2a §2: aarogya_lead_alert {{5}} bracket-tag --------------
+  // {{5}} is bodyParams[4] (the Context slot). cancel_booking and
+  // log_complaint prefix it with an originating-tool tag so ops triages
+  // at a glance; escalate_to_ops (genuine leads) stays raw.
+  it("S11 cancel — {{5}} starts [CANCELLATION] Reason: and carries booking_code", async () => {
+    rec.bookingLookup = {
+      latest: { id: "b6", booking_code: "SAN-B-00058", status: "PENDING", service_category: "homecare" },
+      latestActive: { id: "b6", booking_code: "SAN-B-00058", status: "PENDING", service_category: "homecare" },
+      activeCount: 1,
+    };
+    scriptToolCall("cancel_booking", { reason: "plans changed", patient_acknowledged_fee: true });
+    await processWebhook(envelope(PATIENT, "yes cancel please"));
+    console.log("\n--- S11 cancel {{5}} ---\n" + rec.log.join("\n"));
+    const t = rec.templateSends.find((x) => x.templateName === "aarogya_lead_alert");
+    expect(t).toBeTruthy();
+    const ctx = t!.bodyParams[4];
+    expect(ctx.startsWith("[CANCELLATION] Reason:")).toBe(true);
+    expect(ctx).toContain("plans changed");
+    expect(ctx).toContain("| Booking #SAN-B-00058");
+  });
+
+  it("S12 complaint (billing) — {{5}} starts [COMPLAINT — billing] + narrative + code", async () => {
+    rec.bookingLookup = {
+      latest: { id: "b7", booking_code: "SAN-B-00071", status: "COMPLETED" },
+      latestActive: null,
+      activeCount: 0,
+    };
+    scriptToolCall("log_complaint", { category: "billing", narrative: "charged twice for one visit", severity: "medium" });
+    await processWebhook(envelope(PATIENT, "you billed me twice"));
+    console.log("\n--- S12 complaint {{5}} ---\n" + rec.log.join("\n"));
+    const t = rec.templateSends.find((x) => x.templateName === "aarogya_lead_alert");
+    const ctx = t!.bodyParams[4];
+    expect(ctx.startsWith("[COMPLAINT — billing]")).toBe(true);
+    expect(ctx).toContain("charged twice for one visit");
+    expect(ctx).toContain("| Booking #SAN-B-00071");
+  });
+
+  it("S13 complaint (medic_behavior, high) — {{5}} tagged + escalation p1", async () => {
+    rec.bookingLookup = {
+      latest: { id: "b8", booking_code: "SAN-B-00072", status: "COMPLETED" },
+      latestActive: null,
+      activeCount: 0,
+    };
+    scriptToolCall("log_complaint", { category: "medic_behavior", narrative: "medic was rough with my mother", severity: "high" });
+    await processWebhook(envelope(PATIENT, "the medic hurt my mother"));
+    console.log("\n--- S13 complaint high {{5}} ---\n" + rec.log.join("\n"));
+    const t = rec.templateSends.find((x) => x.templateName === "aarogya_lead_alert");
+    expect(t!.bodyParams[4].startsWith("[COMPLAINT — medic_behavior]")).toBe(true);
+    expect(rec.escalations).toContainEqual({ type: "complaint", priority: "p1" });
+  });
+
+  it("S14 qualified lead — {{5}} is raw context, NO bracket-tag (regression guard)", async () => {
+    rec.scripted.push({
+      text: "Thank you. A Medic will reach you within 30 minutes; the exact amount is settled at the door.",
+      toolUses: [
+        {
+          id: "tu_14",
+          name: "escalate_to_ops",
+          input: {
+            escalation_type: "qualified_lead",
+            service_intent: "doctor_visit",
+            urgency: "today",
+            patient_name: "Mrs Sushma Sharma",
+            patient_age: "68 y",
+            patient_relationship: "parent",
+            location: "Greater Kailash 1, New Delhi",
+            context: "post knee surgery, needs home assessment",
+            summary_for_ops: "68F GK-1, post knee surgery, Home Visit today",
+          },
+        },
+      ],
+      stopReason: "tool_use",
+      model: "claude-sonnet-4-6",
+      tokensIn: 1800,
+      tokensOut: 140,
+    });
+    await processWebhook(envelope(PATIENT, "mother needs a home visit today, GK-1"));
+    console.log("\n--- S14 lead {{5}} raw ---\n" + rec.log.join("\n"));
+    const t = rec.templateSends.find((x) => x.templateName === "aarogya_lead_alert");
+    const ctx = t!.bodyParams[4];
+    expect(ctx).toBe("post knee surgery, needs home assessment");
+    expect(ctx.startsWith("[")).toBe(false);
+  });
+
+  it("S15 cancel with no resolvable booking_code — suffix omitted, never 'undefined'", async () => {
+    rec.bookingLookup = {
+      latest: { id: "b9", booking_code: null, status: "CONFIRMED", service_category: "homecare" },
+      latestActive: { id: "b9", booking_code: null, status: "CONFIRMED", service_category: "homecare" },
+      activeCount: 1,
+    };
+    scriptToolCall("cancel_booking", { reason: "changed mind", patient_acknowledged_fee: true });
+    await processWebhook(envelope(PATIENT, "cancel please"));
+    console.log("\n--- S15 cancel no-code ---\n" + rec.log.join("\n"));
+    const t = rec.templateSends.find((x) => x.templateName === "aarogya_lead_alert");
+    const ctx = t!.bodyParams[4];
+    expect(ctx.startsWith("[CANCELLATION] Reason:")).toBe(true);
+    expect(ctx).not.toContain("undefined");
+    expect(ctx).not.toContain("Booking #");
+  });
 });

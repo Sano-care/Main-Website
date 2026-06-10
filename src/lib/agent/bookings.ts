@@ -27,6 +27,7 @@ const ACTIVE_STATUSES: BookingStatus[] = [
 
 export interface BookingRow {
   id: string;
+  booking_code: string | null;
   status: BookingStatus;
   service_category: string | null;
   assigned_paramedic: string | null;
@@ -68,7 +69,7 @@ export async function findBookingsByPhone(phone: string): Promise<BookingLookup>
 
   const { data, error } = await supabaseAdmin
     .from("bookings")
-    .select("id, status, service_category, assigned_paramedic, dispatched_at, completed_at, created_at, phone")
+    .select("id, booking_code, status, service_category, assigned_paramedic, dispatched_at, completed_at, created_at, phone")
     .order("created_at", { ascending: false })
     .limit(300);
   if (error || !data) return { latest: null, latestActive: null, activeCount: 0 };

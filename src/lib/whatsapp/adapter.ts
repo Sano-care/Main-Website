@@ -180,6 +180,21 @@ const SERVICE_LABEL: Record<string, string> = {
   teleconsult: "Teleconsultation",
 };
 
+// Slice 2a §2 — `aarogya_lead_alert` {{5}} bracket-tag.
+//
+// Slice 1 made cancel_booking / log_complaint reuse the lead-alert
+// template, so ops sees the "New patient lead received…" framing for
+// situations that aren't leads. The agent prefixes {{5}} with an
+// originating-tool tag so ops can triage at a glance — no template
+// change, no Meta review. escalate_to_ops (genuine leads) is untouched.
+//
+// The booking-code suffix is appended only when a code resolved; a
+// missing/old-row code drops the suffix entirely (never "#undefined").
+function bookingTagSuffix(code: string | null | undefined): string {
+  const c = code?.trim();
+  return c ? ` | Booking #${c}` : "";
+}
+
 async function executeCheckMedicStatus(phone: string): Promise<string> {
   const { latest } = await findBookingsByPhone(phone);
   if (!latest) return "I don't see an active booking for this number — want me to set one up?";
@@ -232,7 +247,10 @@ async function executeCancelBooking(
     patientAge: "—",
     serviceDisplay: SERVICE_LABEL[mapServiceCategory(target.service_category)] ?? "Booking",
     location: "—",
-    context: `CANCELLED: ${reason}`.slice(0, 60),
+    // {{5}} — bracket-tagged so ops sees this is a cancellation, not a
+    // lead. Only the free-text reason is bounded; tag + booking suffix
+    // always survive.
+    context: `[CANCELLATION] Reason: ${reason.slice(0, 120)}${bookingTagSuffix(target.booking_code)}`,
     patientMobile: phone,
   });
   return "Done — booking cancelled, no charge. Sorry we couldn't help today. Message anytime if you need us again.";
@@ -265,7 +283,10 @@ async function executeLogComplaint(
     patientAge: "—",
     serviceDisplay: `Complaint: ${input.category}`,
     location: "—",
-    context: input.narrative.slice(0, 60),
+    // {{5}} — bracket-tagged with the complaint category so ops triages
+    // at a glance. Category passed verbatim (the 6-value enum); only the
+    // free-text narrative is bounded so tag + booking suffix survive.
+    context: `[COMPLAINT — ${input.category}] ${input.narrative.slice(0, 120)}${bookingTagSuffix(latest?.booking_code)}`,
     patientMobile: phone,
   });
   return "Got it — I've logged this for our team. Someone will respond within 4 hours. If anything's urgent, call +91 97119 77782.";
