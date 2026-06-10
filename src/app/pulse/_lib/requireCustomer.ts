@@ -1,8 +1,15 @@
 import "server-only";
 
+import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { VERIFY_COOKIE_NAME } from "@/lib/otp/token";
+import {
+  PULSE_LONG_TTL_SECONDS,
+  VERIFY_COOKIE_NAME,
+  pulseCookieOptions,
+  renewVerificationToken,
+  verifyToken,
+} from "@/lib/otp/token";
 import {
   resolveCustomerFromToken,
   type PulseCustomer,
@@ -22,6 +29,16 @@ import {
 // by /api/consent/record — same cookie name, same `verifyToken`, same
 // `customers.phone` resolution — so there is exactly one identity contract
 // across the patient surfaces.
+//
+// T90 — Sliding renewal:
+// When the verified payload carries `staySignedIn === true`, this helper
+// re-mints the token with a fresh `exp` and writes it back to the response
+// via `cookies().set()` from `next/headers`. Net effect: an actively-used
+// Pulse session never expires unless the user explicitly signs out.
+//
+// Old pre-T90 tokens (no `staySignedIn` field) read as `true` per the
+// fallback in `verifyToken` — so existing active sessions keep working,
+// and their next API hit upgrades their cookie to the new payload shape.
 
 export type PulseAuthResult =
   | { customer: PulseCustomer }
@@ -37,14 +54,43 @@ export function pulseUnauthorized(
 /**
  * Resolve the signed-in Pulse customer from the request's verify cookie, or
  * return a ready-to-send 401 response. Never throws.
+ *
+ * On success, when `staySignedIn === true` is encoded in the token, also
+ * renew the cookie's expiry to PULSE_LONG_TTL_SECONDS forward of now.
  */
 export async function requirePulseCustomer(
   req: NextRequest,
 ): Promise<PulseAuthResult> {
   const token = req.cookies.get(VERIFY_COOKIE_NAME)?.value;
+  // Verify the token signature + TTL first so we have access to the
+  // staySignedIn flag for the renewal decision below. resolveCustomerFromToken
+  // also calls verifyToken internally; the double-verify here is a few
+  // microseconds and keeps the renewal logic readable.
+  const verified = verifyToken(token);
+  if (!verified) return { response: pulseUnauthorized() };
+
   const customer = await resolveCustomerFromToken(token);
-  if (!customer) {
-    return { response: pulseUnauthorized() };
+  if (!customer) return { response: pulseUnauthorized() };
+
+  // Sliding renewal — only when the user opted into Stay-signed-in. The
+  // `?? true` fallback in verifyToken keeps pre-T90 active sessions alive
+  // and migrates them onto the new shape via this very write.
+  if (verified.staySignedIn) {
+    try {
+      const renewed = renewVerificationToken(verified);
+      const cookieStore = await cookies();
+      cookieStore.set({
+        name: VERIFY_COOKIE_NAME,
+        value: renewed,
+        ...pulseCookieOptions(PULSE_LONG_TTL_SECONDS),
+      });
+    } catch (cause) {
+      // Soft-fail: if the cookie write fails for any reason, the request
+      // still proceeds with the existing (still-valid) cookie. The user
+      // sees no disruption; renewal retries on the next API hit.
+      console.error("[requirePulseCustomer] sliding renewal failed", cause);
+    }
   }
+
   return { customer };
 }

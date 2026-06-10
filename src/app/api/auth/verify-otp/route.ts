@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
   OTP_MAX_ATTEMPTS,
-  TOKEN_TTL_SECONDS,
+  PULSE_LONG_TTL_SECONDS,
   VERIFY_COOKIE_NAME,
   hashOtp,
   hashesEqual,
   mintVerificationToken,
   normaliseIndianPhone,
+  pulseCookieOptions,
 } from "@/lib/otp/token";
 
 export const runtime = "nodejs";
@@ -46,12 +47,19 @@ export const runtime = "nodejs";
  * customers.full_name + customer_code) — applied 2026-06-09.
  */
 export async function POST(req: NextRequest) {
-  let body: { phone?: string; otp?: string };
+  let body: { phone?: string; otp?: string; stay_signed_in?: boolean };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
+
+  // T90: clients that don't pass the flag get the persistent-session
+  // behaviour (default true). The onboarding Step 1 checkbox is
+  // default-checked and posts `stay_signed_in: false` ONLY when the
+  // user explicitly unchecks it.
+  const staySignedIn =
+    typeof body.stay_signed_in === "boolean" ? body.stay_signed_in : true;
 
   const phone = normaliseIndianPhone(String(body.phone ?? ""));
   if (!phone) {
@@ -153,7 +161,7 @@ export async function POST(req: NextRequest) {
   // Mint the signed token and stamp it onto an HttpOnly cookie.
   let token: string;
   try {
-    token = mintVerificationToken(phone);
+    token = mintVerificationToken(phone, staySignedIn);
   } catch (err) {
     console.error("[verify-otp] token mint failed:", err);
     return NextResponse.json({ error: "Server is misconfigured." }, { status: 500 });
@@ -164,12 +172,17 @@ export async function POST(req: NextRequest) {
   // Soft-fail: any error in this block degrades gracefully (response
   // returns customer_id/full_name as null) — the OTP cookie is the actual
   // gate; the customer linkage is convenience for pre-fill + MemberPicker.
+  //
+  // T90: also surfaces `pulse_first_signin_at` so we can detect first-Pulse
+  // signin (vs. "first customers row creation" which would skip onboarding
+  // for booking-only customers Pulse-signing for the first time).
   let customerId: string | null = null;
   let customerFullName: string | null = null;
+  let isFirstPulseSignin = false;
   try {
     const { data: existing, error: lookupErr } = await supabase
       .from("customers")
-      .select("id, full_name")
+      .select("id, full_name, pulse_first_signin_at")
       .eq("phone", phone)
       .maybeSingle();
     if (lookupErr) {
@@ -177,6 +190,7 @@ export async function POST(req: NextRequest) {
     } else if (existing?.id) {
       customerId = existing.id as string;
       customerFullName = (existing.full_name as string | null) ?? null;
+      isFirstPulseSignin = existing.pulse_first_signin_at === null;
     } else {
       // No existing row — auto-upsert with phone only. M043 dropped NOT
       // NULL on full_name + customer_code so this minimal insert succeeds;
@@ -192,6 +206,28 @@ export async function POST(req: NextRequest) {
       } else if (created?.id) {
         customerId = created.id as string;
         customerFullName = (created.full_name as string | null) ?? null;
+        // Fresh insert ⇒ unambiguously first Pulse signin.
+        isFirstPulseSignin = true;
+      }
+    }
+
+    // T90: stamp pulse_first_signin_at when this is the first Pulse signin.
+    // Idempotency guard on `.is('pulse_first_signin_at', null)` makes the
+    // update a no-op if a concurrent request already stamped it — even at
+    // race, exactly one stamp wins. Soft-fail: a stamp failure means the
+    // user sees onboarding again next signin; better than refusing the
+    // verify response.
+    if (isFirstPulseSignin && customerId) {
+      const { error: stampErr } = await supabase
+        .from("customers")
+        .update({ pulse_first_signin_at: new Date().toISOString() })
+        .eq("id", customerId)
+        .is("pulse_first_signin_at", null);
+      if (stampErr) {
+        console.error(
+          "[verify-otp] pulse_first_signin_at stamp failed:",
+          stampErr,
+        );
       }
     }
   } catch (cause) {
@@ -203,15 +239,18 @@ export async function POST(req: NextRequest) {
     phone,
     customer_id: customerId,
     full_name: customerFullName,
+    // T90: drives the onboarding gate on the client. The PulseLoginForm
+    // routes to /pulse/welcome when true, /pulse when false.
+    is_new_customer: isFirstPulseSignin,
   });
   response.cookies.set({
     name: VERIFY_COOKIE_NAME,
     value: token,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: TOKEN_TTL_SECONDS,
+    // T90: conditional Max-Age. stay_signed_in=true gets a 1-year
+    // persistent cookie + matching long-TTL token + sliding renewal on
+    // every /api/pulse/* hit. stay_signed_in=false gets a session cookie
+    // (no Max-Age, cleared on browser close) + 30-min token TTL.
+    ...pulseCookieOptions(staySignedIn ? PULSE_LONG_TTL_SECONDS : null),
   });
   return response;
 }
