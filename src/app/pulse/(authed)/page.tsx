@@ -33,6 +33,7 @@ import {
   trendTextClass,
 } from "../_lib/vitalsDisplay";
 import { doseVisual } from "../_lib/medsDisplay";
+import EmergencyRibbon from "./_components/EmergencyRibbon";
 
 // Pulse home — two hero tiles (today's vitals + today's medications) over the
 // existing recent-activity card, per Sanocare_Pulse_Web_Mockup_v1.html. Fully
@@ -97,6 +98,11 @@ async function PulseHomeBody() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* T90 Step 10 — Emergency ribbon, always visible immediately */}
+      {/* below the top app bar. Owns the session-count increment for */}
+      {/* the home zone (one-shot per mount, debounced). */}
+      <EmergencyRibbon />
+
       {/* Greeting — Step 12 (home restructure) rewrites this zone per */}
       {/* brief Surface 6. Step 08 just retires the in-card ProfileMenu */}
       {/* chip (now lives in the AppBar avatar menu). */}
