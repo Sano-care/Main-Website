@@ -7,7 +7,7 @@ import {
   useReducedMotion,
 } from "framer-motion";
 
-import { AddMemberForm } from "../family-members/_components/AddMemberForm";
+import { AddMemberForm } from "../(authed)/family-members/_components/AddMemberForm";
 import { useCurrentCustomer } from "../_lib/PulseCustomerContext";
 import { useViewingMember } from "../_lib/MemberViewingContext";
 

@@ -16,25 +16,23 @@ import type { ReactNode } from "react";
 
 import { formatIST } from "@/lib/time/formatIST";
 import type { VitalKind } from "@/app/api/pulse/_lib/validation";
-import { PulseShell } from "./_components/PulseShell";
-import { ProfileMenu } from "./_components/ProfileMenu";
 import { SectionReveal } from "@/components/marketing/SectionReveal";
 import { AnimatedCounter } from "@/components/marketing/AnimatedCounter";
-import { getCurrentCustomer } from "./_lib/getCurrentCustomer";
+import { getCurrentCustomer } from "../_lib/getCurrentCustomer";
 import {
   getLatestVitalsByKind,
   getRecentActivity,
   getTodaySchedule,
-} from "./_lib/pulseData";
+} from "../_lib/pulseData";
 import { supabaseAdmin } from "@/lib/supabase-server";
-import type { VitalReading } from "./_lib/pulseTypes";
+import type { VitalReading } from "../_lib/pulseTypes";
 import {
   VITAL_META,
   classifyVital,
   formatVitalValue,
   trendTextClass,
-} from "./_lib/vitalsDisplay";
-import { doseVisual } from "./_lib/medsDisplay";
+} from "../_lib/vitalsDisplay";
+import { doseVisual } from "../_lib/medsDisplay";
 
 // Pulse home — two hero tiles (today's vitals + today's medications) over the
 // existing recent-activity card, per Sanocare_Pulse_Web_Mockup_v1.html. Fully
@@ -44,11 +42,7 @@ import { doseVisual } from "./_lib/medsDisplay";
 export const dynamic = "force-dynamic";
 
 export default async function PulseHomePage() {
-  return (
-    <PulseShell next="/pulse">
-      <PulseHomeBody />
-    </PulseShell>
-  );
+  return <PulseHomeBody />;
 }
 
 function kindIcon(kind: VitalKind): ReactNode {
@@ -72,7 +66,9 @@ function kindIcon(kind: VitalKind): ReactNode {
 
 async function PulseHomeBody() {
   const customer = await getCurrentCustomer();
-  if (!customer) return null; // guaranteed inside PulseShell; type guard
+  // The (authed) layout already redirects to /pulse/login on null. This
+  // guard is purely for TypeScript narrowing.
+  if (!customer) return null;
   const firstName = customer.full_name?.trim().split(/\s+/)[0] ?? "there";
 
   const [latestVitals, todaySchedule, recent, familyCount] = await Promise.all([
@@ -101,7 +97,9 @@ async function PulseHomeBody() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Greeting */}
+      {/* Greeting — Step 12 (home restructure) rewrites this zone per */}
+      {/* brief Surface 6. Step 08 just retires the in-card ProfileMenu */}
+      {/* chip (now lives in the AppBar avatar menu). */}
       <div className="bg-primary px-5 pb-6 pt-6 text-white">
         <p className="text-xs text-white/70">
           {formatIST(new Date(), "dateLong")}
@@ -109,9 +107,6 @@ async function PulseHomeBody() {
         <h1 className="mt-1 text-xl font-semibold tracking-tight">
           Hi {firstName} 👋
         </h1>
-        <div className="mt-3">
-          <ProfileMenu variant="chip" />
-        </div>
       </div>
 
       <main className="mx-auto max-w-2xl space-y-3 px-4 pb-20 pt-4">

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
-import { getCurrentCustomer } from "../_lib/getCurrentCustomer";
-import { sanitizeNext } from "../_lib/safeNext";
+import { getCurrentCustomer } from "../../_lib/getCurrentCustomer";
+import { sanitizeNext } from "../../_lib/safeNext";
 import { PulseLoginForm } from "./PulseLoginForm";
 
 // Sanocare Pulse sign-in.

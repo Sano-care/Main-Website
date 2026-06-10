@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui";
-import { sanitizeNext } from "../_lib/safeNext";
+import { sanitizeNext } from "../../_lib/safeNext";
 
 // Full-page sign-in for Sanocare Pulse. Mirrors the booking BookingGate OTP
 // shape (phone + consent → 6-box OTP) but adds a third "name capture" step

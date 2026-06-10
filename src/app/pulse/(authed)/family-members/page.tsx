@@ -1,6 +1,4 @@
-import { PulseShell } from "../_components/PulseShell";
-import { PulsePageHeader } from "../_components/PulsePageHeader";
-import { getCurrentCustomer } from "../_lib/getCurrentCustomer";
+import { getCurrentCustomer } from "../../_lib/getCurrentCustomer";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import type { FamilyMember } from "@/lib/family-members/types";
 import { FamilyMembersSurface } from "./FamilyMembersSurface";
@@ -9,22 +7,17 @@ import { FamilyMembersSurface } from "./FamilyMembersSurface";
 //
 // Server-renders the initial list so the surface paints instantly on mobile,
 // then hands off to FamilyMembersSurface (client) for the modal-driven CRUD.
-// Same shell pattern as /pulse/vitals and /pulse/medications.
+//
+// Auth gate lives in the (authed) layout — this page assumes a signed-in
+// customer. The /pulse v1 chrome wraps the surface; the page no longer
+// renders its own header.
 
 export const dynamic = "force-dynamic";
 
 export default async function FamilyMembersPage() {
-  return (
-    <PulseShell next="/pulse/family-members">
-      <PulsePageHeader title="Family Members" />
-      <FamilyMembersPageBody />
-    </PulseShell>
-  );
-}
-
-async function FamilyMembersPageBody() {
   const customer = await getCurrentCustomer();
-  if (!customer) return null; // guaranteed inside PulseShell; type guard
+  // (authed) layout already redirected on null. Purely a type guard.
+  if (!customer) return null;
 
   // Initial fetch — same query as GET /api/pulse/family-members. Inline
   // here (vs. a pulseData helper) because there's only one consumer.

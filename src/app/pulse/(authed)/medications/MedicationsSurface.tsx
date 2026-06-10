@@ -24,22 +24,22 @@ import {
 } from "lucide-react";
 
 import { formatIST } from "@/lib/time/formatIST";
-import { PulseStickyBar } from "../_components/PulseStickyBar";
-import { AddMedicationSheet } from "../_components/AddMedicationSheet";
-import { MedDetailSheet } from "../_components/MedDetailSheet";
-import { pulseFetch } from "../_lib/pulseClient";
+import { PulseStickyBar } from "../../_components/PulseStickyBar";
+import { AddMedicationSheet } from "../../_components/AddMedicationSheet";
+import { MedDetailSheet } from "../../_components/MedDetailSheet";
+import { pulseFetch } from "../../_lib/pulseClient";
 import type {
   AdherenceResponse,
   ImportableRx,
   Medication,
   ScheduledDose,
-} from "../_lib/pulseTypes";
+} from "../../_lib/pulseTypes";
 import {
   doseVisual,
   formatAdherence,
   refillStatus,
   scheduleSummary,
-} from "../_lib/medsDisplay";
+} from "../../_lib/medsDisplay";
 
 export function MedicationsSurface() {
   const [meds, setMeds] = useState<Medication[]>([]);

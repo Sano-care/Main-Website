@@ -19,8 +19,8 @@ import type {
 // exactly the same "today's doses" / "importable Rx" logic — one source of truth.
 //
 // Every function is customer-scoped: the caller resolves the signed-in
-// customer (PulseShell / requirePulseCustomer) and passes the id in. No
-// function here trusts a cookie itself.
+// customer (the (authed) layout / requirePulseCustomer) and passes the
+// id in. No function here trusts a cookie itself.
 
 const MED_ACTIVE_SELECT = "id, name, dose, scheduled_times, end_date";
 

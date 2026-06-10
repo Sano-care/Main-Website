@@ -152,7 +152,7 @@ export function Navbar() {
                 {/* "Sign in" pill — distinct from regular nav links.
                     Links directly to /pulse/login (not /portal) to skip
                     the /portal→/pulse→/pulse/login redirect chain + its
-                    PulseShell transition flash. /pulse/login itself
+                    (authed)-layout transition flash. /pulse/login itself
                     bounces an already-signed-in patient to /pulse
                     server-side. */}
                 <Link

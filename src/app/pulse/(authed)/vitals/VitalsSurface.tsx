@@ -18,17 +18,17 @@ import {
 
 import type { VitalKind } from "@/app/api/pulse/_lib/validation";
 import { formatIST } from "@/lib/time/formatIST";
-import { PulseStickyBar } from "../_components/PulseStickyBar";
-import { AddVitalSheet } from "../_components/AddVitalSheet";
-import { VitalsTrendChart, type TrendPoint } from "../_components/VitalsTrendChart";
-import { pulseFetch } from "../_lib/pulseClient";
-import type { VitalReading } from "../_lib/pulseTypes";
+import { PulseStickyBar } from "../../_components/PulseStickyBar";
+import { AddVitalSheet } from "../../_components/AddVitalSheet";
+import { VitalsTrendChart, type TrendPoint } from "../../_components/VitalsTrendChart";
+import { pulseFetch } from "../../_lib/pulseClient";
+import type { VitalReading } from "../../_lib/pulseTypes";
 import {
   VITAL_META,
   classifyVital,
   formatVitalValue,
   trendTextClass,
-} from "../_lib/vitalsDisplay";
+} from "../../_lib/vitalsDisplay";
 
 type Tab = "recent" | "trends";
 
