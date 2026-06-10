@@ -7,6 +7,8 @@ import {
   useReducedMotion,
 } from "framer-motion";
 
+import { useScrollLock } from "@/hooks/useScrollLock";
+
 import { AddMemberForm } from "../(authed)/family-members/_components/AddMemberForm";
 import { useCurrentCustomer } from "../_lib/PulseCustomerContext";
 import { useViewingMember } from "../_lib/MemberViewingContext";
@@ -47,6 +49,12 @@ export default function MemberSwitcherSheet({ open, onClose }: Props) {
   const { members, viewing, setViewingId, refetchMembers } = useViewingMember();
   const prefersReducedMotion = useReducedMotion();
   const [addOpen, setAddOpen] = useState(false);
+
+  // T90 Step 08-fold-in 1: parity with PulseAvatarMenu. Locks the body
+  // scroll while the sheet is open so iOS doesn't bounce the page
+  // underneath. Founder UAT flagged the mobile sheet behaviour as
+  // unreliable — this matches the working avatar-menu pattern.
+  useScrollLock(open);
 
   const selfFirstName = deriveFirstName(customer.full_name);
   const currentId = viewing.kind === "self" ? null : viewing.member.id;

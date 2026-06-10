@@ -115,7 +115,11 @@ export default function PulseAppBar({
           type="button"
           onClick={onMemberChipClick}
           aria-label={`Viewing care for ${viewingFirstName}. Tap to switch.`}
-          className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          // T90 Step 08-fold-in 1: tap target enlarged from py-1.5 (32px
+          // effective height) to py-2 (36px) — still snug but matches the
+          // avatar's h-9 for iOS reliability. Founder UAT flagged the chip
+          // tap as unreliable on mobile.
+          className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
           <span className="max-w-[8rem] truncate">{viewingFirstName}</span>
           <svg
