@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Pencil, X, AlertCircle } from "lucide-react";
 import { updateCustomer } from "../actions";
 import { computeAge, computeCompleteness } from "../../../_lib/customerProfile";
+import { formatIST } from "@/lib/time/formatIST";
 
 type Customer = {
   id: string;
@@ -162,7 +163,7 @@ export function ProfileCard({ customer }: { customer: Customer }) {
           label="Date of birth"
           value={
             customer.date_of_birth
-              ? `${new Date(customer.date_of_birth).toLocaleDateString("en-IN")}${
+              ? `${formatIST(customer.date_of_birth, "date")}${
                   age != null ? ` · age ${age}` : ""
                 }`
               : null

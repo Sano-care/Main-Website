@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Search, ArrowRight } from "lucide-react";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
+import { formatIST } from "@/lib/time/formatIST";
 
 export const metadata: Metadata = {
   title: "Ops · Payments",
@@ -258,7 +259,7 @@ export default async function PaymentsListPage({
                   return (
                     <tr key={`${p.booking_id}-${p.payment_kind}`} className="hover:bg-slate-50">
                       <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
-                        {new Date(p.created_at).toLocaleString("en-IN")}
+                        {formatIST(p.created_at)}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="font-mono text-xs text-slate-900">

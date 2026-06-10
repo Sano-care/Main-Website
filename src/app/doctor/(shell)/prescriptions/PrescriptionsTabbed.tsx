@@ -23,6 +23,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
+import { formatIST } from "@/lib/time/formatIST";
 
 export type RxListRow = {
   id: string;
@@ -117,7 +118,7 @@ export function PrescriptionsTabbed({ rows }: { rows: RxListRow[] }) {
                   <div className="shrink-0 text-right text-xs text-slate-500">
                     {r.status === "sent" ? (
                       <div className="flex items-center gap-1.5 justify-end">
-                        <span>{r.sent_at ? formatWhen(r.sent_at) : "—"}</span>
+                        <span>{formatIST(r.sent_at)}</span>
                         {r.whatsapp_sent_at ? (
                           <CheckCircle2
                             className="w-3.5 h-3.5 text-emerald-600"
@@ -132,7 +133,7 @@ export function PrescriptionsTabbed({ rows }: { rows: RxListRow[] }) {
                       </div>
                     ) : (
                       <div>
-                        {formatWhen(r.sent_at ?? r.created_at)}
+                        {formatIST(r.sent_at ?? r.created_at)}
                       </div>
                     )}
                   </div>
@@ -211,12 +212,3 @@ function StatusPill({ status }: { status: RxListRow["status"] }) {
   }
 }
 
-function formatWhen(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}

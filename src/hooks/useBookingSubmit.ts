@@ -1,5 +1,20 @@
 "use client";
 
+/**
+ * @deprecated T85 PR5 — kept ONLY for the @deprecated `BookingModal`
+ * (Navbar's "Book a Visit" pill fallback) and for the legacy
+ * `/api/lab/create-booking` free-collection lab flow that 5 prod rows
+ * still walk (`report_payment_status` NOT_DUE / null, not yet
+ * CAPTURED). The non-lab branch is dead — PaymentStep handles
+ * service-led flows inline. The lab branch is legacy-only —
+ * `LabBasketWindow` writes to `/api/lab/create-booking-prepaid`
+ * directly. Retires alongside BookingModal once Navbar's no-slug
+ * pill is repointed.
+ *
+ * LEGACY: lab branch survives for the prod rows still walking the
+ * old NOT_DUE → LINK_SENT → CAPTURED lifecycle. PR5+1 retires this
+ * after the last legacy row clears.
+ */
 import { useCallback } from "react";
 import { useBookingStore } from "@/store/bookingStore";
 import { getServicePrice } from "@/constants/pricing";

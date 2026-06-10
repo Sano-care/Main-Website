@@ -6,6 +6,7 @@ import { getCurrentDoctor } from "../../../../_lib/getCurrentDoctor";
 import { getDraftForSession } from "../../../../_lib/prescriptionData";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { createDraftPrescription } from "../../../../_actions/prescription";
+import { formatIST } from "@/lib/time/formatIST";
 import { PrescriptionComposer } from "./PrescriptionComposer";
 
 export const metadata: Metadata = {
@@ -108,7 +109,7 @@ export default async function PrescribePage({
           {ctx.patient_name}
         </h1>
         <div className="text-sm text-slate-600 mt-1">
-          Consult scheduled {formatScheduled(ctx.scheduled_at)}
+          Consult scheduled {formatIST(ctx.scheduled_at)}
         </div>
       </div>
 
@@ -193,13 +194,3 @@ export default async function PrescribePage({
   );
 }
 
-function formatScheduled(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}

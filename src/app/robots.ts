@@ -23,6 +23,7 @@ export default function robots(): MetadataRoute.Robots {
           "/coming-soon/",
           "/_next/",
           "/private/",
+          "/wa", // paid conversion redirect — noindex, keep out of search
         ],
       },
       // Slow down the more aggressive crawlers

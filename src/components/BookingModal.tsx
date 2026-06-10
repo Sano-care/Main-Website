@@ -1,5 +1,12 @@
 "use client";
 
+/**
+ * @deprecated T85 PR5 — kept ONLY for Navbar's "Book a Visit" pill
+ * fallback (no-slug case). All 4 service-led CTAs route through
+ * `ServiceLedBookingModal` (non-lab) or `LabBasketWindow` (lab). When
+ * Navbar's no-slug pill is removed or repointed to a service-led
+ * default, this file goes too. Until then, retired but mounted.
+ */
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
@@ -10,6 +17,7 @@ import { Button, Input, Select } from "@/components/ui";
 import { useBookingStore } from "@/store/bookingStore";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useBookingSubmit } from "@/hooks/useBookingSubmit";
+import { useScrollLock } from "@/hooks/useScrollLock";
 import { useCmsSection } from "@/hooks/useCmsSection";
 import { BookingConfirmation } from "@/components/BookingConfirmation";
 import { HOME_CONTENT } from "@/constants/cms-content";
@@ -112,19 +120,21 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
   };
 
   // Close on escape key
+  // T85 PR4a bug 2 fix — body scroll lock via shared useScrollLock
+  // (position:fixed pattern, ref-counted across all 3 booking surfaces).
+  // The prior `overflow: hidden` here was iOS-broken — rubber-band
+  // scroll bled through. The hook handles acquire/release; this effect
+  // now only owns the Escape key listener.
+  useScrollLock(isOpen);
+
   useEffect(() => {
+    if (!isOpen) return;
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-    
-    if (isOpen) {
-      document.addEventListener("keydown", handleEscape);
-      document.body.style.overflow = "hidden";
-    }
-    
+    document.addEventListener("keydown", handleEscape);
     return () => {
       document.removeEventListener("keydown", handleEscape);
-      document.body.style.overflow = "unset";
     };
   }, [isOpen, onClose]);
 
@@ -228,17 +238,25 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
             exit={{ opacity: 0 }}
           />
 
-          {/* Modal */}
+          {/* Modal panel — T85 PR4a stopgap scroll regression fix.
+              Body scroll lock means this panel can no longer rely on
+              page scroll for tall content; we make the panel a flex
+              column capped at 90vh, with the inner content area
+              scrolling. Header (top) + form CTA (sticky footer) live
+              outside the scroller so they're always reachable. T61
+              modal is the lab-tests stopgap that retires when PR4b
+              ships its dedicated lab basket window — this fix keeps
+              it functional during the PR4a → PR4b gap. */}
           <motion.div
             ref={modalRef}
-            className="relative w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden"
+            className="relative w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
           >
-            {/* Header */}
-            <div className="bg-primary px-6 py-4 flex items-center justify-between">
+            {/* Header (outside scroller) */}
+            <div className="flex-shrink-0 bg-primary px-6 py-4 flex items-center justify-between">
               <h3 className="text-xl font-bold text-white">
                 {modalCopy.headerTitle}
               </h3>
@@ -250,8 +268,13 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
               </button>
             </div>
 
-            {/* Content */}
-            <div className="grid md:grid-cols-2 gap-0">
+            {/* Scroller — flex-1 takes the remaining height; min-h-0
+                is the flex-child overflow incantation (without it, the
+                child's intrinsic height wins and overflow-auto does
+                nothing). overscroll-contain traps scroll gestures
+                inside the modal so the body never sees them — defence
+                in depth alongside useScrollLock. */}
+            <div className="grid md:grid-cols-2 gap-0 flex-1 overflow-y-auto overscroll-contain min-h-0">
               {/* Left - Info */}
               <div className="p-6 lg:p-8 bg-slate-50 border-r border-slate-100">
                 <h4 className="text-lg font-bold text-text-main mb-2">
@@ -324,7 +347,11 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
                     variant="modal"
                   />
                 ) : (
-                  <form onSubmit={handleSubmit} className="space-y-4">
+                  <form
+                    id="t61-booking-form"
+                    onSubmit={handleSubmit}
+                    className="space-y-4"
+                  >
                     <Input
                       label={modalCopy.form.fields.patientNameLabel}
                       icon={User}
@@ -439,43 +466,58 @@ export function BookingModal({ isOpen, onClose }: BookingModalProps) {
                       </span>
                     </div>
 
-                    {/* Submit Status */}
+                    {/* Submit Status — kept inside the form so error
+                        messages render adjacent to the offending input
+                        (not buried at the bottom of the panel). The
+                        CTA itself is lifted to the sticky footer below
+                        via the HTML5 `form="t61-booking-form"`
+                        attribute association. */}
                     {submitStatus && submitStatus.type === 'error' && (
                       <div className="p-3 rounded-lg text-sm flex items-center gap-2 bg-red-50 text-red-700 border border-red-200">
                         <AlertCircle className="w-4 h-4 flex-shrink-0" />
                         {submitStatus.message}
                       </div>
                     )}
-
-                    <Button
-                      type="submit"
-                      variant="primary"
-                      size="lg"
-                      glow
-                      className="w-full"
-                      disabled={isSubmitting}
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          {modalCopy.form.submittingLabel}
-                        </>
-                      ) : (
-                        <>
-                          {modalCopy.form.ctaLabel}
-                          <ArrowRight className="w-4 h-4" />
-                        </>
-                      )}
-                    </Button>
-
-                    <p className="text-center text-xs text-gray-400 flex items-center justify-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {modalCopy.form.responseTimeNote}
-                    </p>
                   </form>
                 )}
               </div>
             </div>
+
+            {/* Sticky footer (outside scroller) — owns the form's
+                submit CTA + response-time note. The button submits the
+                form via HTML5 `form="t61-booking-form"` even though
+                it's no longer a descendant. Only rendered when the
+                form is rendered (not after BookingConfirmation
+                replaces it). */}
+            {!confirmedBooking && (
+              <div className="flex-shrink-0 border-t border-slate-100 bg-white px-6 lg:px-8 py-4 space-y-2">
+                <Button
+                  type="submit"
+                  form="t61-booking-form"
+                  variant="primary"
+                  size="lg"
+                  glow
+                  className="w-full"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {modalCopy.form.submittingLabel}
+                    </>
+                  ) : (
+                    <>
+                      {modalCopy.form.ctaLabel}
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </Button>
+                <p className="text-center text-xs text-gray-400 flex items-center justify-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {modalCopy.form.responseTimeNote}
+                </p>
+              </div>
+            )}
           </motion.div>
         </motion.div>
       )}

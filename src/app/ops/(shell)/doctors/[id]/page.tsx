@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
+import { formatIST } from "@/lib/time/formatIST";
 import { getCurrentOpsUser } from "../../../_lib/getCurrentOpsUser";
 import { computeDoctorFigures, rupees } from "@/lib/doctorFinance";
 import { EditDoctorCard } from "./EditDoctorCard";
@@ -252,7 +253,7 @@ export default async function DoctorDetailPage({
                   return (
                     <tr key={e.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
-                        {new Date(e.entry_date).toLocaleDateString("en-IN")}
+                        {formatIST(e.entry_date, "date")}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span

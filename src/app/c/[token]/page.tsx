@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { isValidConsultJoinTokenFormat } from "@/lib/consult/tokens";
+import { formatIST } from "@/lib/time/formatIST";
 import { PatientJoinClient } from "./PatientJoinClient";
 
 export const metadata: Metadata = {
@@ -202,22 +203,12 @@ export default async function PatientJoinPage({
                 ? <>Booking <span className="font-mono">{data.booking_code}</span></>
                 : <>Booking #{data.session_id.slice(0, 8)}</>}
               {" "}·{" "}
-              {/* Server-side render runs in Netlify's UTC, so toLocaleString
-                  used to emit UTC like "30 May 2026, 1:28 pm" while the
-                  inner scheduled-time pill showed IST "6:58 pm" — same
-                  booking, two different times in the header. Explicit
-                  Asia/Kolkata timezone via Intl.DateTimeFormat forces IST
-                  everywhere this server-renders. Other UTC leakages are
-                  out of scope here — Task #51 sweeps the system. */}
-              {new Intl.DateTimeFormat("en-IN", {
-                timeZone: "Asia/Kolkata",
-                year: "numeric",
-                month: "short",
-                day: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
-                hour12: true,
-              }).format(new Date(data.scheduled_at))}
+              {/* T51: routed through the shared formatIST helper. This
+                  surface was the first site where the IST forcing was
+                  added (consult-room-v1.0 patch) — the inline
+                  Intl.DateTimeFormat that landed then is now consolidated
+                  along with every other datetime in the app. */}
+              {formatIST(data.scheduled_at)}
             </p>
           </div>
 

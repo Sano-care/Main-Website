@@ -1,5 +1,12 @@
 "use client";
 
+/**
+ * @deprecated T85 PR5 — kept ONLY for the dedicated `/lab-tests` page
+ * (rail + drawer variants). Homepage Lab Tests CTA now routes through
+ * T85 PR4b's `LabBasketWindow` (full-screen sheet, service-led). When
+ * `/lab-tests` is rebuilt to use the same window OR retired, this
+ * file goes too.
+ */
 import { useEffect, useState } from "react";
 import {
   ShoppingBag,
@@ -12,7 +19,7 @@ import {
 } from "lucide-react";
 import { useBookingStore } from "@/store/bookingStore";
 import type { AppliedCoupon } from "@/types/lab-coupon";
-import { PathcoreCoBrandStrip } from "@/components/PathcoreCoBrandStrip";
+import { PathcoreCoBrandStrip } from "@/components/lab-tests/PathcoreCoBrandStrip";
 
 interface Props {
   /** When true, basket renders as a sticky right-rail panel (desktop).

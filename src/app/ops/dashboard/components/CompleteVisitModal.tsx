@@ -156,7 +156,10 @@ export function CompleteVisitModal({
                 >
                   {SERVICE_LABELS[booking.service_category] ||
                     booking.service_category}
-                  {booking.amount != null && booking.amount > 0 && ` · ₹${booking.amount.toLocaleString()}`}
+                  {booking.amount != null &&
+                    booking.amount > 0 &&
+                    // eslint-disable-next-line no-restricted-syntax -- Number.toLocaleString for currency, not Date.
+                    ` · ₹${booking.amount.toLocaleString()}`}
                 </p>
               </div>
 

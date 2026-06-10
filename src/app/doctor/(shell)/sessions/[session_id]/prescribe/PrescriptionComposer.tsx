@@ -39,6 +39,7 @@ import {
   LabTestAutocomplete,
   type LabTestSearchResult,
 } from "@/components/rx/LabTestAutocomplete";
+import { formatIST } from "@/lib/time/formatIST";
 
 type ItemRow = {
   ordinal: number;
@@ -765,7 +766,7 @@ function SaveBadge({ savedAt, saving }: { savedAt: Date | null; saving: boolean 
   if (savedAt) {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700">
-        <CheckCircle2 className="w-3 h-3" /> Saved {savedAt.toLocaleTimeString()}
+        <CheckCircle2 className="w-3 h-3" /> Saved {formatIST(savedAt, "time")}
       </span>
     );
   }

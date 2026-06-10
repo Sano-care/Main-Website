@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Video, Clock, CheckCircle2, AlertCircle, FileText } from "lucide-react";
 import type { DoctorWaitingSession } from "../_lib/doctorData";
+import { formatIST } from "@/lib/time/formatIST";
 
 /**
  * Renders the doctor's Duty Room queue. C2 read-only — the doctor uses
@@ -67,10 +68,7 @@ export function DoctorWaitingQueue({
                   <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
                     <span className="inline-flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      {when.toLocaleString("en-IN", {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })}
+                      {formatIST(when)}
                     </span>
                     <span className="font-mono uppercase text-[10px] tracking-wider bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
                       {s.modality === "teleconsultation" ? "telecon" : "vc home"}

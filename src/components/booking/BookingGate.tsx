@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ShieldCheck, X, Phone as PhoneIcon, Loader2, ArrowRight, AlertCircle, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui";
 import { useBookingStore } from "@/store/bookingStore";
+import { useScrollLock } from "@/hooks/useScrollLock";
 
 // Keep in sync with token.ts. Duplicated here so the gate doesn't need to
 // import a server-only module.
@@ -91,6 +92,11 @@ type Step = "phone" | "otp";
 export function BookingGate({ isOpen, onClose, onVerified }: BookingGateProps) {
   const setPhoneVerified = useBookingStore((s) => s.setPhoneVerified);
   const setDetails = useBookingStore((s) => s.setDetails);
+
+  // T85 PR4a bug 2 fix — body scroll lock. Shared ref-counted hook
+  // means the gate→modal handoff (gate releases at the same instant
+  // the modal acquires) is glitch-free.
+  useScrollLock(isOpen);
 
   const [step, setStep] = useState<Step>("phone");
   const [phoneDigits, setPhoneDigits] = useState(""); // 10 local digits only
@@ -182,6 +188,11 @@ export function BookingGate({ isOpen, onClose, onVerified }: BookingGateProps) {
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         phone?: string;
+        // T64: verify-otp now also returns the resolved customers row
+        // identity (auto-upserted for fresh phones; null full_name when
+        // no name has ever been captured).
+        customer_id?: string | null;
+        full_name?: string | null;
         error?: string;
       };
       if (!res.ok || !json.ok) {
@@ -190,7 +201,12 @@ export function BookingGate({ isOpen, onClose, onVerified }: BookingGateProps) {
       }
       const verifiedPhone = json.phone ?? e164;
       const untilMs = Date.now() + TOKEN_TTL_MS;
-      setPhoneVerified(verifiedPhone, untilMs);
+      // T64: pass full_name through so IdentifyStep + LabBasketWindow can
+      // pre-fill their name input for returning patients. null is the
+      // explicit "no name yet" signal (vs. undefined which would preserve
+      // a stale value from a previous session).
+      const verifiedFullName = json.full_name ?? null;
+      setPhoneVerified(verifiedPhone, untilMs, verifiedFullName);
       // Mirror the verified phone into the booking form's phone field so
       // the next step renders with phone pre-filled and locked.
       setDetails({ phone: formatPhoneForDisplay(verifiedPhone) });

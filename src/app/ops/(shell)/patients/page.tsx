@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Search, Plus } from "lucide-react";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
+import { formatIST } from "@/lib/time/formatIST";
 import {
   bookingAmountRupees,
   classifyBookingPayment,
@@ -255,7 +256,7 @@ export default async function PatientsListPage({
                       <td className="px-5 py-3 text-slate-600">{c.email ?? "—"}</td>
                       <td className="px-5 py-3 text-slate-600">{c.city ?? "—"}</td>
                       <td className="px-5 py-3 text-slate-500 text-xs whitespace-nowrap">
-                        {new Date(c.created_at).toLocaleDateString("en-IN")}
+                        {formatIST(c.created_at, "date")}
                       </td>
                     </tr>
                   );

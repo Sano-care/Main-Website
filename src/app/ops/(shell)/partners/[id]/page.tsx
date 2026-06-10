@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
+import { formatIST } from "@/lib/time/formatIST";
 
 export const metadata: Metadata = {
   title: "Ops · Partner detail",
@@ -88,7 +89,7 @@ export default async function PartnerDetailPage({
             )}
           </div>
           <div className="text-sm text-slate-600 mt-1">
-            Created {new Date(partner.created_at).toLocaleString("en-IN")}
+            Created {formatIST(partner.created_at)}
           </div>
         </div>
       </div>

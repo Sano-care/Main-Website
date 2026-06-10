@@ -63,7 +63,7 @@ export const SANOPULSE_PAGE_CONTENT = {
         icon: Calendar,
         title: "Book a visit in 60 seconds",
         description:
-          "Pick a service, confirm your address with GPS, and pay ₹249 to confirm. The remaining balance is auto-charged when the doctor closes your case.",
+          "Pick a service, confirm your address with GPS, and pay 50% to confirm. The remaining balance is auto-charged when the doctor closes your case.",
       },
       {
         icon: MapPin,

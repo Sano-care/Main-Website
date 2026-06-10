@@ -5,7 +5,7 @@ import { LEGAL_CONTENT } from "@/constants/cms-content";
 export const metadata: Metadata = {
   title: "Refund & Cancellation Policy",
   description:
-    "Full refund of the ₹249 booking fee before medic dispatch. Honest, customer-friendly cancellation terms with clear timelines.",
+    "Full refund of the booking fee before medic dispatch. Honest, customer-friendly cancellation terms with clear timelines.",
   alternates: { canonical: "/refund" },
 };
 

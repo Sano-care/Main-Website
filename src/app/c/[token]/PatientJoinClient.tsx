@@ -12,6 +12,8 @@ import {
   Clock,
 } from "lucide-react";
 import { useSessionAdmitState } from "@/lib/realtime/useSessionAdmitState";
+import { formatIST } from "@/lib/time/formatIST";
+import { useScrollLock } from "@/hooks/useScrollLock";
 
 /**
  * The interactive part of /c/[token]. Drives the patient's journey from
@@ -161,22 +163,15 @@ export function PatientJoinClient({
   // it to destroy on unmount.
   const frameRef = useRef<DailyFrameLike | null>(null);
 
-  // ===== Body scroll lock during in-call (v6) =====
+  // ===== Body scroll lock during in-call (T85 PR5 port) =====
   //
-  // When the Daily iframe goes fullscreen, lock document.body
-  // overflow so the patient can't accidentally scroll the host page
-  // behind the iframe (iOS Safari rubber-band, scroll wheel on
-  // desktop, etc.). Restored on cleanup so the consent screen,
-  // ended-state surface, and parent page chrome all scroll normally
-  // outside the in-call window.
-  useEffect(() => {
-    if (state !== "in-call") return;
-    const original = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = original;
-    };
-  }, [state]);
+  // Was previously inline `overflow: hidden` (v6); replaced with the
+  // shared `useScrollLock` hook (position:fixed pattern, ref-counted,
+  // iOS-safe). Same intent — when the Daily iframe goes fullscreen,
+  // the patient can't accidentally scroll the host page behind the
+  // iframe (iOS Safari rubber-band, scroll wheel on desktop, etc.).
+  // Releases automatically on state transition or unmount.
+  useScrollLock(state === "in-call");
 
   // ===== Mount Daily Prebuilt EXACTLY ONCE per dailyArgs lifecycle =====
   //
@@ -575,13 +570,8 @@ export function PatientJoinClient({
   // it flips non-null, the [admittedAt, state] effect calls
   // mintAndJoin() which transitions us into "joining".
   if (state === "waiting-room") {
-    const scheduled = new Date(scheduledAt);
-    const scheduledLabel = Number.isFinite(scheduled.getTime())
-      ? scheduled.toLocaleString("en-IN", {
-          dateStyle: "medium",
-          timeStyle: "short",
-        })
-      : null;
+    const scheduledFormatted = formatIST(scheduledAt);
+    const scheduledLabel = scheduledFormatted === "—" ? null : scheduledFormatted;
     // "Send to Waiting" re-entry: the patient was already in-call and
     // the doctor pushed them back. M031: wasEverAdmitted is the
     // server-derived signal (true iff consultation_sessions.

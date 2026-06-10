@@ -8,6 +8,7 @@ import {
   type DoctorRxDetail,
 } from "../../../_lib/prescriptionData";
 import { getCurrentDoctor } from "../../../_lib/getCurrentDoctor";
+import { formatIST } from "@/lib/time/formatIST";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { AmendButton, VoidButton } from "./RxDetailActions";
 
@@ -157,7 +158,7 @@ export default async function DoctorRxDetail({
           )}
           {rx.sent_at && (
             <div className="text-[11px] text-slate-500 mt-1">
-              Sent {formatWhen(rx.sent_at)}
+              Sent {formatIST(rx.sent_at)}
             </div>
           )}
         </DetailCard>
@@ -314,13 +315,3 @@ function sexLabel(s: "M" | "F" | "O" | "U"): string {
   return { M: "Male", F: "Female", O: "Other", U: "Unspecified" }[s];
 }
 
-function formatWhen(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}

@@ -8,7 +8,8 @@ import { QuickCategories } from "./QuickCategories";
 import { LabTestsBanner } from "./LabTestsBanner";
 import { LabTestSearch } from "@/components/lab/LabTestSearch";
 import { LabTestBasket } from "@/components/lab/LabTestBasket";
-import { PathcoreCoBrandStrip } from "@/components/PathcoreCoBrandStrip";
+import { PathcoreCoBrandStrip } from "@/components/lab-tests/PathcoreCoBrandStrip";
+import { PathcoreAboutSection } from "@/components/lab-tests/PathcoreAboutSection";
 
 export const metadata: Metadata = {
   title: "Lab Tests at Home — Search 1,900+ Tests · Sanocare",
@@ -37,9 +38,12 @@ export default function LabTestsPage() {
           <LabTestsBanner />
         </Suspense>
 
-        {/* Diagnostics co-brand strip — names Pathcore as the processing
-            lab. Sits above the hero so the partnership reads first. */}
-        <PathcoreCoBrandStrip />
+        {/* T28: Pathcore co-brand strip relocated from above-the-hero
+            (its prior position) to inside the hero, between the intro
+            paragraph and the search input — per founder direction
+            2026-06-09. Strip rewritten to headline-only (claims about
+            AIIMS / PGIMER training + "40+ years" stripped, deferred
+            pending Pathcore written sign-off). */}
 
         {/* Hero with search + basket right-rail (desktop). Basket is a bottom
             drawer on mobile, anchored at the bottom of the page. */}
@@ -59,11 +63,17 @@ export default function LabTestsPage() {
             <h1 className="text-4xl lg:text-5xl font-bold tracking-tight text-text-main mb-4">
               Find the price of any lab test we offer.
             </h1>
-            <p className="text-lg text-text-secondary max-w-2xl mb-8">
+            <p className="text-lg text-text-secondary max-w-2xl mb-6">
               Search 1,900+ tests across pathology, biochemistry, oncology, and
               genetics. <strong>Free home collection</strong> — you pay only for
               the test. Reports flow back into your Sanocare record.
             </p>
+
+            {/* T28: Pathcore co-brand strip — between the page intro
+                and the search input. */}
+            <div className="mb-8">
+              <PathcoreCoBrandStrip />
+            </div>
 
             <LabTestSearch variant="hero" />
 
@@ -170,6 +180,11 @@ export default function LabTestsPage() {
             </p>
           </div>
         </section>
+
+        {/* T28: About Pathcore Diagnostics — collapsible, below all
+            lab listings + CTAs, above the footer. Locked conservative
+            copy; no accreditation / AIIMS / "40+ years" claims. */}
+        <PathcoreAboutSection />
       </main>
 
       <Footer />

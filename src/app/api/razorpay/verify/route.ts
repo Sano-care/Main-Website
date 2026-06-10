@@ -6,6 +6,30 @@ import {
   normaliseIndianPhone,
   verifyToken,
 } from "@/lib/otp/token";
+import { sendAarogyaLeadAlert } from "@/lib/booking/rampwin";
+import { sendBookingConfirmed } from "@/lib/aarogya/rampwin";
+import { formatLeadAlertContext } from "@/lib/booking/contextFormat";
+import {
+  validatePatientName,
+  lookupCustomerIdByPhone,
+} from "@/lib/booking/customerLink";
+import {
+  dbToT85Slug,
+  t85ServiceDisplayName,
+  t85ToPricingKey,
+} from "@/lib/booking/serviceMapper";
+import {
+  getServiceHalfRoundedUp,
+  getServiceRemainingAfterHalf,
+} from "@/constants/pricing";
+import type { ServiceSlug } from "@/lib/services/catalog";
+
+const VALID_T85_SLUGS: ServiceSlug[] = [
+  "home-visit",
+  "teleconsultation",
+  "lab-tests",
+  "medic-at-home",
+];
 
 export const runtime = "nodejs";
 
@@ -113,13 +137,67 @@ export async function POST(req: NextRequest) {
       ? null
       : "📍 Location auto-capture declined or unavailable — confirm address with patient before dispatch.";
 
+    // T85 PR4a — if the booking carries a T85 slug, write that as the
+    // service_category (post-M039 widening accepts both legacy and T85
+    // values). booking_fee_paid_paise is server-computed from the slug
+    // via getServiceHalfRoundedUp so a tampered client value can't
+    // mark a booking as fully prepaid at a lower amount.
+    const t85SlugRaw = String(booking.t85Slug || "").trim();
+    const t85Slug = (VALID_T85_SLUGS as string[]).includes(t85SlugRaw)
+      ? (t85SlugRaw as ServiceSlug)
+      : null;
+    const persistedServiceCategory = t85Slug
+      ? t85Slug
+      : String(booking.service_category || "").trim();
+    const persistedFeePaise = t85Slug
+      ? getServiceHalfRoundedUp(t85ToPricingKey(t85Slug)) * 100
+      : 24_900; // Legacy ₹249 flat — unchanged for existing callers.
+
+    // T85 PR4a — schedule snapshot. ASAP rows get null in scheduled_for;
+    // slot rows get the ISO start of the 1-hour window. ops surfaces
+    // can read scheduled_for to dispatch correctly. Until M040 adds a
+    // typed column for this, we round-trip via ops_notes so PR4a doesn't
+    // need another migration.
+    const scheduledMarker =
+      booking.scheduledFor && typeof booking.scheduledFor === "object"
+        ? booking.scheduledFor.kind === "slot" && booking.scheduledFor.iso
+          ? `🗓 Scheduled: ${String(booking.scheduledFor.iso)}`
+          : "🗓 ASAP"
+        : "";
+
+    const composedOpsNotes = [opsNotesMarker, scheduledMarker]
+      .filter(Boolean)
+      .join("\n");
+
+    // customer-link-hotpatch: validate patient_name server-side. The
+    // client (LabBasketWindow / IdentifyStep) gates on the same rules,
+    // but server validation is the actual contract — silent corruption
+    // beats a 400, but a 400 beats writing "Patient" into the DB.
+    const nameValidation = validatePatientName(booking.patient_name);
+    if (!nameValidation.ok) {
+      return NextResponse.json(
+        { error: nameValidation.error, razorpay_payment_id },
+        { status: 400 },
+      );
+    }
+
+    // customer-link-hotpatch: look up existing customer by phone and link
+    // it. SAN-B-00058/00059 both had matching customers that this path
+    // was never querying. customer_id stays NULL when no match exists
+    // (T64 PR1 adds the auto-create path).
+    const insertCustomerId = await lookupCustomerIdByPhone(
+      supabase,
+      String(booking.phone || "").trim(),
+    );
+
     const insertPayload = {
-      patient_name: String(booking.patient_name || "").trim(),
+      patient_name: nameValidation.name,
       phone: String(booking.phone || "").trim(),
-      service_category: String(booking.service_category || "").trim(),
+      customer_id: insertCustomerId,
+      service_category: persistedServiceCategory,
       manual_address: String(booking.manual_address || "").trim(),
       gps_location: booking.gps_location ?? null,
-      ops_notes: opsNotesMarker,
+      ops_notes: composedOpsNotes || null,
       amount: typeof booking.amount === "number" ? booking.amount : null,
       status: "CONFIRMED",
       // Payment fields — see migration 007_razorpay_payments.sql for schema.
@@ -127,7 +205,7 @@ export async function POST(req: NextRequest) {
       razorpay_payment_id,
       razorpay_signature,
       payment_status: "CAPTURED",
-      booking_fee_paid_paise: 24_900,
+      booking_fee_paid_paise: persistedFeePaise,
       payment_captured_at: new Date().toISOString(),
       // From migration 011 — stamps the OTP-verified moment so ops can
       // audit which bookings went through the phone gate.
@@ -137,7 +215,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase
       .from("bookings")
       .insert(insertPayload)
-      .select("id")
+      .select("id, booking_code")
       .single();
 
     if (error) {
@@ -152,7 +230,115 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ ok: true, bookingId: data?.id });
+    // T64: customer first-write-wins. Sets the customer's display name
+    // on their FIRST booking only. Subsequent bookings for family
+    // members or under different names don't overwrite (the
+    // `is('full_name', null)` filter is the gate). Patient can later
+    // update via Pulse profile editing (T70/T71). Soft-fail discipline
+    // matches the lead-alert pattern — logged + swallowed.
+    if (insertCustomerId) {
+      try {
+        const { error: nameWriteErr } = await supabase
+          .from("customers")
+          .update({ full_name: nameValidation.name })
+          .eq("id", insertCustomerId)
+          .is("full_name", null);
+        if (nameWriteErr) {
+          console.error(
+            "[razorpay/verify] customer first-write full_name failed:",
+            nameWriteErr,
+          );
+        }
+      } catch (cause) {
+        console.error(
+          "[razorpay/verify] customer first-write threw unexpectedly",
+          cause,
+        );
+      }
+    }
+
+    // T85 PR4a + leadalert-hotfix — best-effort ops alert.
+    // `sendAarogyaLeadAlert` swallows its own errors (logged via
+    // console.error) and never throws here, so the booking response
+    // stays authoritative regardless of BSP hiccups.
+    //
+    // We `await` (not `void`) deliberately: PR4a originally fired this
+    // promise-style on the theory that Netlify Functions would honor the
+    // pending fetch before container teardown. Prod smoke on Case
+    // #SAN-B-00058 (2026-06-08) confirmed that theory is wrong — the
+    // serverless function freezes immediately on response, and the
+    // pending Rampwin fetch never executes. OTPs work because their send
+    // is already awaited (the response depends on send success). Same
+    // BSP creds, same wire shape — only call pattern differs. The
+    // ~200–800ms latency hit is acceptable; ops needs the alert.
+    const displaySlug =
+      t85Slug ?? dbToT85Slug(persistedServiceCategory) ?? "home-visit";
+
+    // T85 PR4b v2 — `{{5}}` Context is now a standardized payment
+    // summary via formatLeadAlertContext (single source of truth in
+    // contextFormat.ts). Non-lab services use 'partial-advance-50':
+    // paid = half, total = full = half + remaining. The "notes" half
+    // of the format defaults to "—" since PR4a doesn't surface a
+    // notes input — when a future iteration adds one, pass it as the
+    // first arg.
+    const totalInr = t85Slug
+      ? getServiceHalfRoundedUp(t85ToPricingKey(t85Slug)) +
+        getServiceRemainingAfterHalf(t85ToPricingKey(t85Slug))
+      : Math.round(persistedFeePaise / 100) * 2;
+    const contextText = formatLeadAlertContext(undefined, {
+      paidPaise: persistedFeePaise,
+      totalPaise: totalInr * 100,
+      mode: "partial-advance-50",
+    });
+
+    // Slice 2a — fire the ops lead alert AND the patient booking
+    // confirmation concurrently. Both senders are best-effort (never
+    // throw); Promise.allSettled keeps one failure from blocking the
+    // other and parallelizes the two BSP round-trips so the patient
+    // template adds no extra sequential latency on top of the alert.
+    const bookingRef = data?.booking_code ?? data?.id ?? "?";
+    try {
+      await Promise.allSettled([
+        sendAarogyaLeadAlert({
+          patientName: insertPayload.patient_name,
+          // Age is not collected in PR4a Step 1 — defaults to "—y" in the
+          // sender. T64 (family-member picker) extends Step 1 with age
+          // and can pass `ageWithYearSuffix` here once it ships.
+          serviceDisplayName: t85ServiceDisplayName(displaySlug),
+          location: insertPayload.manual_address,
+          context: contextText,
+          patientPhone: insertPayload.phone,
+        }).then(({ delivered }) =>
+          console.log(
+            `[razorpay/verify] aarogya_lead_alert dispatch: delivered=${delivered} booking=${bookingRef}`,
+          ),
+        ),
+        sendBookingConfirmed({
+          patientName: insertPayload.patient_name,
+          serviceSlug: displaySlug,
+          bookingCode: data?.booking_code ?? "",
+          patientPhone: insertPayload.phone,
+        }).then(({ delivered }) =>
+          console.log(
+            `[razorpay/verify] sanocare_booking_confirmed dispatch: delivered=${delivered} booking=${bookingRef}`,
+          ),
+        ),
+      ]);
+    } catch (alertErr) {
+      // Both senders are documented never to throw, and allSettled never
+      // rejects — defense in depth so no dispatch path can bubble into
+      // the booking response. The booking row is the source of truth.
+      console.error(
+        "[razorpay/verify] template dispatch threw unexpectedly",
+        alertErr,
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      bookingId: data?.id,
+      bookingCode: data?.booking_code ?? null,
+    });
   } catch (err) {
     console.error("[razorpay/verify] error:", err);
     const message =

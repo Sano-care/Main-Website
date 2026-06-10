@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
+import { formatIST } from "@/lib/time/formatIST";
 import {
   BOOKING_STATUSES,
   STATUS_STYLE,
@@ -19,7 +20,9 @@ import {
   assignDoctor,
   assignParamedic,
   assignPartner,
+  confirmLabCollection,
 } from "../actions";
+import { serviceCategoryToSlug } from "@/lib/aarogya/labels";
 
 export const metadata: Metadata = {
   title: "Ops · Booking detail",
@@ -71,6 +74,9 @@ type BookingDetail = {
   assigned_paramedic_id: string | null;
   assigned_partner_id: string | null;
   assigned_by: string | null;
+  // Legacy text phlebotomist column — used by Slice 2a lab-collection
+  // confirmation (lab bookings don't flow through assigned_paramedic_id).
+  assigned_paramedic: string | null;
   customer: {
     id: string;
     customer_code: string;
@@ -208,7 +214,8 @@ export default async function BookingDetailPage({
      assigned_at, dispatched_at, completed_at, cancelled_at,
      cancellation_reason, ops_notes,
      customer_id, partner_id, doctor_id,
-     assigned_paramedic_id, assigned_partner_id, assigned_by`;
+     assigned_paramedic_id, assigned_partner_id, assigned_by,
+     assigned_paramedic`;
 
   const UUID_RE =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -473,11 +480,11 @@ export default async function BookingDetailPage({
             {booking.customer?.full_name ?? booking.patient_name}
           </h1>
           <div className="text-sm text-slate-600 mt-1">
-            Created {new Date(booking.created_at).toLocaleString("en-IN")}
+            Created {formatIST(booking.created_at)}
             {booking.scheduled_for && (
               <>
                 {" · Scheduled "}
-                {new Date(booking.scheduled_for).toLocaleString("en-IN")}
+                {formatIST(booking.scheduled_for)}
               </>
             )}
           </div>
@@ -678,15 +685,7 @@ export default async function BookingDetailPage({
           <div className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2 mb-6 text-[11px] text-slate-600">
             Last assignment{" "}
             <span className="font-mono">
-              {new Intl.DateTimeFormat("en-IN", {
-                timeZone: "Asia/Kolkata",
-                year: "numeric",
-                month: "short",
-                day: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
-                hour12: true,
-              }).format(new Date(booking.assigned_at))}
+              {formatIST(booking.assigned_at)}
             </span>
             {booking.assigned_by_user
               ? <> by <span className="font-medium">{booking.assigned_by_user.full_name}</span></>
@@ -962,6 +961,65 @@ export default async function BookingDetailPage({
         </div>
       </div>
 
+      {/* Slice 2a — lab collection confirmation. Lab bookings don't flow
+          through the medic picker (that's gated to homecare/chronic), so
+          this is the affordance that records the phlebotomist + slot and
+          texts the patient (sanocare_lab_collection_scheduled). Only
+          shown for lab-test bookings. */}
+      {serviceCategoryToSlug(booking.service_category) === "lab-tests" && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
+          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-3">
+            Confirm lab collection
+          </div>
+          <form
+            action={confirmLabCollection}
+            className="grid sm:grid-cols-2 gap-3"
+          >
+            <input type="hidden" name="booking_id" value={booking.id} />
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">
+                Phlebotomist name
+              </label>
+              <input
+                type="text"
+                name="phlebotomist_name"
+                required
+                defaultValue={booking.assigned_paramedic ?? ""}
+                placeholder="e.g. Rahul Verma"
+                disabled={isCancelled}
+                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm disabled:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">
+                Collection slot
+              </label>
+              <input
+                type="datetime-local"
+                name="scheduled_for"
+                required
+                defaultValue={toLocalInput(booking.scheduled_for)}
+                disabled={isCancelled}
+                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm disabled:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+              />
+            </div>
+            <div className="sm:col-span-2 flex items-center gap-3">
+              <button
+                type="submit"
+                disabled={isCancelled}
+                className="bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+              >
+                Confirm & notify patient
+              </button>
+              <p className="text-xs text-slate-500">
+                Texts the patient their phlebotomist + slot. Time window
+                (7-10 AM / 5-8 PM) is set from the slot time.
+              </p>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* C2-Rx: prescriptions linked to this booking. Lists every Rx
           (across versions) so ops can resend or jump into a detail
           surface. Most bookings have zero or one; teleconsult chains
@@ -1028,7 +1086,7 @@ export default async function BookingDetailPage({
           <div className="text-sm text-slate-800">
             Cancelled{" "}
             {booking.cancelled_at
-              ? new Date(booking.cancelled_at).toLocaleString("en-IN")
+              ? formatIST(booking.cancelled_at)
               : "(no timestamp)"}
           </div>
           {booking.cancellation_reason && (
@@ -1086,7 +1144,7 @@ function Stamp({ label, iso }: { label: string; iso: string | null }) {
     <div>
       <span className="text-xs text-slate-500">{label}: </span>
       <span className="text-sm text-slate-800">
-        {iso ? new Date(iso).toLocaleString("en-IN") : "—"}
+        {formatIST(iso)}
       </span>
     </div>
   );
@@ -1193,12 +1251,7 @@ async function BookingPrescriptionsSection({
                   )
                 )}
                 <span className="text-slate-500">
-                  {new Date(r.sent_at ?? r.created_at).toLocaleString("en-IN", {
-                    day: "2-digit",
-                    month: "short",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  {formatIST(r.sent_at ?? r.created_at)}
                 </span>
               </div>
             </li>
