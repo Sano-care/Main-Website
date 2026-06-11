@@ -34,6 +34,11 @@ import {
 } from "../_lib/vitalsDisplay";
 import { doseVisual } from "../_lib/medsDisplay";
 import EmergencyRibbon from "./_components/EmergencyRibbon";
+import PulseBookingPhonePrime from "./_components/PulseBookingPhonePrime";
+import PulseHomeTiles from "./_components/PulseHomeTiles";
+import SnapshotDivider from "./_components/SnapshotDivider";
+import ViewingSubLine from "./_components/ViewingSubLine";
+import { getGreeting } from "./_lib/greeting";
 
 // Pulse home — two hero tiles (today's vitals + today's medications) over the
 // existing recent-activity card, per Sanocare_Pulse_Web_Mockup_v1.html. Fully
@@ -70,7 +75,10 @@ async function PulseHomeBody() {
   // The (authed) layout already redirects to /pulse/login on null. This
   // guard is purely for TypeScript narrowing.
   if (!customer) return null;
-  const firstName = customer.full_name?.trim().split(/\s+/)[0] ?? "there";
+  // T90 Slice 2 Step 11: greeting is server-rendered via getGreeting() to
+  // avoid a hydration mismatch on the time-of-day text. firstName extraction
+  // happens inside the helper (defensive) — we pass full_name directly.
+  const greeting = getGreeting(customer.full_name);
 
   const [latestVitals, todaySchedule, recent, familyCount] = await Promise.all([
     getLatestVitalsByKind(customer.id),
@@ -103,19 +111,33 @@ async function PulseHomeBody() {
       {/* the home zone (one-shot per mount, debounced). */}
       <EmergencyRibbon />
 
-      {/* Greeting — Step 12 (home restructure) rewrites this zone per */}
-      {/* brief Surface 6. Step 08 just retires the in-card ProfileMenu */}
-      {/* chip (now lives in the AppBar avatar menu). */}
-      <div className="bg-primary px-5 pb-6 pt-6 text-white">
-        <p className="text-xs text-white/70">
-          {formatIST(new Date(), "dateLong")}
-        </p>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight">
-          Hi {firstName} 👋
-        </h1>
-      </div>
+      {/* T90 Slice 2 Step 11 — phone-verified prime. Renders null; */}
+      {/* seeds bookingStore.phoneVerifiedUntil from the live Pulse */}
+      {/* cookie so tile-tap booking flows skip the redundant OTP gate. */}
+      <PulseBookingPhonePrime />
 
-      <main className="mx-auto max-w-2xl space-y-3 px-4 pb-20 pt-4">
+      <main className="mx-auto max-w-2xl space-y-4 px-4 pb-20 pt-5">
+        {/* T90 Slice 2 Step 11 — Greeting zone. Date + time-aware */}
+        {/* greeting (server-rendered) + viewing sub-line (client, */}
+        {/* conditional). Drops the old blue-band greeting card. */}
+        <header className="space-y-0.5">
+          <p className="text-xs uppercase tracking-wider text-gray-500">
+            {formatIST(new Date(), "dateLong")}
+          </p>
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
+            {greeting} <span aria-hidden="true">👋</span>
+          </h1>
+          <ViewingSubLine />
+        </header>
+
+        {/* T90 Slice 2 Step 11 — Tile grid (Surface 6 hero zone). */}
+        {/* 4 booking entries, 2×2 on every breakpoint. */}
+        <PulseHomeTiles />
+
+        {/* T90 Slice 2 Step 11 — Snapshot section divider. Label */}
+        {/* tracks the active viewing target via MemberViewingContext. */}
+        <SnapshotDivider />
+
         {/* Today's vitals tile */}
         <SectionReveal>
           <section className="rounded-2xl bg-white p-4 shadow-md">
