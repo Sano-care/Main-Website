@@ -2,6 +2,44 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AppliedCoupon } from '@/types/lab-coupon';
 import type { ServiceSlug } from '@/lib/services/catalog';
+import type { FamilyMember } from '@/lib/family-members/types';
+
+/**
+ * T90 Slice 2 Step 12 — booking-flow entry-point provenance.
+ *
+ * The four bookingStore-driven overlays are now mounted in TWO trees
+ * (Navbar for marketing, PulseChrome for /pulse). When a booking is
+ * dispatched, the modal needs to know which tree triggered it so the
+ * Step 0 MemberConfirmStep only shows for Pulse-side bookings. Stored
+ * here rather than prop-drilled through BookingFlowMounts because the
+ * trigger component (PulseHomeTiles, etc.) owns the value, not the
+ * mount-site component.
+ *
+ * 'marketing' is the default — Navbar / ServiceSection / etc. don't
+ * need to set it. Pulse triggers explicitly set 'pulse' before dispatch.
+ *
+ * Reset in closeModal / closeLabBasket / closeGate (NOT persisted)
+ * so a marketing visit from the same browser doesn't inherit Pulse state.
+ */
+export type EntryPoint = 'marketing' | 'pulse';
+
+/**
+ * T90 Slice 2 Step 12 — who the Pulse booking is for.
+ *
+ * `null` = no Pulse context (marketing entry, or Pulse entry hasn't
+ * resolved viewing-state yet).
+ * `{ kind: 'self' }` = explicit "Booking for yourself" — caregiver
+ * is themselves the patient. Modal hides chevron + Change link.
+ * `{ kind: 'member', member }` = "Booking for {member.name}" — the
+ * caregiver is booking on behalf of a family member. Modal shows
+ * the relation line + age + Change link, populates patient_name +
+ * member_id from `member`.
+ *
+ * Reset alongside entryPoint.
+ */
+export type PulseEntryMember =
+  | { kind: 'self' }
+  | { kind: 'member'; member: FamilyMember };
 
 export type GPSLocation = { lat: number; lng: number; accuracy: number };
 
@@ -100,6 +138,13 @@ export type BookingState = {
    * verifiedPhone).
    */
   verifiedFullName: string | null;
+  /**
+   * T90 Slice 2 Step 12 — entryPoint provenance + Pulse booking subject.
+   * Both are session-only (NOT persisted) and reset on closeModal /
+   * closeLabBasket / closeGate so the next booking starts clean.
+   */
+  entryPoint: EntryPoint;
+  pulseEntryMember: PulseEntryMember | null;
 
   setDetails: (details: Partial<BookingState>) => void;
   setGPSLocation: (gps: GPSLocation | null) => void;
@@ -131,6 +176,10 @@ export type BookingState = {
     fullName?: string | null,
   ) => void;
   clearPhoneVerified: () => void;
+  /** T90 Slice 2 Step 12 — set provenance before dispatching a booking. */
+  setEntryPoint: (entryPoint: EntryPoint) => void;
+  /** T90 Slice 2 Step 12 — set Pulse booking subject (self vs family member). */
+  setPulseEntryMember: (m: PulseEntryMember | null) => void;
   reset: () => void;
   resetForNewBooking: () => void;
 };
@@ -156,6 +205,8 @@ const initialState = {
   phoneVerifiedUntil: null as number | null,
   verifiedPhone: null as string | null,
   verifiedFullName: null as string | null,
+  entryPoint: 'marketing' as EntryPoint,
+  pulseEntryMember: null as PulseEntryMember | null,
 };
 
 const BOOKING_EXPIRY_TIME = 30 * 60 * 1000;
@@ -191,11 +242,29 @@ export const useBookingStore = create<BookingState>()(
       setAppliedCoupon: (appliedCoupon) => set({ appliedCoupon }),
       clearAppliedCoupon: () => set({ appliedCoupon: null }),
       openModal: () => set({ isModalOpen: true }),
-      closeModal: () => set({ isModalOpen: false }),
+      // T90 Slice 2 Step 12 — reset Pulse provenance on every close.
+      // Hygiene: the next dispatch (could be a different surface, even
+      // a different user on a shared browser) must start clean.
+      closeModal: () =>
+        set({
+          isModalOpen: false,
+          entryPoint: 'marketing',
+          pulseEntryMember: null,
+        }),
       openGate: () => set({ isGateOpen: true }),
-      closeGate: () => set({ isGateOpen: false }),
+      closeGate: () =>
+        set({
+          isGateOpen: false,
+          entryPoint: 'marketing',
+          pulseEntryMember: null,
+        }),
       openLabBasket: () => set({ isLabBasketOpen: true }),
-      closeLabBasket: () => set({ isLabBasketOpen: false }),
+      closeLabBasket: () =>
+        set({
+          isLabBasketOpen: false,
+          entryPoint: 'marketing',
+          pulseEntryMember: null,
+        }),
       setLocating: (isLocating) => set({ isLocating }),
       setSubmitting: (isSubmitting) => set({ isSubmitting }),
       setLocationError: (locationError) => set({ locationError }),
@@ -217,6 +286,8 @@ export const useBookingStore = create<BookingState>()(
           phoneVerifiedUntil: null,
           verifiedFullName: null,
         }),
+      setEntryPoint: (entryPoint) => set({ entryPoint }),
+      setPulseEntryMember: (pulseEntryMember) => set({ pulseEntryMember }),
       reset: () => set(initialState),
       resetForNewBooking: () =>
         set({
@@ -234,6 +305,8 @@ export const useBookingStore = create<BookingState>()(
           isLocating: false,
           isSubmitting: false,
           locationError: null,
+          entryPoint: 'marketing',
+          pulseEntryMember: null,
         }),
     }),
     {
