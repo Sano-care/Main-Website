@@ -20,17 +20,23 @@ export default function NotFound() {
       {/* Simple Header */}
       <header className="border-b border-slate-100 bg-white/80 backdrop-blur-sm">
         <div className="max-w-[1400px] mx-auto px-6 lg:px-12 h-20 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 group">
+          <Link
+            href="/"
+            className="flex items-center group"
+            aria-label="Sanocare home"
+          >
+            {/* T90 Step 09 patch 2 (2026-06-12): canonical Sanocare
+                lockup, replacing the prior /logo.svg square icon +
+                hand-rolled "Sano(italic)care" wordmark. Mirrors the
+                Step-08-fold-in-2 swap on /pulse/login. */}
             <Image
-              src="/logo.svg"
+              src="/sanocare-lockup.svg"
               alt={notFoundCopy.logoAlt}
-              width={40}
-              height={40}
-              className="w-10 h-10"
+              width={140}
+              height={32}
+              priority
+              className="h-8 w-auto"
             />
-            <h2 className="text-2xl font-serif font-bold tracking-tight text-text-main">
-              {notFoundCopy.brandWordmarkPrefix}<span className="text-primary font-normal italic">{notFoundCopy.brandWordmarkHighlight}</span>
-            </h2>
           </Link>
         </div>
       </header>
