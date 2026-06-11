@@ -36,6 +36,20 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE}/portal`,        changeFrequency: "monthly", priority: 0.5, lastModified: now },
   ];
 
+  // Dedicated SEO service landing pages (/services/[slug]). Keep this list
+  // in sync with src/app/services/[slug]/serviceContent.ts.
+  const servicePages: MetadataRoute.Sitemap = [
+    "doctor-home-visit-delhi",
+    "home-nurse-delhi-ncr",
+    "lab-tests-at-home-delhi",
+    "online-doctor-consultation-india",
+  ].map((slug) => ({
+    url: `${SITE}/services/${slug}`,
+    changeFrequency: "monthly",
+    priority: 0.8,
+    lastModified: now,
+  }));
+
   // Legal pages — important for credibility + Razorpay KYC
   const legal: MetadataRoute.Sitemap = [
     { url: `${SITE}/privacy`,   changeFrequency: "yearly", priority: 0.5, lastModified: now },
@@ -54,5 +68,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
     lastModified: now,
   }));
 
-  return [...marketing, ...legal, ...blog];
+  return [...marketing, ...servicePages, ...legal, ...blog];
 }
