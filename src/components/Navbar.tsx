@@ -21,12 +21,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { Menu, Phone } from "lucide-react";
 import { Button } from "@/components/ui";
-import { BookingModal } from "@/components/BookingModal";
-import { ServiceLedBookingModal } from "@/components/booking/ServiceLedBookingModal";
-import { LabBasketWindow } from "@/components/booking/LabBasketWindow";
-import { BookingGate } from "@/components/booking/BookingGate";
+import BookingFlowMounts from "@/components/booking/BookingFlowMounts";
 import { MobileMenu } from "@/components/marketing/MobileMenu";
-import { useBookingStore } from "@/store/bookingStore";
 import { useBookingFlow } from "@/hooks/useBookingFlow";
 import { cn } from "@/lib/utils";
 import { useCmsSection } from "@/hooks/useCmsSection";
@@ -40,27 +36,12 @@ export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Booking modal + OTP gate stay mounted here; the trigger is shared.
-  const isModalOpen = useBookingStore((s) => s.isModalOpen);
-  const closeModal = useBookingStore((s) => s.closeModal);
-  const isGateOpen = useBookingStore((s) => s.isGateOpen);
-  const closeGate = useBookingStore((s) => s.closeGate);
-  const isLabBasketOpen = useBookingStore((s) => s.isLabBasketOpen);
-  const closeLabBasket = useBookingStore((s) => s.closeLabBasket);
-  const serviceSlug = useBookingStore((s) => s.serviceSlug);
+  // Booking dispatch trigger (the "Book a Visit" pill below). The four
+  // bookingStore-driven overlays themselves live in <BookingFlowMounts />
+  // rendered at the bottom of this component — and ALSO in PulseChrome
+  // for the /pulse tree (T90 Slice 2 Step 11 fix). Single source of
+  // truth for the mount JSX is src/components/booking/BookingFlowMounts.
   const { requestBooking } = useBookingFlow();
-
-  // T85 PR4a + PR4b — modal dispatch:
-  //   - isLabBasketOpen=true → LabBasketWindow (PR4b service-led lab path)
-  //   - serviceSlug = non-lab T85 slug → ServiceLedBookingModal (PR4a)
-  //   - serviceSlug = null (Navbar's "Book a Visit" pill, no slug) → T61 BookingModal
-  //     (T61's modal collects everything inline; safe fallback when no service is preselected)
-  // Note: `isLabBasketOpen` and `isModalOpen` are independent flags by design
-  // — useBookingFlow.requestBookingForLab() calls openLabBasket() (not
-  // openModal()) so isModalOpen stays false on the lab path. The dispatch
-  // here doesn't need to special-case 'lab-tests' anymore.
-  const useT85Modal = isModalOpen && serviceSlug !== null;
-  const useT61Modal = isModalOpen && !useT85Modal;
 
   const { data: navbarCopy } = useCmsSection(
     "shared",
@@ -214,14 +195,11 @@ export function Navbar() {
         phoneDisplay={PHONE_DISPLAY}
       />
 
-      <BookingModal isOpen={useT61Modal} onClose={closeModal} />
-      <ServiceLedBookingModal isOpen={useT85Modal} onClose={closeModal} />
-      <LabBasketWindow isOpen={isLabBasketOpen} onClose={closeLabBasket} />
-      <BookingGate
-        isOpen={isGateOpen}
-        onClose={closeGate}
-        onVerified={() => closeGate()}
-      />
+      {/* T90 Slice 2 Step 11 (fix-up): the four bookingStore-driven
+          overlays are extracted to a shared mount component so the
+          /pulse tree (PulseChrome) can render the same set without
+          duplicating the JSX. Marketing flow unchanged. */}
+      <BookingFlowMounts />
     </>
   );
 }
