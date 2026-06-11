@@ -64,8 +64,9 @@ export async function resolveCustomerFromToken(
  * null if the visitor is unauthenticated / has no customer row yet.
  *
  * Reads cookies via next/headers, so this is callable from server
- * components and route handlers but NOT from the edge middleware. PulseShell
- * calls this and redirects to /pulse/login on null.
+ * components and route handlers but NOT from the edge middleware. The
+ * (authed) route-group layout calls this and redirects to /pulse/login
+ * on null.
  *
  * T64 note (see file header): getCurrentAccountMembers() will return the
  * full managed-customer array; this stays the primary-only wrapper.

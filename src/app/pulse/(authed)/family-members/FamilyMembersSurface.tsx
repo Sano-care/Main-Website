@@ -11,7 +11,7 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Plus, Users, AlertCircle } from "lucide-react";
 
 import type { FamilyMember } from "@/lib/family-members/types";
-import { pulseFetch } from "../_lib/pulseClient";
+import { pulseFetch } from "../../_lib/pulseClient";
 import { MemberCard } from "./_components/MemberCard";
 import { AddMemberForm } from "./_components/AddMemberForm";
 

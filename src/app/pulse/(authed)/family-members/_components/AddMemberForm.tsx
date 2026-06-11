@@ -27,7 +27,7 @@ import {
   ALL_RELATIONS,
 } from "@/lib/family-members/types";
 import { RELATION_LABELS } from "@/lib/family-members/relations";
-import { pulseFetch } from "../../_lib/pulseClient";
+import { pulseFetch } from "../../../_lib/pulseClient";
 import { useScrollLock } from "@/hooks/useScrollLock";
 
 interface Props {

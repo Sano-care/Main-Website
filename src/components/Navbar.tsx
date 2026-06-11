@@ -152,7 +152,7 @@ export function Navbar() {
                 {/* "Sign in" pill — distinct from regular nav links.
                     Links directly to /pulse/login (not /portal) to skip
                     the /portal→/pulse→/pulse/login redirect chain + its
-                    PulseShell transition flash. /pulse/login itself
+                    (authed)-layout transition flash. /pulse/login itself
                     bounces an already-signed-in patient to /pulse
                     server-side. */}
                 <Link
@@ -165,9 +165,15 @@ export function Navbar() {
             </div>
           </nav>
 
-          {/* Mobile cluster — persistent click-to-call + hamburger.
-              T85 PR3 retint: phone icon goes coral to match desktop.
-              Disciplined palette: coral = action. */}
+          {/* Mobile cluster — persistent click-to-call + Sign-in + hamburger.
+              T85 PR3 retint: phone icon coral.
+              T90 Step 08-fold-in 3 (subsumes tasks #26 + #30 + #58): added
+              the "Sign in" pill so mobile visitors have a visible Pulse
+              entry point — desktop has had this since T85 but mobile only
+              showed call + hamburger. Tap target h-11 (44px iOS HIG floor);
+              "Sign in" hardcoded short label (vs desktop's CMS-driven
+              {navbarCopy.portalLabel}) so it fits the mobile cluster
+              without overflow. */}
           <div className="flex items-center gap-1 md:hidden">
             <a
               href={`tel:${PHONE_TEL}`}
@@ -176,6 +182,13 @@ export function Navbar() {
             >
               <Phone className="w-5 h-5" aria-hidden="true" />
             </a>
+            <Link
+              href="/pulse/login"
+              aria-label="Sign in to Sanocare Pulse"
+              className="inline-flex items-center justify-center h-11 px-3 text-sm font-semibold text-primary rounded-full hover:bg-primary/5 transition-colors"
+            >
+              Sign in
+            </Link>
             <button
               type="button"
               className="inline-flex items-center justify-center w-11 h-11 text-text-main"

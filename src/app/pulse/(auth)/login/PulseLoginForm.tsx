@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui";
-import { sanitizeNext } from "../_lib/safeNext";
+import { sanitizeNext } from "../../_lib/safeNext";
 
 // Full-page sign-in for Sanocare Pulse. Mirrors the booking BookingGate OTP
 // shape (phone + consent → 6-box OTP) but adds a third "name capture" step
@@ -174,15 +174,29 @@ export function PulseLoginForm({ next }: { next: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ phone: e164, otp: code }),
+        // T90 Step 09: explicit stay_signed_in=true matches the server
+        // default. The login form deliberately omits a toggle — the
+        // welcome page Step 1 surfaces the user's deliberate consent
+        // and re-issues the cookie via /api/auth/stay-signed-in-preference
+        // if they uncheck it.
+        body: JSON.stringify({ phone: e164, otp: code, stay_signed_in: true }),
       });
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         phone?: string;
         error?: string;
+        is_new_customer?: boolean;
       };
       if (!res.ok || !json.ok) {
         setError(json.error || "That code didn't match.");
+        return;
+      }
+      // T90 Step 09: first-Pulse-signin (M047 pulse_first_signin_at was
+      // null pre-verify) routes to the welcome onboarding flow instead
+      // of safeNext. Full-page navigation so the (onboarding) layout
+      // server-reads the fresh cookie.
+      if (json.is_new_customer) {
+        window.location.assign("/pulse/welcome");
         return;
       }
       await routeAfterVerify();
@@ -266,17 +280,19 @@ export function PulseLoginForm({ next }: { next: string }) {
       {/* Header */}
       <header className="border-b border-slate-100 bg-white/80 backdrop-blur-sm">
         <div className="max-w-[1400px] mx-auto px-6 lg:px-12 h-20 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 group">
+          <Link href="/" className="flex items-center group" aria-label="Sanocare home">
+            {/* T90 Step 08-fold-in 2 (subsumes task #74): canonical Sanocare
+                lockup, replacing the prior /logo.svg square icon + hand-
+                rolled "Sano(italic)care" wordmark. One asset, one rendition
+                — matches the lockup used by the Pulse app bar and drawer. */}
             <Image
-              src="/logo.svg"
+              src="/sanocare-lockup.svg"
               alt="Sanocare"
-              width={40}
-              height={40}
-              className="w-10 h-10"
+              width={140}
+              height={32}
+              priority
+              className="h-8 w-auto"
             />
-            <h2 className="text-2xl font-bold tracking-tight text-text-main">
-              Sano<span className="text-primary italic font-normal">care</span>
-            </h2>
           </Link>
           <span className="inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-widest text-primary">
             <HeartPulse className="h-4 w-4" />

@@ -1,4 +1,4 @@
-// Open-redirect guard for the ?next= bounce used by PulseShell → login.
+// Open-redirect guard for the ?next= bounce used by the (authed) layout → login.
 //
 // Only same-origin, Pulse-scoped paths are honoured. Anything else (absolute
 // URLs, protocol-relative "//evil.com", non-/pulse paths) collapses to the
