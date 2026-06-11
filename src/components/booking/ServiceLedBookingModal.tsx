@@ -34,11 +34,20 @@ import { getServiceBySlug } from "@/lib/services/catalog";
 import type { ServiceSlug } from "@/lib/services/catalog";
 
 import { IdentifyStep } from "./steps/IdentifyStep";
+import { MemberConfirmStep } from "./steps/MemberConfirmStep";
 import { WhereWhenStep } from "./steps/WhereWhenStep";
 import { PaymentStep } from "./steps/PaymentStep";
 import { ConfirmStep } from "./steps/ConfirmStep";
 
-type Step = "identify" | "wherewhen" | "payment" | "confirm";
+// T90 Slice 2 Step 12 — 'confirm-member' prepended for Pulse-entry
+// bookings (Booking Step 0, Surface 9 in brief). Skipped on marketing
+// entries; entryPoint='marketing' starts at identify/wherewhen as before.
+type Step =
+  | "confirm-member"
+  | "identify"
+  | "wherewhen"
+  | "payment"
+  | "confirm";
 
 interface ServiceLedBookingModalProps {
   isOpen: boolean;
@@ -52,6 +61,10 @@ export function ServiceLedBookingModal({
   const serviceSlug = useBookingStore((s) => s.serviceSlug);
   const storedName = useBookingStore((s) => s.name);
   const resetForNewBooking = useBookingStore((s) => s.resetForNewBooking);
+  // T90 Slice 2 Step 12 — provenance drives the initial step. Pulse
+  // entry starts at the new confirm-member step (Booking Step 0);
+  // marketing entry keeps the existing storedName-skip logic.
+  const entryPoint = useBookingStore((s) => s.entryPoint);
 
   // T85 PR4a bug 2 fix — body scroll lock. position:fixed pattern via
   // shared useScrollLock hook; ref-counted module so gate→modal
@@ -59,7 +72,7 @@ export function ServiceLedBookingModal({
   useScrollLock(isOpen);
 
   const [step, setStep] = useState<Step>(() =>
-    storedName.trim().length >= 2 ? "wherewhen" : "identify",
+    initialStepFor(entryPoint, storedName),
   );
   const [confirmed, setConfirmed] = useState<{
     bookingId: string;
@@ -67,13 +80,13 @@ export function ServiceLedBookingModal({
   } | null>(null);
 
   // Reset internal state every (re)open. The starting step depends on
-  // whether the patient already has a name in store — returning
-  // patient flow skips Step 1.
+  // the entry-point provenance (Pulse → confirm-member; marketing →
+  // storedName-aware skip).
   useEffect(() => {
     if (!isOpen) return;
-    setStep(storedName.trim().length >= 2 ? "wherewhen" : "identify");
+    setStep(initialStepFor(entryPoint, storedName));
     setConfirmed(null);
-  }, [isOpen, storedName]);
+  }, [isOpen, storedName, entryPoint]);
 
   const service = useMemo(
     () => (serviceSlug ? getServiceBySlug(serviceSlug) : null),
@@ -158,6 +171,13 @@ export function ServiceLedBookingModal({
 
             {/* Body */}
             <div className="px-5 py-5 sm:px-6 sm:py-6">
+              {step === "confirm-member" && (
+                // T90 Slice 2 Step 12 — Booking Step 0 for Pulse-entry
+                // bookings. On continue, jumps straight to wherewhen
+                // (identify is skipped — name + address are already
+                // seeded into the store by MemberConfirmStep).
+                <MemberConfirmStep onContinue={() => setStep("wherewhen")} />
+              )}
               {step === "identify" && (
                 <IdentifyStep
                   onComplete={() => setStep("wherewhen")}
@@ -192,4 +212,24 @@ export function ServiceLedBookingModal({
       )}
     </AnimatePresence>
   );
+}
+
+/**
+ * T90 Slice 2 Step 12 — initial step decision per entryPoint provenance.
+ *
+ *   'pulse'    → confirm-member ALWAYS (the Pulse Step 0 surface seeds
+ *                 patient_name + manual_address into the store, then
+ *                 jumps to wherewhen — bypassing identify entirely
+ *                 because Pulse-authed users always have a name from
+ *                 the welcome flow).
+ *   'marketing' → wherewhen when storedName is set (returning patient,
+ *                 skip-identify path), else identify (first-time
+ *                 marketing booking — collect the name in step 1).
+ */
+function initialStepFor(
+  entryPoint: "marketing" | "pulse",
+  storedName: string,
+): Step {
+  if (entryPoint === "pulse") return "confirm-member";
+  return storedName.trim().length >= 2 ? "wherewhen" : "identify";
 }

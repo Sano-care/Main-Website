@@ -26,6 +26,7 @@ import { useGeolocation } from "@/hooks/useGeolocation";
 import { useRazorpayCheckout } from "@/hooks/useRazorpayCheckout";
 import { SchedulePicker, slotIso } from "@/components/booking/SchedulePicker";
 import { ConfirmStep } from "@/components/booking/steps/ConfirmStep";
+import { MemberConfirmStep } from "@/components/booking/steps/MemberConfirmStep";
 import {
   LAB_COMMON_TESTS,
   LAB_COLLECTION_FEE_INR,
@@ -85,6 +86,10 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
   const resetForNewBooking = useBookingStore((s) => s.resetForNewBooking);
   const isLocating = useBookingStore((s) => s.isLocating);
   const locationError = useBookingStore((s) => s.locationError);
+  // T90 Slice 2 Step 12 — provenance gate. When 'pulse', show
+  // MemberConfirmStep before the basket form. Marketing entry skips
+  // straight to the basket (existing behavior unchanged).
+  const entryPoint = useBookingStore((s) => s.entryPoint);
 
   const { detectLocation } = useGeolocation();
   const { openCheckout } = useRazorpayCheckout();
@@ -102,6 +107,11 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
     bookingId: string;
     bookingCode: string | null;
   } | null>(null);
+  // T90 Slice 2 Step 12 — Pulse Step 0 gate. Flips true when the
+  // user confirms member + address on MemberConfirmStep, then the
+  // basket form renders (with name + address pre-seeded by Step 0).
+  // Reset on every (re)open below.
+  const [pulseStep0Done, setPulseStep0Done] = useState(false);
 
   // Reset state on every (re)open so the basket doesn't carry over
   // between two booking attempts in the same session.
@@ -112,6 +122,7 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
     setPaymentMode("full");
     setSubmitError(null);
     setConfirmed(null);
+    setPulseStep0Done(false);
     // T64: pre-fill name from customers.full_name (cached by BookingGate
     // after /api/auth/verify-otp success) when the field is empty. A
     // returning patient never re-types their name. Skipped when name is
@@ -426,6 +437,13 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
                     bookingCode={confirmed.bookingCode}
                     onDone={handleDone}
                   />
+                ) : entryPoint === "pulse" && !pulseStep0Done ? (
+                  // T90 Slice 2 Step 12 — Booking Step 0 gate (Surface 9).
+                  // Seeds bookingStore.name + bookingStore.location from
+                  // the chosen member + their last-visit address; the
+                  // basket form below picks up those pre-fills via the
+                  // existing store selectors.
+                  <MemberConfirmStep onContinue={() => setPulseStep0Done(true)} />
                 ) : (
                   <>
                     {/* customer-link-hotpatch: Name capture for the lab
