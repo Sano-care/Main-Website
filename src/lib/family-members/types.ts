@@ -56,6 +56,14 @@ export interface FamilyMember {
   dob: string | null;
   gender: Gender | null;
   notes: string | null;
+  /**
+   * T90 Slice 2 Step 13 — free-text health notes captured on the
+   * Pulse Profile tab. Column added by M046; this field added to the
+   * type when the Profile tab started reading/writing it. Optional in
+   * the type shape so reads that don't `SELECT health_notes` still
+   * type-check; the column itself is nullable on the DB side.
+   */
+  health_notes?: string | null;
   created_at: string;
   updated_at: string;
 }
