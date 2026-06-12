@@ -34,6 +34,7 @@ import {
 } from "../_lib/vitalsDisplay";
 import { doseVisual } from "../_lib/medsDisplay";
 import EmergencyRibbon from "./_components/EmergencyRibbon";
+import PWAInstallPrompt from "./_components/PWAInstallPrompt";
 import PulseBookingPhonePrime from "./_components/PulseBookingPhonePrime";
 import PulseHomeTiles from "./_components/PulseHomeTiles";
 import SnapshotDivider from "./_components/SnapshotDivider";
@@ -347,6 +348,12 @@ async function PulseHomeBody() {
             </section>
           </SectionReveal>
         )}
+
+        {/* T90 Slice 2 Step 16 — PWA install prompt (Surface 7). */}
+        {/* Inline card at the bottom of the zone stack. Renders null */}
+        {/* unless eligibility passes (>=2 sessions, not recently */}
+        {/* dismissed, not already installed, capable browser). */}
+        <PWAInstallPrompt />
       </main>
     </div>
   );
