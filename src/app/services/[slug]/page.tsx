@@ -143,6 +143,10 @@ export default async function ServicePage({
   const page = SERVICE_PAGES[slug];
   if (!page) notFound();
 
+  // Google-Ads classifier-safe pages drop the cross-service grid (it names
+  // doctor / teleconsult services) and render the nursing-only footer.
+  const classifierSafe = !!page.classifierSafe;
+
   const others = SERVICE_PAGE_SLUGS.filter((s) => s !== slug).map(
     (s) => SERVICE_PAGES[s],
   );
@@ -313,35 +317,41 @@ export default async function ServicePage({
           </div>
         </section>
 
-        {/* 8. Cross-service links */}
-        <section className="border-t border-slate-100">
-          <div className="mx-auto max-w-[1100px] px-6 lg:px-12 py-14">
-            <h2 className="font-serif text-2xl font-bold">Our other services</h2>
-            <div className="mt-8 grid gap-4 sm:grid-cols-3">
-              {others.map((o) => (
-                <Link
-                  key={o.seoSlug}
-                  href={`/services/${o.seoSlug}`}
-                  className="group rounded-xl border border-slate-200 p-5 transition-colors hover:border-primary"
-                >
-                  <h3 className="text-base font-bold group-hover:text-primary">
-                    {getServiceLabel(o.serviceSlug)}
-                  </h3>
-                  <p className="mt-1.5 text-sm text-text-secondary">
-                    {o.subtitle}
-                  </p>
-                  <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-primary">
-                    Learn more
-                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                  </span>
-                </Link>
-              ))}
+        {/* 8. Cross-service links — omitted on classifier-safe pages (the
+            cards name doctor / teleconsult services Google Ads' healthcare
+            classifier flags). */}
+        {!classifierSafe && (
+          <section className="border-t border-slate-100">
+            <div className="mx-auto max-w-[1100px] px-6 lg:px-12 py-14">
+              <h2 className="font-serif text-2xl font-bold">
+                Our other services
+              </h2>
+              <div className="mt-8 grid gap-4 sm:grid-cols-3">
+                {others.map((o) => (
+                  <Link
+                    key={o.seoSlug}
+                    href={`/services/${o.seoSlug}`}
+                    className="group rounded-xl border border-slate-200 p-5 transition-colors hover:border-primary"
+                  >
+                    <h3 className="text-base font-bold group-hover:text-primary">
+                      {getServiceLabel(o.serviceSlug)}
+                    </h3>
+                    <p className="mt-1.5 text-sm text-text-secondary">
+                      {o.subtitle}
+                    </p>
+                    <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-primary">
+                      Learn more
+                      <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    </span>
+                  </Link>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
       </main>
 
-      <Footer />
+      <Footer variant={classifierSafe ? "classifier-safe" : "default"} />
     </>
   );
 }

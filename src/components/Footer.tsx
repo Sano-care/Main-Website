@@ -8,7 +8,30 @@ import { useCmsSiteGlobals } from "@/hooks/useCmsSiteGlobals";
 import { SHARED_CONTENT } from "@/constants/cms-content";
 import { isReactComponent } from "@/services/cms/snapshot";
 
-export function Footer() {
+// Nursing-only corporate bio for the Google-Ads classifier-safe footer
+// variant — strips "doctor / MBBS / diagnose / prescribe / telemedicine".
+const CLASSIFIER_SAFE_BIO =
+  "Sanocare provides professional doorstep nursing assistance, vital monitoring logs, and premium home-care coordination for urban families. Our qualified, background-verified professionals deliver on-demand physical care support and health tracking right to your residence on your timeline.";
+
+// Service links dropped from the classifier-safe footer variant — the two
+// telemedicine destinations Google Ads' healthcare classifier flags.
+const CLASSIFIER_SAFE_EXCLUDED_LINKS = new Set([
+  "/services/doctor-home-visit-delhi",
+  "/services/online-doctor-consultation-india",
+]);
+
+export function Footer({
+  variant = "default",
+}: {
+  /**
+   * "classifier-safe" swaps the doctor-led bio for a nursing-only one and
+   * drops the two telemedicine service links, so the page can serve as a
+   * Google Ads landing destination without tripping the healthcare-services
+   * classifier. ONLY /services/home-nurse-delhi-ncr passes this today; every
+   * other page renders the default footer unchanged.
+   */
+  variant?: "default" | "classifier-safe";
+} = {}) {
   const defaultSocialIcon = SHARED_CONTENT.footer.socialLinks[0].icon;
   const defaultTrustIcon = SHARED_CONTENT.footer.trustBadges[0].icon;
   const { data: footerCopy } = useCmsSection(
@@ -18,6 +41,13 @@ export function Footer() {
   );
   const siteGlobals = useCmsSiteGlobals();
   const footerLinks = footerCopy.links;
+  // Classifier-safe variant drops the two telemedicine service links.
+  const serviceLinks =
+    variant === "classifier-safe"
+      ? footerLinks.services.filter(
+          (l: { href: string }) => !CLASSIFIER_SAFE_EXCLUDED_LINKS.has(l.href),
+        )
+      : footerLinks.services;
   // Match a CMS-supplied social link to its constant counterpart by host (most
   // robust — labels and exact hrefs drift, but the social-network host doesn't).
   // Falls back to position. Used only for icon resolution.
@@ -75,7 +105,10 @@ export function Footer() {
   const mapsHref = siteGlobals?.mapsUrl ?? footerCopy.contact.mapsHref;
   const logoSrc = siteGlobals?.logoUrl ?? "/logo.svg";
   const logoAlt = siteGlobals?.logoAlt ?? siteGlobals?.companyName ?? footerCopy.logoAlt;
-  const brandDescription = siteGlobals?.brandDescription ?? footerCopy.brandDescription;
+  const brandDescription =
+    variant === "classifier-safe"
+      ? CLASSIFIER_SAFE_BIO
+      : (siteGlobals?.brandDescription ?? footerCopy.brandDescription);
   const legalStripFallback = SHARED_CONTENT.footer.legalStrip;
   const legalStrip = {
     emergencyDisclaimer:
@@ -152,7 +185,7 @@ export function Footer() {
               Our Services
             </h4>
             <ul className="flex flex-col gap-3 text-sm text-text-secondary">
-              {footerLinks.services.map((link) => (
+              {serviceLinks.map((link) => (
                 <li key={link.label}>
                   <Link
                     href={link.href}
