@@ -16,36 +16,36 @@ import { AboutBand } from "@/components/marketing/AboutBand";
 import { SERVICES } from "@/lib/services/catalog";
 import { PaidConversionFire } from "@/components/PaidConversionFire";
 
-// T85 PR2 — homepage rewired to the brief's 8-section hierarchy:
+// T85 PR2 + T91 — homepage hierarchy. T91 swaps the mobile-first 420px
+// column for a desktop-responsive layout, with the AboutBand lifted
+// from "between S1 and S2" up to a full-bleed band above the service
+// stack so the desktop 2x2 grid reads as one focused choose-your-
+// service unit instead of being interrupted between S1 and S2.
 //
+// Render order (all viewports):
 //   1. Navbar
-//   2. Hero (informational only — CTAs stripped in Hero.tsx itself)
-//   3. Service 1: Home-Visit
-//   4. AboutBand (blue band, between Service 1 and Service 2)
+//   2. Hero (informational only)
+//   3. AboutBand (brand-context blue band — moved here in T91)
+//   4. Service 1: Home-Visit
 //   5. Service 2: Teleconsultation
 //   6. Service 3: Lab Tests at Home
 //   7. Service 4: Medic at Home
-//   8. StatsBar (Numbers band — copy locked to T85 brief Section 5)
+//   8. StatsBar (Numbers band)
 //   9. SanocareAdvantage
 //  10. Footer
 //
+// Layout per breakpoint:
+//   mobile     — AboutBand + 4 services stack inside max-w-[420px] column
+//   md (≥768)  — AboutBand + 4 services widen to max-w-[680px], stacked
+//   lg (≥1024) — AboutBand full-bleed gradient inside max-w-[1100px];
+//                4 services render as a 2x2 grid inside max-w-[1100px]
+//                with gap-6
+//
 // Booking entry points across the homepage:
-//   - 4 coral CTAs inside ServiceSections (PR4 wires the modal flow)
+//   - 4 coral CTAs inside ServiceSections
 //   - HomeStickyBar (mobile sticky)
 //   - FloatingWhatsApp (mobile pill)
 //   - Navbar Book a Visit button
-//
-// Removed from the homepage tree in PR2 (vs T61) — file-level cleanup
-// happens in PR5 after a full grep for other callers:
-//   - 5 × BookingCTASection strips
-//   - LabTestSearchSection (Lab is now Service 3 card; the component
-//     still serves `/lab-tests` page)
-//   - Testimonials, Features, Journey, Insights, Accreditations
-//   - Hero CTA buttons + QuickBookCard (handled inside Hero.tsx)
-//
-// The 4 ServiceSections + the AboutBand all render inside a 420px
-// mobile-first column. StatsBar + SanocareAdvantage are full-bleed
-// bands with their own internal max-widths.
 
 // NEXT_PUBLIC_SHOW_PULSE_BETA_BANNER gates the Pulse closed-beta TopBanner.
 // Defaults hidden (false / unset); flip to "true" to surface it.
@@ -77,36 +77,28 @@ export default function Home() {
             <Hero />
           </SectionReveal>
 
-          {/* Service stack — mobile-first 420px column. Brief order:
-              Service 1 → AboutBand → Service 2 → Service 3 → Service 4. */}
-          <div className="mx-auto max-w-[420px] w-full">
-            {/* Service 1: Home-Visit */}
-            <SectionReveal>
-              <ServiceSection
-                config={SERVICES[0]}
-                index={0}
-                total={SERVICES.length}
-              />
-            </SectionReveal>
-
-            {/* About Sanocare blue band */}
+          {/* AboutBand — lifted above the service stack in T91 so the
+              desktop 2x2 grid reads as one focused unit. Full-bleed at
+              lg+ via the band's own internal max-w-[1100px]. */}
+          <div className="mx-auto w-full max-w-[420px] md:max-w-[680px] lg:max-w-[1100px] px-0 lg:px-6">
             <SectionReveal>
               <AboutBand />
             </SectionReveal>
+          </div>
 
-            {/* Services 2–4: Teleconsultation, Lab Tests, Medic at Home */}
-            {SERVICES.slice(1).map((config, i) => {
-              const index = i + 1;
-              return (
-                <SectionReveal key={config.slug}>
-                  <ServiceSection
-                    config={config}
-                    index={index}
-                    total={SERVICES.length}
-                  />
-                </SectionReveal>
-              );
-            })}
+          {/* 4 services — mobile-first column, widen at md, 2x2 grid at lg.
+              `items-start` keeps shorter cards aligned to their grid cell
+              top instead of stretching vertically. */}
+          <div className="mx-auto w-full max-w-[420px] md:max-w-[680px] lg:max-w-[1100px] px-0 lg:px-6 lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
+            {SERVICES.map((config, index) => (
+              <SectionReveal key={config.slug}>
+                <ServiceSection
+                  config={config}
+                  index={index}
+                  total={SERVICES.length}
+                />
+              </SectionReveal>
+            ))}
           </div>
 
           {/* Numbers band */}

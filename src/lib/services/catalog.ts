@@ -147,21 +147,21 @@ export const SERVICES: ReadonlyArray<ServiceConfig> = [
     iconKey: "flask",
     priceLine: { kind: "bare", text: "₹200 collection fee + test amount" },
     description:
-      "Free home sample collection by a trained phlebotomist. Choose from 1,892 tests via our Pathcore partner. NABL-accredited labs, signed PDF reports.",
+      "Free home sample collection by a trained phlebotomist. Choose from 1,892 tests via our Pathcore partner. Partner laboratories, signed PDF reports.",
     expandable: {
       pricing:
         "₹200 collection fee at booking + full test amount via UPI on phlebotomist's phone at collection. Tests process only after both payments confirmed.",
       promise: "Phlebotomist arrives within 90 minutes in Delhi NCR.",
       included: [
         "Free home sample collection",
-        "NABL-accredited lab processing",
+        "Partner laboratory processing",
         "Reports on WhatsApp + Sanocare Pulse within 24h",
         "Choice of 1,892 tests via Pathcore",
       ],
       bestFor:
         "routine health checks, doctor-prescribed tests, pre-employment medicals.",
     },
-    promiseRow: "1,892 tests · NABL-accredited",
+    promiseRow: "1,892 tests · partner laboratories",
     ctaLabel: "Get Lab Tests Done",
     paymentPolicy: { kind: "lab-split", collectionFee: 200 },
   },

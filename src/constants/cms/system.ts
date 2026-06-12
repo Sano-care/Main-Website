@@ -52,7 +52,7 @@ export const NOT_FOUND_PAGE_CONTENT = {
     { label: "Services", href: "/#services" },
     { label: "Specialists", href: "/#specialists" },
     { label: "Contact", href: "/#contact" },
-    { label: "Patient Portal", href: "/portal" },
+    { label: "Sign in", href: "/portal" },
   ],
   helpLabel: "Need help? Call us at",
   helpPhone: "+91-9711977782",

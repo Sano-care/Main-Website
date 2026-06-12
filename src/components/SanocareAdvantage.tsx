@@ -68,8 +68,10 @@ export function SanocareAdvantage() {
     })),
   }));
 
-  const TraditionalIcon = typeof (comparisonData.providers[0]?.icon) === "function" ? comparisonData.providers[0].icon : Check;
-  const SanocareIcon = typeof (comparisonData.providers[2]?.icon) === "function" ? comparisonData.providers[2].icon : Check;
+  // T91: TraditionalIcon + SanocareIcon constants removed — the
+  // consolidated comparison render iterates `comparisonData.providers`
+  // and pulls the icon from each provider, so these aliases were
+  // dual-render leftovers.
 
   return (
     <section className="py-20 lg:py-14 bg-slate-50 relative overflow-hidden" id="advantage">
@@ -95,35 +97,50 @@ export function SanocareAdvantage() {
           </p>
         </motion.div>
 
-        {/* Comparison Table - Desktop (4 columns) */}
+        {/* Comparison Table — consolidated render (T91).
+            One source of truth for both mobile + desktop layouts.
+            - Mobile (`grid-cols-3`):   Feature | Traditional | Sanocare
+              (Telemedicine column hidden; cell text truncated to first
+              token via the inline `<span className="md:hidden">` to
+              preserve the narrow-viewport readability the dual-render
+              targeted.)
+            - Desktop (`md:grid-cols-4`): Feature | Traditional |
+              Telemedicine | Sanocare, full text, larger padding. */}
         <motion.div
-          className="hidden md:block bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden"
+          className="bg-white rounded-2xl md:rounded-3xl shadow-xl border border-slate-100 overflow-hidden"
           variants={containerVariants}
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true, margin: "-100px" }}
         >
           {/* Table Header */}
-          <div className="grid grid-cols-4 bg-slate-50 border-b border-slate-100">
-            <div className="p-6 font-bold text-text-main">
-              {pageCopy.featureLabel}
+          <div className="grid grid-cols-3 md:grid-cols-4 bg-slate-50 border-b border-slate-100">
+            <div className="p-3 md:p-6 font-bold text-text-main text-xs md:text-base">
+              <span className="md:hidden">Feature</span>
+              <span className="hidden md:inline">{pageCopy.featureLabel}</span>
             </div>
-            {comparisonData.providers.map((provider) => {
+            {comparisonData.providers.map((provider, providerIdx) => {
               const ProviderIcon = typeof provider.icon === "function" ? provider.icon : Check;
+              // Middle provider (Telemedicine) is hidden on mobile.
+              const isTelemedicine = providerIdx === 1;
               return (
-                <div 
+                <div
                   key={provider.name}
-                  className={`p-6 text-center ${
-                    provider.highlight 
-                      ? "bg-primary text-white" 
-                      : ""
+                  className={`p-3 md:p-6 text-center ${
+                    isTelemedicine ? "hidden md:flex md:flex-col md:items-center md:justify-center" : ""
+                  } ${
+                    provider.highlight ? "bg-primary text-white" : ""
                   }`}
                 >
-                  <div className="flex items-center justify-center gap-2 font-bold">
-                    <ProviderIcon className="w-5 h-5" />
+                  <div className="flex items-center justify-center gap-1 md:gap-2 font-bold text-xs md:text-base">
+                    <ProviderIcon className="w-3.5 h-3.5 md:w-5 md:h-5" />
                     {provider.name}
                   </div>
-                  <p className={`text-xs mt-1 ${provider.highlight ? "text-white/80" : "text-text-secondary"}`}>
+                  <p
+                    className={`hidden md:block text-xs mt-1 ${
+                      provider.highlight ? "text-white/80" : "text-text-secondary"
+                    }`}
+                  >
                     {provider.description}
                   </p>
                 </div>
@@ -138,79 +155,29 @@ export function SanocareAdvantage() {
               <motion.div
                 key={feature.name}
                 variants={rowVariants}
-                className={`grid grid-cols-4 ${
+                className={`grid grid-cols-3 md:grid-cols-4 ${
                   index !== comparisonData.features.length - 1 ? "border-b border-slate-100" : ""
                 }`}
               >
-                <div className="p-6 flex items-center gap-3">
-                  <div className="size-10 rounded-lg bg-slate-100 flex items-center justify-center">
-                    <Icon className="w-5 h-5 text-slate-600" />
+                <div className="p-3 md:p-6 flex items-center gap-2 md:gap-3">
+                  <div className="size-7 md:size-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                    <Icon className="w-3.5 h-3.5 md:w-5 md:h-5 text-slate-600" />
                   </div>
-                  <span className="font-semibold text-text-main">{feature.name}</span>
+                  <span className="font-semibold text-text-main text-xs md:text-base">{feature.name}</span>
                 </div>
-                <div className="p-6 flex items-center justify-center text-center text-slate-600">
-                  {feature.traditional}
+                <div className="p-3 md:p-6 flex items-center justify-center text-center text-slate-500 md:text-slate-600 text-xs md:text-base">
+                  <span className="md:hidden">{feature.traditional.split(" ")[0]}</span>
+                  <span className="hidden md:inline">{feature.traditional}</span>
                 </div>
-                <div className="p-6 flex items-center justify-center text-center text-slate-600">
+                {/* Telemedicine column — desktop only */}
+                <div className="hidden md:flex p-6 items-center justify-center text-center text-slate-600">
                   {feature.telemedicine}
                 </div>
-                <div className="p-6 flex items-center justify-center text-center bg-primary/5">
-                  <span className="font-bold text-primary">{feature.sanocare}</span>
-                </div>
-              </motion.div>
-            );
-          })}
-        </motion.div>
-
-        {/* Comparison Table - Mobile (3 columns: Feature, Traditional, Sanocare) */}
-        <motion.div
-          className="md:hidden bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden"
-          variants={containerVariants}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: "-100px" }}
-        >
-          {/* Table Header */}
-          <div className="grid grid-cols-3 bg-slate-50 border-b border-slate-100">
-            <div className="p-3 font-bold text-text-main text-xs">
-              Feature
-            </div>
-            <div className="p-3 text-center">
-              <div className="flex items-center justify-center gap-1 font-bold text-slate-600 text-xs">
-                <TraditionalIcon className="w-3.5 h-3.5" />
-                <span>Traditional</span>
-              </div>
-            </div>
-            <div className="p-3 text-center bg-primary text-white">
-              <div className="flex items-center justify-center gap-1 font-bold text-xs">
-                <SanocareIcon className="w-3.5 h-3.5" />
-                <span>Sanocare</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Table Rows */}
-          {comparisonData.features.map((feature, index) => {
-            const Icon = typeof feature.icon === "function" ? feature.icon : Check;
-            return (
-              <motion.div
-                key={feature.name}
-                variants={rowVariants}
-                className={`grid grid-cols-3 ${
-                  index !== comparisonData.features.length - 1 ? "border-b border-slate-100" : ""
-                }`}
-              >
-                <div className="p-3 flex items-center gap-2">
-                  <div className="size-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                    <Icon className="w-3.5 h-3.5 text-slate-600" />
-                  </div>
-                  <span className="font-semibold text-text-main text-xs">{feature.name}</span>
-                </div>
-                <div className="p-3 flex items-center justify-center text-center text-slate-500 text-xs">
-                  {feature.traditional.split(' ')[0]}
-                </div>
-                <div className="p-3 flex items-center justify-center text-center bg-primary/5">
-                  <span className="font-bold text-primary text-xs">{feature.sanocare.split(' ')[0]}</span>
+                <div className="p-3 md:p-6 flex items-center justify-center text-center bg-primary/5">
+                  <span className="font-bold text-primary text-xs md:text-base">
+                    <span className="md:hidden">{feature.sanocare.split(" ")[0]}</span>
+                    <span className="hidden md:inline">{feature.sanocare}</span>
+                  </span>
                 </div>
               </motion.div>
             );
@@ -228,7 +195,10 @@ export function SanocareAdvantage() {
             {pageCopy.serviceModelsTitle}
           </h3>
           
-          <div className="grid md:grid-cols-2 gap-6">
+          {/* T91 (E-b): NOW + CareHub side-by-side from sm: (640px+)
+              instead of md: (768px+) so tablet portrait shows the two
+              cards rather than stacking. */}
+          <div className="grid sm:grid-cols-2 gap-6">
             {serviceOfferings.map((service) => {
               const Icon = typeof service.icon === "function" ? service.icon : Check;
               const isPrimary = service.color === "primary";
