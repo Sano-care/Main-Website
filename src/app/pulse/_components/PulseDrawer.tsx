@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 
 import { useViewingFirstName } from "../_lib/MemberViewingContext";
+import PulseSignOutButton from "./PulseSignOutButton";
 
 /**
  * T90 Pulse v1 Phase 1 — Hamburger drawer (Surface 4).
@@ -40,8 +41,6 @@ interface PulseDrawerProps {
 
 export default function PulseDrawer({ isOpen, onClose }: PulseDrawerProps) {
   const pathname = usePathname();
-  const router = useRouter();
-  const [signingOut, setSigningOut] = useState(false);
 
   // T90 Step 06: subtitle tracks the active viewing target — the entire
   // profile tab is scoped to whoever the user is currently viewing, so
@@ -69,20 +68,6 @@ export default function PulseDrawer({ isOpen, onClose }: PulseDrawerProps) {
       document.body.style.overflow = original;
     };
   }, [isOpen]);
-
-  async function handleSignOut() {
-    if (signingOut) return;
-    setSigningOut(true);
-    try {
-      await fetch("/api/pulse/signout", { method: "POST" });
-    } catch (err) {
-      console.error("[PulseDrawer] sign-out request failed", err);
-      // Soft-fail: still bounce to /pulse/login. The login page's own
-      // getCurrentCustomer() check will redirect back to home if the
-      // cookie is somehow still valid (it shouldn't be — but harmless).
-    }
-    router.push("/pulse/login");
-  }
 
   return (
     <>
@@ -225,17 +210,7 @@ export default function PulseDrawer({ isOpen, onClose }: PulseDrawerProps) {
 
           <hr className="my-3 border-gray-200" />
 
-          <button
-            type="button"
-            onClick={handleSignOut}
-            disabled={signingOut}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-60"
-          >
-            <span className="text-base" aria-hidden="true">
-              ↪
-            </span>
-            <span>{signingOut ? "Signing out…" : "Sign out"}</span>
-          </button>
+          <PulseSignOutButton variant="menu" />
         </nav>
 
         {/* Footer — tiny gray. v0.1 is what the brief specifies (Phase 1 */}

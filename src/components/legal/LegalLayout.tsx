@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import type { LegalDocument } from "@/constants/cms-content";
+import { PHONE_DISPLAY, PHONE_TEL, SUPPORT_EMAIL } from "@/lib/contact";
 
 interface LegalLayoutProps {
   doc: LegalDocument;
@@ -149,17 +150,17 @@ export function LegalLayout({ doc }: LegalLayoutProps) {
               Write to our <strong>Grievance Officer, Shashwat Arora</strong>{" "}
               at{" "}
               <a
-                href="mailto:contact@sanocare.in"
+                href={`mailto:${SUPPORT_EMAIL}`}
                 className="text-primary underline"
               >
-                contact@sanocare.in
+                {SUPPORT_EMAIL}
               </a>{" "}
               or call{" "}
               <a
-                href="tel:+919711977782"
+                href={`tel:${PHONE_TEL}`}
                 className="text-primary underline"
               >
-                +91-97119 77782
+                {PHONE_DISPLAY}
               </a>
               . We respond within 30 days as required under the DPDP Act 2023.
             </p>

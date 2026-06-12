@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui";
+import { PHONE_DISPLAY } from "@/lib/contact";
 import { sanitizeNext } from "../../_lib/safeNext";
 
 // Full-page sign-in for Sanocare Pulse. Mirrors the booking BookingGate OTP
@@ -140,7 +141,7 @@ export function PulseLoginForm({ next }: { next: string }) {
       if (!res.ok || !json.ok) {
         setError(
           json.error ||
-            "We couldn't send the code. Please try again or call +91-9711977782.",
+            `We couldn't send the code. Please try again or call ${PHONE_DISPLAY}.`,
         );
         if (json.retryAfterSeconds && json.retryAfterSeconds > 0) {
           setResendCountdown(

@@ -30,7 +30,8 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useBookingStore } from "@/store/bookingStore";
 
-const WHATSAPP_NUMBER = "919711977782"; // E.164 without + (matches Navbar PHONE_TEL)
+import { WHATSAPP_DEEPLINK } from "@/lib/contact";
+
 const PREFILL_MESSAGE = "Hi, I'd like to book a Sanocare visit";
 
 interface FloatingWhatsAppProps {
@@ -55,7 +56,7 @@ export function FloatingWhatsApp({ hidden = false }: FloatingWhatsAppProps) {
 
   if (!mounted || hidden || bookingSurfaceOpen) return null;
 
-  const href = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(PREFILL_MESSAGE)}`;
+  const href = `${WHATSAPP_DEEPLINK}?text=${encodeURIComponent(PREFILL_MESSAGE)}`;
 
   // Compose the static decoration on the anchor itself:
   //   - drop shadow (outer + tight inner-light)

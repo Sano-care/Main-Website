@@ -5,6 +5,7 @@ import { Search, X, Loader2, FlaskConical, Clock, Droplet } from "lucide-react";
 import { useLabTestSearch } from "@/hooks/useLabTestSearch";
 import type { LabTest } from "@/types/lab-test";
 import { useBookingStore } from "@/store/bookingStore";
+import { PHONE_DISPLAY, PHONE_TEL } from "@/lib/contact";
 
 interface LabTestSearchProps {
   /** Hero size: large prominent search box. Compact: smaller embed for sections. */
@@ -142,10 +143,10 @@ export function LabTestSearch({
                 No tests match <strong>&ldquo;{query}&rdquo;</strong>. Try a
                 different name or call us at{" "}
                 <a
-                  href="tel:+919711977782"
+                  href={`tel:${PHONE_TEL}`}
                   className="text-primary underline"
                 >
-                  +91-97119 77782
+                  {PHONE_DISPLAY}
                 </a>{" "}
                 to ask about a specific test.
               </div>
@@ -274,10 +275,10 @@ export function LabTestSearch({
               Search another test
             </button>
             <a
-              href="tel:+919711977782"
+              href={`tel:${PHONE_TEL}`}
               className="inline-flex items-center gap-2 text-text-secondary hover:text-primary font-medium px-2 py-3 transition-colors"
             >
-              Or call +91-97119 77782
+              Or call {PHONE_DISPLAY}
             </a>
           </div>
         </div>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { MessageCircle } from "lucide-react";
 
 import { useBookingFlow } from "@/hooks/useBookingFlow";
+import { WHATSAPP_DEEPLINK } from "@/lib/contact";
 import type { ServiceSlug } from "@/lib/services/catalog";
 
 // Interactive booking CTA for the SEO service pages. The page itself stays a
@@ -11,8 +12,6 @@ import type { ServiceSlug } from "@/lib/services/catalog";
 // drives the booking flow. The BookingModal / BookingGate are mounted by
 // <Navbar /> on the same page, and useBookingFlow is Zustand-backed (no
 // provider needed), so requestBooking* opens the gate/modal from here.
-
-const WA_HREF = "https://wa.me/919711977782";
 
 export function BookVisitCta({
   serviceSlug,
@@ -38,7 +37,7 @@ export function BookVisitCta({
         Book a visit
       </button>
       <Link
-        href={WA_HREF}
+        href={WHATSAPP_DEEPLINK}
         target="_blank"
         rel="noopener noreferrer"
         className="inline-flex items-center gap-2 rounded-full border border-slate-300 px-6 py-3 text-base font-semibold text-text-main transition-colors hover:border-primary hover:text-primary"

@@ -6,6 +6,7 @@ import { ShieldCheck, X, Phone as PhoneIcon, Loader2, ArrowRight, AlertCircle, M
 import { Button } from "@/components/ui";
 import { useBookingStore } from "@/store/bookingStore";
 import { useScrollLock } from "@/hooks/useScrollLock";
+import { PHONE_DISPLAY } from "@/lib/contact";
 
 // Keep in sync with token.ts. Duplicated here so the gate doesn't need to
 // import a server-only module.
@@ -151,7 +152,7 @@ export function BookingGate({ isOpen, onClose, onVerified }: BookingGateProps) {
       if (!res.ok || !json.ok) {
         setError(
           json.error ||
-            "We couldn't send the code. Please try again or call +91-9711977782.",
+            `We couldn't send the code. Please try again or call ${PHONE_DISPLAY}.`,
         );
         if (json.retryAfterSeconds && json.retryAfterSeconds > 0) {
           setResendCountdown(Math.min(json.retryAfterSeconds, RESEND_COOLDOWN_SECONDS));

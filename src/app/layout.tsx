@@ -5,6 +5,7 @@ import { CmsPreloadProvider } from "@/components/providers/CmsPreloadProvider";
 import { getCmsPreloadSnapshot } from "@/services/cms/CmsContentServerService";
 import { ConsentDefaultScript } from "@/components/consent/ConsentDefaultScript";
 import { ConsentRoot } from "@/components/consent/ConsentRoot";
+import { PHONE_TEL, SUPPORT_EMAIL } from "@/lib/contact";
 import "./globals.css";
 
 // GTM container ID. Public client-side identifier — safe to commit
@@ -120,8 +121,8 @@ const structuredData = {
   url: "https://sanocare.in",
   logo: "https://sanocare.in/logo.svg",
   image: "https://sanocare.in/og-image.png",
-  telephone: "+91-9711977782",
-  email: "contact@sanocare.in",
+  telephone: PHONE_TEL,
+  email: SUPPORT_EMAIL,
   description:
     "Home healthcare in South Delhi. A GNM / B.Sc Nursing-qualified medic arrives at your home, supervised in real time by an MBBS doctor on live video, who issues a signed e-prescription per MoHFW Telemedicine Practice Guidelines 2020.",
   // Visible homepage pricing spans ₹199 (home nursing) to full lab

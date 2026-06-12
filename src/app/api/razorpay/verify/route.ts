@@ -190,10 +190,21 @@ export async function POST(req: NextRequest) {
       String(booking.phone || "").trim(),
     );
 
+    // T90 Slice 2 Step 12 — member_id from Pulse-side bookings. Set
+    // client-side by PaymentStep when entryPoint='pulse' AND
+    // pulseEntryMember.kind === 'member'. Null on marketing entries
+    // and on Pulse self-bookings. Column exists on bookings since
+    // M042; this is the first writer.
+    const memberIdInput =
+      typeof booking.member_id === "string" && booking.member_id.trim()
+        ? booking.member_id.trim()
+        : null;
+
     const insertPayload = {
       patient_name: nameValidation.name,
       phone: String(booking.phone || "").trim(),
       customer_id: insertCustomerId,
+      member_id: memberIdInput,
       service_category: persistedServiceCategory,
       manual_address: String(booking.manual_address || "").trim(),
       gps_location: booking.gps_location ?? null,

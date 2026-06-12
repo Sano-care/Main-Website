@@ -26,11 +26,13 @@ import { useGeolocation } from "@/hooks/useGeolocation";
 import { useRazorpayCheckout } from "@/hooks/useRazorpayCheckout";
 import { SchedulePicker, slotIso } from "@/components/booking/SchedulePicker";
 import { ConfirmStep } from "@/components/booking/steps/ConfirmStep";
+import { MemberConfirmStep } from "@/components/booking/steps/MemberConfirmStep";
 import {
   LAB_COMMON_TESTS,
   LAB_COLLECTION_FEE_INR,
   type LabCatalogItem,
 } from "@/lib/services/labCatalog";
+import { PHONE_DISPLAY } from "@/lib/contact";
 
 import { SearchBar } from "./lab/SearchBar";
 import { CommonTestsGrid } from "./lab/CommonTestsGrid";
@@ -85,6 +87,14 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
   const resetForNewBooking = useBookingStore((s) => s.resetForNewBooking);
   const isLocating = useBookingStore((s) => s.isLocating);
   const locationError = useBookingStore((s) => s.locationError);
+  // T90 Slice 2 Step 12 — provenance gate. When 'pulse', show
+  // MemberConfirmStep before the basket form. Marketing entry skips
+  // straight to the basket (existing behavior unchanged).
+  const entryPoint = useBookingStore((s) => s.entryPoint);
+  // T90 Slice 2 Step 12 — piped through to create-booking-prepaid for
+  // bookings.member_id. Null on marketing entries (default) and on
+  // Pulse self-bookings; uuid on Pulse family-member bookings.
+  const pulseEntryMember = useBookingStore((s) => s.pulseEntryMember);
 
   const { detectLocation } = useGeolocation();
   const { openCheckout } = useRazorpayCheckout();
@@ -102,6 +112,11 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
     bookingId: string;
     bookingCode: string | null;
   } | null>(null);
+  // T90 Slice 2 Step 12 — Pulse Step 0 gate. Flips true when the
+  // user confirms member + address on MemberConfirmStep, then the
+  // basket form renders (with name + address pre-seeded by Step 0).
+  // Reset on every (re)open below.
+  const [pulseStep0Done, setPulseStep0Done] = useState(false);
 
   // Reset state on every (re)open so the basket doesn't carry over
   // between two booking attempts in the same session.
@@ -112,6 +127,7 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
     setPaymentMode("full");
     setSubmitError(null);
     setConfirmed(null);
+    setPulseStep0Done(false);
     // T64: pre-fill name from customers.full_name (cached by BookingGate
     // after /api/auth/verify-otp success) when the field is empty. A
     // returning patient never re-types their name. Skipped when name is
@@ -298,6 +314,12 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
           booking: {
             patient_name: trimmedName,
             phone: phone.trim(),
+            // T90 Slice 2 Step 12 — Pulse-side member booking attribution.
+            // Null on marketing entries and on Pulse self-bookings.
+            member_id:
+              pulseEntryMember?.kind === "member"
+                ? pulseEntryMember.member.id
+                : null,
             manual_address: location.trim(),
             gps_location: gpsLocation
               ? {
@@ -324,7 +346,7 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
         const err = (await verifyRes.json().catch(() => ({}))) as { error?: string };
         setSubmitError(
           err.error ||
-            "Payment received but booking failed to save. Please call +91-9711977782.",
+            `Payment received but booking failed to save. Please call ${PHONE_DISPLAY}.`,
         );
         return;
       }
@@ -426,6 +448,13 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
                     bookingCode={confirmed.bookingCode}
                     onDone={handleDone}
                   />
+                ) : entryPoint === "pulse" && !pulseStep0Done ? (
+                  // T90 Slice 2 Step 12 — Booking Step 0 gate (Surface 9).
+                  // Seeds bookingStore.name + bookingStore.location from
+                  // the chosen member + their last-visit address; the
+                  // basket form below picks up those pre-fills via the
+                  // existing store selectors.
+                  <MemberConfirmStep onContinue={() => setPulseStep0Done(true)} />
                 ) : (
                   <>
                     {/* customer-link-hotpatch: Name capture for the lab

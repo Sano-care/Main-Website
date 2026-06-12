@@ -10,6 +10,7 @@ import { LabTestSearch } from "@/components/lab/LabTestSearch";
 import { LabTestBasket } from "@/components/lab/LabTestBasket";
 import { PathcoreCoBrandStrip } from "@/components/lab-tests/PathcoreCoBrandStrip";
 import { PathcoreAboutSection } from "@/components/lab-tests/PathcoreAboutSection";
+import { PHONE_DISPLAY, PHONE_TEL } from "@/lib/contact";
 
 export const metadata: Metadata = {
   title: "Lab Tests at Home — Search 1,900+ Tests · Sanocare",
@@ -171,10 +172,10 @@ export default function LabTestsPage() {
               are MRPs as supplied by the partner lab; bulk-test discounts may
               apply on health-check packages — call{" "}
               <a
-                href="tel:+919711977782"
+                href={`tel:${PHONE_TEL}`}
                 className="text-primary underline"
               >
-                +91-97119 77782
+                {PHONE_DISPLAY}
               </a>{" "}
               to ask.
             </p>

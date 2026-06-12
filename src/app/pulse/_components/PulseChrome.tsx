@@ -2,6 +2,8 @@
 
 import { useState, type ReactNode } from "react";
 
+import BookingFlowMounts from "@/components/booking/BookingFlowMounts";
+
 import { MemberViewingProvider } from "../_lib/MemberViewingContext";
 import MemberSwitcherSheet from "./MemberSwitcherSheet";
 import PulseAppBar from "./PulseAppBar";
@@ -73,6 +75,15 @@ export default function PulseChrome({ children }: { children: ReactNode }) {
           onClose={() => setAvatarMenuOpen(false)}
           onSwitchMember={() => setMemberSheetOpen(true)}
         />
+
+        {/* T90 Slice 2 Step 11 (fix-up): mount the four bookingStore-
+            driven overlays in the /pulse tree too. Same component the
+            marketing Navbar renders — single source of truth. Without
+            this, a tile-tap dispatched through useBookingFlow() flips
+            store state but no modal is in scope to react. Pulse-side
+            booking entries (Step 11 tiles + Step 12 booking-Step-0)
+            all flow through these. */}
+        <BookingFlowMounts />
       </div>
     </MemberViewingProvider>
   );

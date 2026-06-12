@@ -19,19 +19,16 @@ import { useCallback } from "react";
 import { useBookingStore } from "@/store/bookingStore";
 import { getServicePrice } from "@/constants/pricing";
 import { useRazorpayCheckout } from "@/hooks/useRazorpayCheckout";
+import { PHONE_DISPLAY } from "@/lib/contact";
 
 const ERROR_MESSAGES = {
-  NETWORK:
-    "Unable to connect. Please check your internet and try again, or call us at +91-9711977782.",
-  SERVER:
-    "Our servers are busy. Please try again in a moment, or call us directly at +91-9711977782.",
+  NETWORK: `Unable to connect. Please check your internet and try again, or call us at ${PHONE_DISPLAY}.`,
+  SERVER: `Our servers are busy. Please try again in a moment, or call us directly at ${PHONE_DISPLAY}.`,
   VALIDATION: "Please check your details and try again.",
   PAYMENT_DISMISSED:
     "Payment cancelled. Your booking has not been confirmed. Please try again.",
-  PAYMENT_FAILED:
-    "Payment failed. No amount has been charged. Please try again or call us at +91-9711977782.",
-  UNKNOWN:
-    "Something went wrong. Please call us at +91-9711977782 to complete your booking.",
+  PAYMENT_FAILED: `Payment failed. No amount has been charged. Please try again or call us at ${PHONE_DISPLAY}.`,
+  UNKNOWN: `Something went wrong. Please call us at ${PHONE_DISPLAY} to complete your booking.`,
 };
 
 interface SubmitResult {
@@ -214,6 +211,14 @@ export function useBookingSubmit() {
           booking: {
             patient_name: name.trim(),
             phone: phone.trim(),
+            // T90 Slice 2 Step 12 — defensive null pass-through. This
+            // hook drives the legacy T61 BookingModal flow which has
+            // no Pulse entry path (Navbar "Book a Visit" pill only).
+            // member_id stays null; the field is here so the request
+            // body shape stays consistent across all three booking
+            // senders and the server contract doesn't depend on
+            // call-site-specific body keys.
+            member_id: null,
             service_category: serviceCategory,
             manual_address: location.trim(),
             gps_location: gpsLocation
@@ -235,7 +240,7 @@ export function useBookingSubmit() {
           success: false,
           error:
             err.error ||
-            "Payment received but booking failed to save. Please call us at +91-9711977782.",
+            `Payment received but booking failed to save. Please call us at ${PHONE_DISPLAY}.`,
         };
       }
 
