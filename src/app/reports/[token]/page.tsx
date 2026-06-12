@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowLeft, Lock } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import { isValidTokenFormat } from "@/lib/lab-tokens";
+import { PHONE_DISPLAY, PHONE_TEL, SUPPORT_EMAIL } from "@/lib/contact";
 import { ReportPaymentClient } from "./ReportPaymentClient";
 import type { Metadata } from "next";
 
@@ -205,17 +206,17 @@ export default async function ReportTokenPage({
           <div className="bg-slate-50 px-6 py-4 text-xs text-text-secondary">
             Trouble paying or downloading? Call us at{" "}
             <a
-              href="tel:+919711977782"
+              href={`tel:${PHONE_TEL}`}
               className="text-primary underline"
             >
-              +91-97119 77782
+              {PHONE_DISPLAY}
             </a>{" "}
             or email{" "}
             <a
-              href="mailto:contact@sanocare.in"
+              href={`mailto:${SUPPORT_EMAIL}`}
               className="text-primary underline"
             >
-              contact@sanocare.in
+              {SUPPORT_EMAIL}
             </a>
             . This link is private — please don&apos;t forward it.
           </div>

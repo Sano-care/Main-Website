@@ -16,11 +16,11 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, CheckCircle2, AlertCircle, Phone } from "lucide-react";
 
+import { PHONE_DISPLAY, PHONE_TEL } from "@/lib/contact";
+
 type Status = "idle" | "submitting" | "success" | "error";
 
 const PHONE_PREFIX = "+91 ";
-const PHONE_DISPLAY = "+91 97119 77782";
-const PHONE_TEL = "+919711977782";
 
 export function QuickBookCard() {
   const [name, setName] = useState("");

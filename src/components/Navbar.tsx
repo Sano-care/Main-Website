@@ -12,9 +12,9 @@
 //     shared useBookingFlow trigger for Book a Visit pill, BookingModal
 //     + BookingGate still mounted here once and store-driven.
 //
-// PR3 keeps PHONE_TEL = "+919711977782" (T61 codebase number). Founder
-// will confirm whether this is the real ops number or also a
-// placeholder — single grep at launch covers every surface either way.
+// T90 Slice 2 Step 17: PHONE_TEL + PHONE_DISPLAY now sourced from
+// @/lib/contact (single source of truth — a phone-number change is one
+// grep against src/lib/contact.ts).
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -28,9 +28,7 @@ import { cn } from "@/lib/utils";
 import { useCmsSection } from "@/hooks/useCmsSection";
 import { useCmsSiteGlobals } from "@/hooks/useCmsSiteGlobals";
 import { SHARED_CONTENT } from "@/constants/cms-content";
-
-const PHONE_TEL = "+919711977782";
-const PHONE_DISPLAY = "+91 97119 77782";
+import { PHONE_DISPLAY, PHONE_TEL } from "@/lib/contact";
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);

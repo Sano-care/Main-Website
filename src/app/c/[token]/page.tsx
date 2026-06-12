@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { isValidConsultJoinTokenFormat } from "@/lib/consult/tokens";
+import { PHONE_DISPLAY, PHONE_TEL } from "@/lib/contact";
 import { formatIST } from "@/lib/time/formatIST";
 import { PatientJoinClient } from "./PatientJoinClient";
 
@@ -253,8 +254,8 @@ export default async function PatientJoinPage({
 
           <div className="bg-slate-50 px-6 py-4 text-xs text-text-secondary">
             Trouble joining? Call us at{" "}
-            <a href="tel:+919711977782" className="text-primary underline">
-              +91-97119 77782
+            <a href={`tel:${PHONE_TEL}`} className="text-primary underline">
+              {PHONE_DISPLAY}
             </a>
             . This link is private — please don&apos;t forward it.
           </div>

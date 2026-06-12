@@ -21,14 +21,14 @@ import { motion } from "framer-motion";
 import { Check, Copy, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui";
 
+import { WHATSAPP_DEEPLINK } from "@/lib/contact";
+
 interface ConfirmStepProps {
   bookingId: string;
   bookingCode: string | null;
   /** Closes the modal + scrolls to top (per founder Q4 (a)). */
   onDone: () => void;
 }
-
-const WHATSAPP_NUMBER = "919711977782"; // matches Navbar PHONE_TEL
 
 export function ConfirmStep({
   bookingId,
@@ -39,7 +39,7 @@ export function ConfirmStep({
 
   const displayCode = bookingCode ?? bookingId.slice(0, 8).toUpperCase();
   const waText = encodeURIComponent(`Case ${displayCode}`);
-  const waHref = `https://wa.me/${WHATSAPP_NUMBER}?text=${waText}`;
+  const waHref = `${WHATSAPP_DEEPLINK}?text=${waText}`;
 
   async function handleCopy() {
     try {

@@ -26,7 +26,8 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { ArrowRight, Phone } from "lucide-react";
 import { useEffect, useState } from "react";
 
-const PHONE_TEL = "+919711977782";
+import { PHONE_TEL, WHATSAPP_DEEPLINK } from "@/lib/contact";
+
 const WHATSAPP_PREFILL = "Hi, I'd like to book a Sanocare visit";
 // Threshold: if the visual viewport shrinks below 75% of the window,
 // assume the soft keyboard is up. Empirically robust on iOS Safari
@@ -110,7 +111,7 @@ export function MobileStickyBar({ onBook }: MobileStickyBarProps) {
 
             {/* WhatsApp — brand green */}
             <a
-              href={`https://wa.me/${PHONE_TEL.replace(/\D/g, "")}?text=${encodeURIComponent(WHATSAPP_PREFILL)}`}
+              href={`${WHATSAPP_DEEPLINK}?text=${encodeURIComponent(WHATSAPP_PREFILL)}`}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Chat on WhatsApp"

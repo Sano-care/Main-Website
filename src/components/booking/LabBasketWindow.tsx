@@ -32,6 +32,7 @@ import {
   LAB_COLLECTION_FEE_INR,
   type LabCatalogItem,
 } from "@/lib/services/labCatalog";
+import { PHONE_DISPLAY } from "@/lib/contact";
 
 import { SearchBar } from "./lab/SearchBar";
 import { CommonTestsGrid } from "./lab/CommonTestsGrid";
@@ -345,7 +346,7 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
         const err = (await verifyRes.json().catch(() => ({}))) as { error?: string };
         setSubmitError(
           err.error ||
-            "Payment received but booking failed to save. Please call +91-9711977782.",
+            `Payment received but booking failed to save. Please call ${PHONE_DISPLAY}.`,
         );
         return;
       }

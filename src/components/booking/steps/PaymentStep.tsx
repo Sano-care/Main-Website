@@ -32,6 +32,7 @@ import {
   formatPrice,
 } from "@/constants/pricing";
 import { t85ToPricingKey } from "@/lib/booking/serviceMapper";
+import { PHONE_DISPLAY } from "@/lib/contact";
 import type { ServiceSlug } from "@/lib/services/catalog";
 
 interface PaymentStepProps {
@@ -122,7 +123,7 @@ export function PaymentStep({
           );
         } else {
           setError(
-            "Payment failed. No amount has been charged. Please retry or call +91-9711977782.",
+            `Payment failed. No amount has been charged. Please retry or call ${PHONE_DISPLAY}.`,
           );
         }
         return;
@@ -166,7 +167,7 @@ export function PaymentStep({
         const errJson = await verifyRes.json().catch(() => ({}));
         setError(
           errJson.error ||
-            "Payment received but booking failed to save. Please call +91-9711977782.",
+            `Payment received but booking failed to save. Please call ${PHONE_DISPLAY}.`,
         );
         return;
       }

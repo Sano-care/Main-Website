@@ -27,6 +27,8 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { useScrollLock } from "@/hooks/useScrollLock";
 
+import { PHONE_DISPLAY, PHONE_TEL } from "@/lib/contact";
+
 type NavLink = {
   href: string;
   label: string;
@@ -58,8 +60,8 @@ export function MobileMenu({
   navLinks,
   signInLabel = "Sign in",
   signInHref = "/portal",
-  phoneNumber = "+919711977782",
-  phoneDisplay = "+91 97119 77782",
+  phoneNumber = PHONE_TEL,
+  phoneDisplay = PHONE_DISPLAY,
 }: MobileMenuProps) {
   const prefersReducedMotion = useReducedMotion();
 

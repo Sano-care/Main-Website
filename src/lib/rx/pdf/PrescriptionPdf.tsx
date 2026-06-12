@@ -42,6 +42,8 @@
 
 import { Document, Page, Text, View, StyleSheet, Image, Svg, Path } from "@react-pdf/renderer";
 
+import { SUPPORT_EMAIL } from "@/lib/contact";
+
 // -------- types --------------------------------------------------------
 
 export type PrescriptionItemForPdf = {
@@ -901,7 +903,7 @@ export function PrescriptionPdf({
               SANOCARE TECH INNOVATIONS PRIVATE LIMITED
             </Text>
             <Text style={styles.footerContact}>
-              eMail: contact@sanocare.in   Website: www.sanocare.in
+              {`eMail: ${SUPPORT_EMAIL}   Website: www.sanocare.in`}
             </Text>
             <Text style={styles.footerWhatsapp}>
               FOR APPOINTMENT CALL / WHATSAPP: +91 9760059900

@@ -5,31 +5,31 @@ import { useState } from "react";
 import { LogOut } from "lucide-react";
 
 /**
- * T90 Slice 2 Step 14 — DRY sign-out client component.
+ * T90 Slice 2 Step 14 + 17 — DRY sign-out client component.
  *
- * Two visual variants today:
- *   "primary"  — large pill, used as the Account-settings page CTA
- *                (Step 14). Full-width-on-mobile button with icon.
- *   "ghost"    — text-only link with an icon, for inline contexts
- *                (e.g. embedded inside drawer-style menus in a
- *                follow-up). Reserved; not used yet.
+ * Three visual variants:
+ *   "primary"  — large pill (Account-settings page CTA, Step 14).
+ *                Full-width-on-mobile button with icon.
+ *   "ghost"    — compact text+icon for inline contexts. Reserved.
+ *   "menu"     — full-width row with hover-bg + left-aligned LogOut
+ *                icon. Used by PulseDrawer + PulseAvatarMenu sign-out
+ *                paths (migrated in Step 17). Matches the rounded-lg
+ *                px-3 py-2.5 row style both menus use for their
+ *                other rows so the sign-out button is visually
+ *                consistent with the rest of the menu.
  *
- * Sign-out flow (matches Drawer + AvatarMenu inline pattern from
- * Steps 05-07):
+ * Sign-out flow (matches the pre-Step-17 inline pattern from Drawer +
+ * AvatarMenu):
  *   POST /api/pulse/signout  → 204 + cleared cookie
  *   router.push('/pulse/login')
  *
  * Soft-fails on network error and still bounces to /pulse/login — the
  * login page's own getCurrentCustomer() check redirects to home if the
  * cookie is somehow still valid (it shouldn't be).
- *
- * Step 17 will migrate Drawer + AvatarMenu sign-out paths to consume
- * this component too — deferred per founder direction to keep Step 14's
- * commit scope tight.
  */
 
 interface Props {
-  variant?: "primary" | "ghost";
+  variant?: "primary" | "ghost" | "menu";
   /** Label override. Defaults to "Sign out". */
   label?: string;
 }
@@ -62,6 +62,20 @@ export default function PulseSignOutButton({
       >
         <LogOut className="h-4 w-4" aria-hidden="true" />
         {signingOut ? "Signing out…" : label}
+      </button>
+    );
+  }
+
+  if (variant === "menu") {
+    return (
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={signingOut}
+        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-60"
+      >
+        <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span>{signingOut ? "Signing out…" : label}</span>
       </button>
     );
   }

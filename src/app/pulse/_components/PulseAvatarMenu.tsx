@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import {
   AnimatePresence,
   motion,
@@ -12,6 +11,7 @@ import {
 import { useScrollLock } from "@/hooks/useScrollLock";
 
 import { useCurrentCustomer } from "../_lib/PulseCustomerContext";
+import PulseSignOutButton from "./PulseSignOutButton";
 
 /**
  * T90 Pulse v1 Phase 1 — Avatar menu (Surface 5).
@@ -63,9 +63,7 @@ export default function PulseAvatarMenu({
   onSwitchMember,
 }: Props) {
   const customer = useCurrentCustomer();
-  const router = useRouter();
   const prefersReducedMotion = useReducedMotion();
-  const [signingOut, setSigningOut] = useState(false);
   useScrollLock(open);
 
   // Escape closes.
@@ -77,20 +75,6 @@ export default function PulseAvatarMenu({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
-
-  async function handleSignOut() {
-    if (signingOut) return;
-    setSigningOut(true);
-    try {
-      await fetch("/api/pulse/signout", { method: "POST" });
-    } catch (err) {
-      // Soft-fail: still bounce to /pulse/login. The login page's own
-      // getCurrentCustomer() check will redirect back to home if the
-      // cookie is somehow still valid (it shouldn't be — but harmless).
-      console.error("[PulseAvatarMenu] sign-out request failed", err);
-    }
-    router.push("/pulse/login");
-  }
 
   function handleSwitchMember() {
     onClose(); // close avatar menu first
@@ -168,14 +152,9 @@ export default function PulseAvatarMenu({
             <hr className="border-gray-200" />
 
             {/* Sign out — instant, no confirmation (per Step-07 scoping). */}
-            <button
-              type="button"
-              onClick={handleSignOut}
-              disabled={signingOut}
-              className="mt-1 flex w-full items-center rounded-lg px-3 py-2.5 text-left text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-60"
-            >
-              <span>{signingOut ? "Signing out…" : "Sign out"}</span>
-            </button>
+            <div className="mt-1">
+              <PulseSignOutButton variant="menu" />
+            </div>
           </motion.div>
         </motion.div>
       )}
