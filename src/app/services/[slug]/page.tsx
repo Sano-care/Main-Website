@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Check, Clock, ShieldCheck, Star, ArrowRight } from "lucide-react";
 
+import { ConversionGtagLoader } from "@/components/ConversionGtagLoader";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { getServiceLabel } from "@/lib/aarogya/labels";
@@ -12,6 +13,13 @@ import {
   type ServicePageContent,
 } from "./serviceContent";
 import { BookVisitCta } from "./BookVisitCta";
+
+// Page-scoped WhatsApp click conversion firing — currently only the
+// home-nurse SEO page is the Final URL of a live Google Ads campaign
+// (`23929771665`, "Sanocare - Home Nursing - Delhi NCR"). On that page,
+// WhatsApp CTA clicks fire a Google Ads conversion + Meta Pixel Lead.
+// All other service pages render BookVisitCta with default no-fire.
+const WHATSAPP_CONVERSION_SLUG = "home-nurse-delhi-ncr";
 
 const SITE_URL = "https://sanocare.in";
 
@@ -147,6 +155,10 @@ export default async function ServicePage({
   // doctor / teleconsult services) and render the nursing-only footer.
   const classifierSafe = !!page.classifierSafe;
 
+  // T93 — fire WhatsApp click conversion only on the page that the live
+  // paid campaign points at. Other service pages stay untouched.
+  const fireWhatsAppConversion = page.seoSlug === WHATSAPP_CONVERSION_SLUG;
+
   const others = SERVICE_PAGE_SLUGS.filter((s) => s !== slug).map(
     (s) => SERVICE_PAGES[s],
   );
@@ -156,6 +168,12 @@ export default async function ServicePage({
       <JsonLd data={serviceSchema(page)} />
       <JsonLd data={breadcrumbSchema(page)} />
       <JsonLd data={faqSchema(page)} />
+
+      {/* T93 — gtag.js loader needed by BookVisitCta's WhatsApp click
+          conversion event. Mounted only when fireWhatsAppConversion is
+          on, so the script is not loaded on the other 3 service pages
+          where no conversion will fire. */}
+      {fireWhatsAppConversion ? <ConversionGtagLoader /> : null}
 
       <Navbar />
 
@@ -191,7 +209,10 @@ export default async function ServicePage({
             {page.subtitle}
           </p>
           <div className="mt-7">
-            <BookVisitCta serviceSlug={page.serviceSlug} />
+            <BookVisitCta
+              serviceSlug={page.serviceSlug}
+              fireWhatsAppConversion={fireWhatsAppConversion}
+            />
           </div>
         </section>
 
@@ -266,7 +287,10 @@ export default async function ServicePage({
               fees, GST-exempt clinical care.
             </p>
             <div className="mt-6">
-              <BookVisitCta serviceSlug={page.serviceSlug} />
+              <BookVisitCta
+                serviceSlug={page.serviceSlug}
+                fireWhatsAppConversion={fireWhatsAppConversion}
+              />
             </div>
           </div>
         </section>
