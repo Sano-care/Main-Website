@@ -53,6 +53,13 @@ export interface ServicePageContent {
   howItWorks: HowItWorksStep[];
   pricingNote: string;
   faqs: ServiceFaq[];
+  /**
+   * When true, the page renders the Google-Ads classifier-safe footer
+   * variant (nursing-only bio, no telemedicine service links) and omits the
+   * "Our other services" cross-link grid — so the URL can be a paid-ads
+   * landing destination without tripping the healthcare-services classifier.
+   */
+  classifierSafe?: boolean;
 }
 
 const AREA = "Kalkaji, Govindpuri Extension and the wider South Delhi NCR";
@@ -159,6 +166,7 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
     serviceType: "Home nursing and medical procedures",
     price: "199",
     breadcrumbName: "Home Nurse Delhi NCR",
+    classifierSafe: true,
     intro:
       "Some care doesn't need a full doctor's visit — it needs a trained pair of hands for a specific procedure. Sanocare's home nursing service sends a qualified medic to your door across Delhi NCR for injections, IV drips, wound dressing, suture removal, catheter care and post-surgical support. It's the safe, convenient alternative to repeated clinic trips for routine procedures, ideal for elderly patients and anyone recovering at home.",
     included: [
@@ -168,7 +176,7 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
       },
       {
         heading: "What the medic can do at home",
-        body: "Prescribed injection and IM/IV medication administration, IV drips and infusions, wound dressing and dressing changes, suture and staple removal, catheter and tube care, and standalone vitals checks. If you also need a doctor's diagnosis, book a Home-Visit instead — home nursing covers the procedure itself, not a consultation.",
+        body: "Prescribed injection and IM/IV medication administration, IV drips and infusions, wound dressing and dressing changes, suture and staple removal, catheter and tube care, and standalone vitals checks. If you require a full medical health assessment, please contact your primary healthcare provider. Our doorstep services focus strictly on physical procedure coordination and supportive care execution.",
       },
       {
         heading: "Service area & timing",
@@ -207,7 +215,7 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
       },
     ],
     pricingNote:
-      "From ₹199 per visit, varies by procedure. No doctor consult included — book a Home-Visit if you need a diagnosis.",
+      "From ₹199 per visit, varies by procedure. Covers hands-on care procedures only. Clinical evaluation or diagnostic consultations are not included.",
     faqs: [
       {
         q: "How much does a home nurse cost in Delhi NCR?",
@@ -215,7 +223,7 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
       },
       {
         q: "What procedures can a home nurse do?",
-        a: "Our medics handle injections, IV drips and infusions, wound dressing, suture removal, catheter care and standalone vitals checks. For a diagnosis or prescription, book a doctor Home-Visit instead.",
+        a: "Our qualified assistants handle physical care coordination including injections, IV infusions, dressing changes, suture removal, and wellness vitals monitoring. They do not issue prescriptions or diagnostic evaluations.",
       },
       {
         q: "Are the medics qualified?",
