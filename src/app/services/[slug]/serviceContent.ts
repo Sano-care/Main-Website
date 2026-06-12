@@ -243,18 +243,18 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
   "lab-tests-at-home-delhi": {
     seoSlug: "lab-tests-at-home-delhi",
     serviceSlug: "lab-tests",
-    metaTitle: "Lab Tests at Home in Delhi — Sanocare | NABL, Free Pickup",
+    metaTitle: "Lab Tests at Home in Delhi — Sanocare | Free Pickup",
     metaDescription:
-      "Free home sample collection by a trained phlebotomist; 1,892 tests via NABL-accredited labs, signed PDF reports within 24h. Serving Kalkaji, Govindpuri Extension & South Delhi. ₹200 collection fee.",
+      "Free home sample collection by a trained phlebotomist; 1,892 tests via partner laboratories, signed PDF reports within 24h. Serving Kalkaji, Govindpuri Extension & South Delhi. ₹200 collection fee.",
     h1: "Lab Tests at Home in Delhi",
     subtitle:
-      "Free phlebotomist pickup · 1,892 NABL-accredited tests · reports in 24 hours. ₹200 collection fee + test amount.",
+      "Free phlebotomist pickup · 1,892 tests · reports in 24 hours. ₹200 collection fee + test amount.",
     schemaServiceName: "Lab Tests at Home in Delhi",
     serviceType: "Home diagnostic sample collection",
     price: "200",
     breadcrumbName: "Lab Tests at Home Delhi",
     intro:
-      "Skip the diagnostic-centre queue. Sanocare sends a trained phlebotomist to your home across Delhi NCR to collect blood, urine or swab samples, processes them at NABL-accredited labs, and delivers signed PDF reports to your phone within 24 hours. With 1,892 tests available through our Pathcore partner — from a single parameter to full-body checkups — it's diagnostics on your schedule, without the travel.",
+      "Skip the diagnostic-centre queue. Sanocare sends a trained phlebotomist to your home across Delhi NCR to collect blood, urine or swab samples, processes them at our partner laboratories, and delivers signed PDF reports to your phone within 24 hours. With 1,892 tests available through our Pathcore partner — from a single parameter to full-body checkups — it's diagnostics on your schedule, without the travel.",
     included: [
       {
         heading: "Who collects your sample",
@@ -262,15 +262,15 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
       },
       {
         heading: "What's available & how reports arrive",
-        body: "Choose from 1,892 tests via Pathcore: routine panels (CBC, lipid, thyroid, HbA1c), doctor-prescribed tests, and full-body health checkups. Samples are processed at NABL-accredited labs and your signed PDF report lands on WhatsApp and in your Sanocare Pulse account, typically within 24 hours.",
+        body: "Choose from 1,892 tests via Pathcore: routine panels (CBC, lipid, thyroid, HbA1c), doctor-prescribed tests, and full-body health checkups. Samples are processed at our partner laboratories and your signed PDF report lands on WhatsApp and in your Sanocare Pulse account, typically within 24 hours.",
       },
       {
         heading: "Service area & timing",
         body: `Home collection covers ${AREA}, with a phlebotomist arriving within about 90 minutes of a confirmed slot. Morning collection (ideal for fasting tests) and evening slots are both available, 9 AM to 9 PM.`,
       },
       {
-        heading: "Pricing & accreditation",
-        body: "A flat ₹200 collection fee is paid at booking; the test amount is paid by UPI to the phlebotomist at collection, so you only ever pay for the tests you actually take. All processing is at NABL-accredited labs, and your data is handled under India's DPDP Act 2023.",
+        heading: "Pricing & compliance",
+        body: "A flat ₹200 collection fee is paid at booking; the test amount is paid by UPI to the phlebotomist at collection, so you only ever pay for the tests you actually take. All processing is at our partner laboratories, and your data is handled under India's DPDP Act 2023.",
       },
     ],
     useCases: [
@@ -292,8 +292,8 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
         body: "A trained phlebotomist reaches you (usually within 90 minutes of the slot) and collects your sample with sterile, single-use equipment.",
       },
       {
-        title: "NABL-accredited processing",
-        body: "Pay the test amount by UPI at collection. Samples are processed at NABL-accredited labs under proper cold-chain handling.",
+        title: "Partner laboratory processing",
+        body: "Pay the test amount by UPI at collection. Samples are processed at our partner laboratories under proper cold-chain handling.",
       },
       {
         title: "Reports in 24 hours",
@@ -308,8 +308,8 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
         a: "There's a flat ₹200 home-collection fee paid at booking; the test amount is paid by UPI to the phlebotomist at collection and depends on which of the 1,892 available tests you choose.",
       },
       {
-        q: "Are the labs NABL-accredited?",
-        a: "Yes. All samples are processed at NABL-accredited labs via our Pathcore partner, and you receive a signed PDF report.",
+        q: "How are the lab samples processed?",
+        a: "Samples are processed at our partner laboratories via Pathcore, following chain-of-custody protocol with collection timestamps and tamper-evident seals. You receive a signed PDF report.",
       },
       {
         q: "How soon will I get my reports?",
