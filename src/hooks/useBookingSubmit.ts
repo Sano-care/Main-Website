@@ -214,6 +214,14 @@ export function useBookingSubmit() {
           booking: {
             patient_name: name.trim(),
             phone: phone.trim(),
+            // T90 Slice 2 Step 12 — defensive null pass-through. This
+            // hook drives the legacy T61 BookingModal flow which has
+            // no Pulse entry path (Navbar "Book a Visit" pill only).
+            // member_id stays null; the field is here so the request
+            // body shape stays consistent across all three booking
+            // senders and the server contract doesn't depend on
+            // call-site-specific body keys.
+            member_id: null,
             service_category: serviceCategory,
             manual_address: location.trim(),
             gps_location: gpsLocation

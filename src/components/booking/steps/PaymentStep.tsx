@@ -52,6 +52,11 @@ export function PaymentStep({
   const scheduledFor = useBookingStore((s) => s.scheduledFor);
   const setSubmitting = useBookingStore((s) => s.setSubmitting);
   const isSubmitting = useBookingStore((s) => s.isSubmitting);
+  // T90 Slice 2 Step 12 — pipe Pulse member_id through to the
+  // booking-insert. Null on marketing entries (entryPoint default)
+  // and on Pulse self-bookings. Server-side route accepts the
+  // nullable field, writes bookings.member_id directly.
+  const pulseEntryMember = useBookingStore((s) => s.pulseEntryMember);
 
   const { openCheckout } = useRazorpayCheckout();
   const [error, setError] = useState<string | null>(null);
@@ -132,6 +137,13 @@ export function PaymentStep({
           booking: {
             patient_name: name.trim(),
             phone: phone.trim(),
+            // T90 Slice 2 Step 12 — Pulse-side member booking attribution.
+            // Null for self / marketing entries (no caregiver-for-member
+            // context), uuid for family-member bookings.
+            member_id:
+              pulseEntryMember?.kind === "member"
+                ? pulseEntryMember.member.id
+                : null,
             // service_category gets overridden by t85Slug server-side
             // post-M039 — we still pass it for back-compat in case the
             // server is running pre-M039.

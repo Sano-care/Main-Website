@@ -5,6 +5,9 @@ import type { LucideIcon } from "lucide-react";
 
 import { useBookingFlow } from "@/hooks/useBookingFlow";
 import type { ServiceSlug } from "@/lib/services/catalog";
+import { useBookingStore } from "@/store/bookingStore";
+
+import { useViewingMember } from "../../_lib/MemberViewingContext";
 
 /**
  * T90 Pulse v1 Phase 1 Slice 2 — Home tile grid (Surface 6).
@@ -80,8 +83,27 @@ const TILES: readonly Tile[] = [
 
 export default function PulseHomeTiles() {
   const { requestBookingForService, requestBookingForLab } = useBookingFlow();
+  const { viewing } = useViewingMember();
+  const setEntryPoint = useBookingStore((s) => s.setEntryPoint);
+  const setPulseEntryMember = useBookingStore((s) => s.setPulseEntryMember);
 
   function handleTap(tile: Tile) {
+    // T90 Slice 2 Step 12 — seed Pulse provenance + booking subject
+    // BEFORE dispatching. The booking modal reads both on mount:
+    //   - entryPoint='pulse' drives the initial step (confirm-member
+    //     for ServiceLedBookingModal; gate before basket form for
+    //     LabBasketWindow)
+    //   - pulseEntryMember tells MemberConfirmStep the default subject
+    //     (self vs the active viewing family member)
+    // Both reset on modal close (bookingStore.closeModal / closeLabBasket
+    // / closeGate) so a future marketing visit starts clean.
+    setEntryPoint("pulse");
+    setPulseEntryMember(
+      viewing.kind === "self"
+        ? { kind: "self" }
+        : { kind: "member", member: viewing.member },
+    );
+
     if (tile.isLab) {
       requestBookingForLab();
     } else {

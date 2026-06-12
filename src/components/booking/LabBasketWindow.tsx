@@ -90,6 +90,10 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
   // MemberConfirmStep before the basket form. Marketing entry skips
   // straight to the basket (existing behavior unchanged).
   const entryPoint = useBookingStore((s) => s.entryPoint);
+  // T90 Slice 2 Step 12 — piped through to create-booking-prepaid for
+  // bookings.member_id. Null on marketing entries (default) and on
+  // Pulse self-bookings; uuid on Pulse family-member bookings.
+  const pulseEntryMember = useBookingStore((s) => s.pulseEntryMember);
 
   const { detectLocation } = useGeolocation();
   const { openCheckout } = useRazorpayCheckout();
@@ -309,6 +313,12 @@ export function LabBasketWindow({ isOpen, onClose }: LabBasketWindowProps) {
           booking: {
             patient_name: trimmedName,
             phone: phone.trim(),
+            // T90 Slice 2 Step 12 — Pulse-side member booking attribution.
+            // Null on marketing entries and on Pulse self-bookings.
+            member_id:
+              pulseEntryMember?.kind === "member"
+                ? pulseEntryMember.member.id
+                : null,
             manual_address: location.trim(),
             gps_location: gpsLocation
               ? {
