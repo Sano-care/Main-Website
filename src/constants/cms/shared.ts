@@ -51,7 +51,7 @@ export const SHARED_CONTENT = {
   },
   floatingSidebar: {
     buttons: [
-      { icon: Calendar, label: "Book", href: "/book" },
+      { icon: Calendar, label: "Book", href: "/#service-home-visit" },
       { icon: Phone, label: "Call", href: "tel:+919711977782" },
       { icon: MessageCircle, label: "WhatsApp", href: "https://wa.me/919711977782" },
     ],
@@ -82,9 +82,9 @@ export const SHARED_CONTENT = {
         { label: "CareHub for Societies", href: "/carehub" },
       ],
       resources: [
-        { label: "Book a visit", href: "/book" },
+        { label: "Book a visit", href: "/#service-home-visit" },
         { label: "Sanocare Pulse", href: "/sanopulse" },
-        { label: "Patient Portal", href: "/portal" },
+        { label: "Sign in", href: "/portal" },
         { label: "About", href: "/about" },
         { label: "Insights", href: "/research" },
         { label: "Contact", href: "/contact" },

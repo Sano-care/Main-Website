@@ -18,6 +18,15 @@ const nextConfig: NextConfig = {
   // marketing footer pre-rebuild) is forwarded to the matching /pulse path.
   // 308 (permanent) so crawlers + browsers update the canonical. Both the
   // bare /portal and any /portal/* subpath are covered.
+  //
+  // T91 — /book is referenced by legacy footer links, external bookmarks,
+  // and old WhatsApp shares. There's no real /book route yet (T80 in the
+  // workspace tracker is the multi-step booking flow that will land at
+  // /book later). For now, forward to the homepage Home-Visit section so
+  // the click lands on a relevant booking surface instead of a 404. 307
+  // (NOT 308) because /book will become a real page in T80 — we don't
+  // want crawlers to bake in the redirect and lose SEO authority that
+  // should belong to the future real page.
   async redirects() {
     return [
       { source: "/portal", destination: "/pulse", permanent: true },
@@ -26,6 +35,7 @@ const nextConfig: NextConfig = {
         destination: "/pulse/:path*",
         permanent: true,
       },
+      { source: "/book", destination: "/#service-home-visit", permanent: false },
     ];
   },
 
