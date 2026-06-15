@@ -29,7 +29,7 @@ export function LabTestSearchSection() {
         <LabTestSearch variant="hero" />
         <div className="mt-4 flex items-center justify-between flex-wrap gap-2">
           <p className="text-xs text-text-secondary">
-            Reports flow into your Sanocare record. NABL-partner labs.
+            Reports flow into your Sanocare record. Processed at partner laboratories.
           </p>
           <Link
             href="/lab-tests"

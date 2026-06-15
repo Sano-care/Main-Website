@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 import { isValidConsultJoinTokenFormat } from "@/lib/consult/tokens";
 import { mintMeetingToken } from "@/lib/daily/client";
 import { DailyApiError, DailyAuthError } from "@/lib/daily/auth";
+import { PHONE_DISPLAY } from "@/lib/contact";
 
 export const runtime = "nodejs";
 
@@ -129,7 +130,7 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          "Your doctor's Duty Room isn't set up yet. Please call ops on +91-97119 77782.",
+          `Your doctor's Duty Room isn't set up yet. Please call ops on ${PHONE_DISPLAY}.`,
       },
       { status: 400 },
     );

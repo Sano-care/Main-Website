@@ -122,7 +122,7 @@ export const SHARED_CONTENT = {
       ],
       mapsHref:
         "https://www.google.com/maps/search/?api=1&query=1666/B2,+Gali+2,+Govindpuri+Extension,+Kalkaji,+New+Delhi+110019",
-      phone: "+91-9711977782",
+      phone: "+91 97119 77782",
       phoneHref: "tel:+919711977782",
       email: "contact@sanocare.in",
       emailHref: "mailto:contact@sanocare.in",

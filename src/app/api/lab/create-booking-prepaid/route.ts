@@ -15,6 +15,7 @@ import {
   lookupCustomerIdByPhone,
 } from "@/lib/booking/customerLink";
 import { LAB_COLLECTION_FEE_INR } from "@/lib/services/labCatalog";
+import { PHONE_DISPLAY } from "@/lib/contact";
 
 export const runtime = "nodejs";
 
@@ -332,7 +333,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Payment verified but booking could not be saved. Please call +91-9711977782.",
+            `Payment verified but booking could not be saved. Please call ${PHONE_DISPLAY}.`,
           razorpay_payment_id,
         },
         { status: 500 },

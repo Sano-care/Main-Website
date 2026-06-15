@@ -4,6 +4,7 @@ import { useState } from "react";
 import Script from "next/script";
 import { Loader2, Download, CheckCircle2 } from "lucide-react";
 import { useRazorpayCheckout } from "@/hooks/useRazorpayCheckout";
+import { PHONE_DISPLAY } from "@/lib/contact";
 
 interface Props {
   token: string;
@@ -39,14 +40,14 @@ export function ReportPaymentClient({
     // For now: ask the user to click "Pay & view" — the verify endpoint will
     // detect already-paid state and just return the signed URL again.
     setError(
-      "Already paid. Please contact us if your report didn't appear: +91-97119 77782"
+      `Already paid. Please contact us if your report didn't appear: ${PHONE_DISPLAY}`
     );
   }
 
   async function handlePayAndView() {
     if (!orderId) {
       setError(
-        "Payment link is no longer active. Please contact us to receive a fresh link: +91-97119 77782"
+        `Payment link is no longer active. Please contact us to receive a fresh link: ${PHONE_DISPLAY}`
       );
       return;
     }

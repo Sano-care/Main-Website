@@ -80,7 +80,7 @@ export const SERVICES_PAGE_CONTENT = {
         "Book a consultation now and get professional medical care at your doorstep within 30 minutes.",
       primaryCtaLabel: "Book a Visit",
       primaryCtaHref: "/#service-home-visit",
-      secondaryCtaLabel: "Call: +91-9711977782",
+      secondaryCtaLabel: "Call: +91 97119 77782",
       secondaryCtaHref: "tel:+919711977782",
     },
   },
@@ -195,7 +195,7 @@ export const NOW_PAGE_CONTENT = {
         "Healthcare that comes to you. Get paramedics, nurses, and diagnostics at your doorstep within 30 minutes. No appointments, no waiting rooms.",
       primaryCtaLabel: "Book a Visit Now",
       primaryCtaHref: "/#service-home-visit",
-      secondaryCtaLabel: "+91-9711977782",
+      secondaryCtaLabel: "+91 97119 77782",
       secondaryCtaHref: "tel:+919711977782",
       imageSrc:
         "https://images.unsplash.com/photo-1584820927498-cfe5211fd8bf?q=80&w=2942&auto=format&fit=crop",
@@ -398,7 +398,7 @@ export const CAREHUB_PAGE_CONTENT = {
       description:
         "Fill out the form and our partnership team will reach out within 24 hours to discuss how CareHub can transform healthcare in your community.",
       directTalkLabel: "Prefer to talk directly?",
-      directTalkPhone: "+91-9711977782",
+      directTalkPhone: "+91 97119 77782",
       successTitle: "Request Submitted!",
       successCtaLabel: "Submit Another Inquiry",
       formTitle: "Society Inquiry Form",
@@ -565,7 +565,7 @@ export const CONTACT_PAGE_CONTENT = {
     {
       icon: Phone,
       title: "Call Us",
-      details: ["+91-9711977782", "Mon-Sat: 8AM - 10PM"],
+      details: ["+91 97119 77782", "Mon-Sat: 8AM - 10PM"],
       link: "tel:+919711977782",
       linkText: "Call Now",
     },

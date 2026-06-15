@@ -5,6 +5,7 @@ import {
   normaliseIndianPhone,
   verifyToken,
 } from "@/lib/otp/token";
+import { PHONE_DISPLAY } from "@/lib/contact";
 
 export const runtime = "nodejs";
 
@@ -135,7 +136,7 @@ export async function POST(req: NextRequest) {
   if (error) {
     console.error("[lab/create-booking] insert failed:", error);
     return NextResponse.json(
-      { error: "Could not save booking. Please call +91-9711977782." },
+      { error: `Could not save booking. Please call ${PHONE_DISPLAY}.` },
       { status: 500 },
     );
   }

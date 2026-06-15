@@ -9,6 +9,7 @@ import {
   normaliseIndianPhone,
 } from "@/lib/otp/token";
 import { OtpDeliveryError, sendOtp, type OtpChannel } from "@/lib/otp/sender";
+import { PHONE_DISPLAY } from "@/lib/contact";
 
 export const runtime = "nodejs";
 
@@ -82,10 +83,10 @@ export async function POST(req: NextRequest) {
       {
         error:
           requested === "sms"
-            ? "SMS is not available right now. Please try WhatsApp or call +91-9711977782."
+            ? `SMS is not available right now. Please try WhatsApp or call ${PHONE_DISPLAY}.`
             : requested === "whatsapp"
-              ? "WhatsApp OTP is temporarily unavailable. Please try SMS or call +91-9711977782."
-              : "OTP delivery is temporarily unavailable. Please call +91-9711977782 to book.",
+              ? `WhatsApp OTP is temporarily unavailable. Please try SMS or call ${PHONE_DISPLAY}.`
+              : `OTP delivery is temporarily unavailable. Please call ${PHONE_DISPLAY} to book.`,
       },
       { status: 400 },
     );
@@ -118,7 +119,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Too many code requests for this number. Please try again in an hour or call +91-9711977782.",
+          `Too many code requests for this number. Please try again in an hour or call ${PHONE_DISPLAY}.`,
         retryAfterSeconds: 60 * 60,
       },
       { status: 429 },
