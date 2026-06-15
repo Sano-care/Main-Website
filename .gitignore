@@ -44,3 +44,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# T65 — Medic App (Android) build artifacts
+medic-app/build/
+medic-app/.gradle/
+medic-app/.idea/
+medic-app/app/build/
+medic-app/app/release/
+medic-app/local.properties
+medic-app/captures/
+medic-app/.kotlin/
+*.apk
+*.aab
+*.iml

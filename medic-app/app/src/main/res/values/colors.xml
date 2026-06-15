@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- XML colors used only by the launcher / window before Compose
+         attaches. Compose surfaces use the tokens in
+         in.sanocare.medic.theme.Color (Sanocare brand spec). -->
+    <color name="sanocare_blue">#FF2B81FF</color>
+    <color name="paper">#FFFFFFFF</color>
+</resources>
