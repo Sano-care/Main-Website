@@ -18,14 +18,44 @@ const GRAPH_BASE = "https://graph.facebook.com";
 // safe hard chunk so a long echo can never 400.
 const MAX_CHARS = 4000;
 
+export interface CloudApiErrorMeta {
+  /** Meta error.code. */
+  code?: number;
+  /** Meta error.error_subcode. */
+  subcode?: number;
+  /** Meta error.fbtrace_id. */
+  fbtraceId?: string;
+  /** Retry-After header (seconds), when present on a 429. */
+  retryAfter?: number;
+  /** True when there was no HTTP response (network/DNS/TLS). */
+  network?: boolean;
+}
+
 export class CloudApiError extends Error {
+  readonly code?: number;
+  readonly subcode?: number;
+  readonly fbtraceId?: string;
+  readonly retryAfter?: number;
+  readonly network?: boolean;
   constructor(
     message: string,
     readonly status?: number,
+    meta: CloudApiErrorMeta = {},
   ) {
     super(message);
     this.name = "CloudApiError";
+    this.code = meta.code;
+    this.subcode = meta.subcode;
+    this.fbtraceId = meta.fbtraceId;
+    this.retryAfter = meta.retryAfter;
+    this.network = meta.network;
   }
+}
+
+function parseRetryAfter(header: string | null): number | undefined {
+  if (!header) return undefined;
+  const secs = Number(header);
+  return Number.isFinite(secs) ? secs : undefined;
 }
 
 function requireEnv(name: string): string {
@@ -45,7 +75,31 @@ function chunk(text: string, size: number): string[] {
 
 interface MetaMessagesResponse {
   messages?: { id: string }[];
-  error?: { message: string; type: string; code: number };
+  error?: {
+    message: string;
+    type: string;
+    code: number;
+    error_subcode?: number;
+    fbtrace_id?: string;
+  };
+}
+
+/** Build a CloudApiError from a Meta error response, capturing classification fields. */
+function fromMetaError(
+  prefix: string,
+  response: Response,
+  json: MetaMessagesResponse,
+): CloudApiError {
+  return new CloudApiError(
+    `${prefix} (${response.status}): ${json.error?.message ?? "unknown"}`,
+    response.status,
+    {
+      code: json.error?.code,
+      subcode: json.error?.error_subcode,
+      fbtraceId: json.error?.fbtrace_id,
+      retryAfter: parseRetryAfter(response.headers.get("retry-after")),
+    },
+  );
 }
 
 /**
@@ -90,7 +144,9 @@ export async function sendTextMessage(input: {
       );
     } catch (cause) {
       log.error("cloud-api network error", cause);
-      throw new CloudApiError("Network error reaching WhatsApp Cloud API");
+      throw new CloudApiError("Network error reaching WhatsApp Cloud API", undefined, {
+        network: true,
+      });
     }
 
     const json = (await response
@@ -99,12 +155,7 @@ export async function sendTextMessage(input: {
 
     if (!response.ok || json.error) {
       // json.error.message may include detail but never the token.
-      throw new CloudApiError(
-        `WhatsApp send failed (${response.status}): ${
-          json.error?.message ?? "unknown"
-        }`,
-        response.status,
-      );
+      throw fromMetaError("WhatsApp send failed", response, json);
     }
 
     lastId = json.messages?.[0]?.id ?? lastId;
@@ -175,17 +226,14 @@ export async function sendTemplateMessage(input: {
     );
   } catch (cause) {
     log.error("cloud-api template network error", cause);
-    throw new CloudApiError("Network error reaching WhatsApp Cloud API");
+    throw new CloudApiError("Network error reaching WhatsApp Cloud API", undefined, {
+      network: true,
+    });
   }
 
   const json = (await response.json().catch(() => ({}))) as MetaMessagesResponse;
   if (!response.ok || json.error) {
-    throw new CloudApiError(
-      `WhatsApp template send failed (${response.status}): ${
-        json.error?.message ?? "unknown"
-      }`,
-      response.status,
-    );
+    throw fromMetaError("WhatsApp template send failed", response, json);
   }
 
   return { providerMessageId: json.messages?.[0]?.id };
