@@ -196,7 +196,7 @@ export const SANOPULSE_PAGE_CONTENT = {
       {
         question: "Do I need to use Pulse to book a visit?",
         answer:
-          "No. You can always book through sanocare.in or call +91-97119 77782. Pulse is an option, not a requirement.",
+          "No. You can always book through sanocare.in or call +91 97119 77782. Pulse is an option, not a requirement.",
       },
       {
         question: "What about iPhone?",

@@ -135,7 +135,7 @@ export function LabTestSearch({
             {error && (
               <div className="px-5 py-6 text-rose-600 text-sm">
                 Couldn&apos;t load the lab catalog. Please refresh the page or
-                call us at +91-97119 77782.
+                call us at {PHONE_DISPLAY}.
               </div>
             )}
             {!isLoading && !error && results.length === 0 && (

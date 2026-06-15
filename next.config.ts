@@ -27,6 +27,13 @@ const nextConfig: NextConfig = {
   // (NOT 308) because /book will become a real page in T80 — we don't
   // want crawlers to bake in the redirect and lose SEO authority that
   // should belong to the future real page.
+  //
+  // T93 — /coming-soon and /blog both only have `[slug]/page.tsx`, so the
+  // bare URLs 404. Forward them to relevant landing surfaces — /coming-soon
+  // to the homepage (caller most likely arrived from a stale link),
+  // /blog to /research (closest existing content surface). Both 307 (NOT
+  // 308) — if we ever build a real /coming-soon index or /blog index,
+  // we want the redirect cleared without crawlers caching it.
   async redirects() {
     return [
       { source: "/portal", destination: "/pulse", permanent: true },
@@ -36,6 +43,8 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       { source: "/book", destination: "/#service-home-visit", permanent: false },
+      { source: "/coming-soon", destination: "/", permanent: false },
+      { source: "/blog", destination: "/research", permanent: false },
     ];
   },
 

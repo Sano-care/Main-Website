@@ -392,7 +392,7 @@ export function PulseLoginForm({ next }: { next: string }) {
                 )}
               </Button>
               <p className="mt-3 text-center text-xs text-text-secondary">
-                Need help? Call us at +91-97119 77782.
+                Need help? Call us at {PHONE_DISPLAY}.
               </p>
             </>
           )}

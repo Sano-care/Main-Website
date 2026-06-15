@@ -306,7 +306,7 @@ function StateBody({
       <Notice
         tone="rose"
         title="This consultation was cancelled."
-        body="If you believe this is wrong, please call ops on +91-97119 77782."
+        body={`If you believe this is wrong, please call ops on ${PHONE_DISPLAY}.`}
       />
     );
   }
@@ -324,7 +324,7 @@ function StateBody({
       <Notice
         tone="amber"
         title="This link has expired."
-        body="Please contact ops on +91-97119 77782 to receive a fresh join link."
+        body={`Please contact ops on ${PHONE_DISPLAY} to receive a fresh join link.`}
       />
     );
   }
@@ -333,7 +333,7 @@ function StateBody({
       <Notice
         tone="amber"
         title="Your doctor's room isn't set up yet."
-        body="Please call ops on +91-97119 77782 — we'll sort this out and send you a fresh link."
+        body={`Please call ops on ${PHONE_DISPLAY} — we'll sort this out and send you a fresh link.`}
       />
     );
   }

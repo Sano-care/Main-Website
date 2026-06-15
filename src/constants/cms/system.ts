@@ -55,7 +55,7 @@ export const NOT_FOUND_PAGE_CONTENT = {
     { label: "Sign in", href: "/portal" },
   ],
   helpLabel: "Need help? Call us at",
-  helpPhone: "+91-9711977782",
+  helpPhone: "+91 97119 77782",
   helpPhoneHref: "tel:+919711977782",
 };
 
@@ -75,7 +75,7 @@ export const COMING_SOON_PAGE_CONTENT = {
   notifyLabel: "Notify Me",
   notifyToast: "Thanks! We'll notify you when this page is ready.",
   contactHelpLabel: "Need immediate help? Call us at",
-  contactPhone: "+91-9711977782",
+  contactPhone: "+91 97119 77782",
   contactPhoneHref: "tel:+919711977782",
   entries: {
     about: {
@@ -145,7 +145,7 @@ export const PORTAL_PAGE_CONTENT = {
   },
   helpStrip: {
     label: "Already a patient and need your records right now?",
-    phoneLabel: "Call us at +91-97119 77782",
+    phoneLabel: "Call us at +91 97119 77782",
     phoneHref: "tel:+919711977782",
     emailLabel: "Email contact@sanocare.in",
     emailHref: "mailto:contact@sanocare.in",

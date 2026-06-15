@@ -443,7 +443,7 @@ function PhoneStep({
             {CHANNEL_LABEL[FALLBACK_CHANNEL]} on the next step.
           </>
         ) : (
-          <>Need help? Call us at +91-97119 77782 to book.</>
+          <>Need help? Call us at {PHONE_DISPLAY} to book.</>
         )}
       </p>
     </>
