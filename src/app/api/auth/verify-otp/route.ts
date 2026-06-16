@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
+  MEDIC_COOKIE_NAME,
   OTP_MAX_ATTEMPTS,
   PULSE_LONG_TTL_SECONDS,
+  TOKEN_TTL_SECONDS,
   VERIFY_COOKIE_NAME,
   hashOtp,
   hashesEqual,
+  medicCookieOptions,
+  mintMedicToken,
   mintVerificationToken,
   normaliseIndianPhone,
   pulseCookieOptions,
@@ -156,6 +160,63 @@ export async function POST(req: NextRequest) {
   if (markErr) {
     console.error("[verify-otp] mark verified failed:", markErr);
     return NextResponse.json({ error: "Could not record verification." }, { status: 500 });
+  }
+
+  // T65 Phase 1 — medic table routing (A2 pattern). After OTP hash validates,
+  // check medics FIRST. If the phone matches an active medic row, mint the
+  // medic cookie + return medic shape; do NOT continue to the customer
+  // auto-upsert path (medic cookie wins on multi-match — policy explicitly
+  // documented in the T65 brief §6).
+  //
+  // The send-otp closed-signup gate (body.medic === true) means real medic
+  // requests already pre-filter to "phone in medics". This second check is
+  // a defence-in-depth: a customer-app verify call for a phone that's ALSO
+  // in medics still mints the medic cookie + returns role:'medic' rather
+  // than silently issuing a customer cookie that could later confuse the
+  // role-disambiguation downstream.
+  {
+    const { data: medicRow, error: medicErr } = await supabase
+      .from("medics")
+      .select("id, full_name, qualification")
+      .eq("phone", phone)
+      .eq("active", true)
+      .maybeSingle();
+    if (medicErr) {
+      console.error("[verify-otp] medic lookup failed:", medicErr);
+      // Fall through to customer path on lookup error — soft fail.
+    } else if (medicRow?.id) {
+      let medicToken: string;
+      try {
+        medicToken = mintMedicToken({
+          medic_id: medicRow.id as string,
+          phone,
+          staySignedIn,
+        });
+      } catch (err) {
+        console.error("[verify-otp] medic token mint failed:", err);
+        return NextResponse.json(
+          { error: "Server is misconfigured." },
+          { status: 500 },
+        );
+      }
+      const response = NextResponse.json({
+        ok: true,
+        role: "medic",
+        medic: {
+          id: medicRow.id as string,
+          full_name: medicRow.full_name as string,
+          qualification: medicRow.qualification as string,
+        },
+      });
+      response.cookies.set({
+        name: MEDIC_COOKIE_NAME,
+        value: medicToken,
+        ...medicCookieOptions(
+          staySignedIn ? PULSE_LONG_TTL_SECONDS : TOKEN_TTL_SECONDS,
+        ),
+      });
+      return response;
+    }
   }
 
   // Mint the signed token and stamp it onto an HttpOnly cookie.

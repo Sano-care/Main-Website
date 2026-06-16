@@ -5,10 +5,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -28,6 +30,8 @@ import `in`.sanocare.medic.R
 fun OtpEntryScreen(
     phone: String,
     contentPadding: PaddingValues,
+    verifying: Boolean,
+    errorMessage: String?,
     onBack: () -> Unit,
     onVerify: (String) -> Unit,
 ) {
@@ -45,9 +49,6 @@ fun OtpEntryScreen(
             style = MaterialTheme.typography.headlineLarge,
         )
         Text(
-            // Phase 0: shows the phone the user just entered so the back-flow
-            // is unambiguous. Phase 1 prefixes with +91 once a phone-formatting
-            // util lives in the shared lib.
             text = stringResource(R.string.login_otp_subtitle) + "\n+91 $phone",
             style = MaterialTheme.typography.bodyMedium,
         )
@@ -58,14 +59,31 @@ fun OtpEntryScreen(
             label = { Text(stringResource(R.string.login_otp_input_label)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             singleLine = true,
-            modifier = Modifier.fillMaxSize().height(72.dp),
+            isError = errorMessage != null,
+            modifier = Modifier.fillMaxWidth(),
         )
+        if (errorMessage != null) {
+            Text(
+                text = errorMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         Button(
             onClick = { onVerify(otp) },
-            enabled = otp.length == 6,
-            modifier = Modifier.fillMaxSize().height(56.dp),
+            enabled = otp.length == 6 && !verifying,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
         ) {
-            Text(stringResource(R.string.login_otp_cta))
+            if (verifying) {
+                CircularProgressIndicator(
+                    modifier = Modifier.height(24.dp),
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Text(stringResource(R.string.login_otp_cta))
+            }
         }
         TextButton(onClick = onBack) {
             Text(stringResource(R.string.login_otp_back))
