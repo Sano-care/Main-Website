@@ -7,6 +7,13 @@
          13+) for FCM push. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Phase 1 C4: attendance clock-in captures device location (optional
+         — denial → null lat/lng, route still accepts). COARSE is sufficient
+         for ops-level "did the medic clock-in at the patient's home"; FINE
+         is requested too to satisfy newer Play targeting requirements. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
     <application
         android:name=".MedicApp"
         android:allowBackup="false"

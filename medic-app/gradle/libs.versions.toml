@@ -34,6 +34,9 @@ androidxHiltNavigationCompose = "1.2.0"
 firebaseBom = "33.7.0"
 dailySdk = "0.30.0"
 
+# Google Play Services
+playServicesLocation = "21.3.0"
+
 # Build config
 minSdk = "26"
 compileSdk = "36"
@@ -77,6 +80,9 @@ firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging
 # Daily.co video SDK
 # Coordinates per https://docs.daily.co/reference/daily-android-client-library
 daily-client = { group = "co.daily", name = "client", version.ref = "dailySdk" }
+
+# Google Play Services — fused location for attendance clock-in coords
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

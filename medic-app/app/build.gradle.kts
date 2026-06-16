@@ -17,8 +17,8 @@ android {
         applicationId = "in.sanocare.medic"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -103,4 +103,7 @@ dependencies {
 
     // Daily.co video SDK (Phase 3 wires the embedded call surface)
     implementation(libs.daily.client)
+
+    // Fused location — attendance clock-in coords (Phase 1 C4)
+    implementation(libs.play.services.location)
 }

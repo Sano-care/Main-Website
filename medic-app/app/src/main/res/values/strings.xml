@@ -21,6 +21,15 @@
     <string name="tab_payouts">Payouts</string>
     <string name="tab_me">Me</string>
     <string name="tab_payouts_placeholder">Payouts open after the first completed visit.</string>
-    <string name="duty_placeholder">Attendance opens in C4.</string>
     <string name="me_sign_out">Sign out</string>
+
+    <!-- Attendance (Duty tab) -->
+    <string name="attendance_clocked_out_title">Off duty</string>
+    <string name="attendance_clocked_out_subtitle">Tap to start your shift. We\'ll capture your location at clock-in.</string>
+    <string name="attendance_clock_in_cta">Clock in</string>
+
+    <string name="attendance_clocked_in_title">On duty</string>
+    <string name="attendance_clocked_in_since">Since %1$s</string>
+    <string name="attendance_clocked_in_coords">Location: %1$.4f, %2$.4f</string>
+    <string name="attendance_clock_out_cta">Clock out</string>
 </resources>
