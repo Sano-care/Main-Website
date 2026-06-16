@@ -14,6 +14,18 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
+    <!-- Phase 1.5: continuous adherence pings during the clocked-in window.
+         Foreground service with type=location is the legal basis for
+         background location access — we do NOT runtime-request
+         ACCESS_BACKGROUND_LOCATION in v0 (low grant rate; service runs while
+         the persistent notification is shown). Manifest declaration is kept
+         for forward-compat (geofence is v0.1+). POST_NOTIFICATIONS is
+         requested at first clock-in on Android 13+. -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
     <application
         android:name=".MedicApp"
         android:allowBackup="false"
@@ -36,6 +48,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Phase 1.5 — continuous location pings while clocked in. The
+             foregroundServiceType="location" attribute satisfies Android
+             10+; ServiceCompat.startForeground(..., FOREGROUND_SERVICE_TYPE_LOCATION)
+             handles the API 34+ enforcement. -->
+        <service
+            android:name=".attendance.MedicAttendanceService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
     </application>
 
