@@ -1,5 +1,6 @@
 package `in`.sanocare.medic.ui.duty
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import `in`.sanocare.medic.data.attendance.AttendanceRepository
@@ -18,6 +19,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private const val TAG = "AttendanceVM"
+
 // T65 Phase 1 C4 + Phase 1.5 — Attendance VM.
 //
 // State: loading/openRow/lastClosedRow/errorMessage/hasLocation (StateFlow).
@@ -35,7 +38,14 @@ class AttendanceViewModel @Inject constructor(
     private val _state = MutableStateFlow(AttendanceState())
     val state: StateFlow<AttendanceState> = _state.asStateFlow()
 
+    // T65 Phase 1.5 hotfix — replay=1 so late-subscribing LaunchedEffect
+    // (e.g. AttendanceScreen remount after a tab switch, or any composition
+    // race between VM init refresh() emit and Compose's commit-phase
+    // LaunchedEffect coroutine launch) still receives the most recent
+    // tracking intent. Service start/stop is idempotent so re-delivering
+    // the same event is harmless.
     private val _events = MutableSharedFlow<AttendanceEvent>(
+        replay = 1,
         extraBufferCapacity = 4,
     )
     val events: SharedFlow<AttendanceEvent> = _events.asSharedFlow()
@@ -56,6 +66,7 @@ class AttendanceViewModel @Inject constructor(
                 // clocked in). The service is single-instance so a duplicate
                 // start is a no-op when it's already running.
                 if (result.value != null) {
+                    Log.i(TAG, "refresh(): openRow already exists, emit StartTracking to re-arm")
                     _events.tryEmit(AttendanceEvent.StartTracking)
                 }
             }
@@ -66,12 +77,15 @@ class AttendanceViewModel @Inject constructor(
     }
 
     fun clockIn() {
+        Log.i(TAG, "clockIn() entered (acting=${_state.value.acting})")
         if (_state.value.acting) return
         _state.update { it.copy(acting = true, errorMessage = null) }
         viewModelScope.launch {
             val coords: Coords? = locationProvider.current()
+            Log.i(TAG, "clockIn(): coords=${if (coords != null) "captured" else "null"}")
             when (val result = attendanceRepository.clockIn(coords?.lat, coords?.lng)) {
                 is AuthResult.Ok -> {
+                    Log.i(TAG, "clockIn() API ok, openRow=${result.value.id}")
                     _state.update {
                         it.copy(
                             acting = false,
@@ -80,10 +94,14 @@ class AttendanceViewModel @Inject constructor(
                             hasLocation = coords != null,
                         )
                     }
-                    _events.tryEmit(AttendanceEvent.StartTracking)
+                    val emitted = _events.tryEmit(AttendanceEvent.StartTracking)
+                    Log.i(TAG, "Emit StartTracking (tryEmit=$emitted)")
                 }
-                is AuthResult.Err -> _state.update {
-                    it.copy(acting = false, errorMessage = result.message)
+                is AuthResult.Err -> {
+                    Log.w(TAG, "clockIn() API err: ${result.message} (code=${result.code})")
+                    _state.update {
+                        it.copy(acting = false, errorMessage = result.message)
+                    }
                 }
             }
         }
@@ -96,6 +114,7 @@ class AttendanceViewModel @Inject constructor(
             val coords: Coords? = locationProvider.current()
             when (val result = attendanceRepository.clockOut(coords?.lat, coords?.lng)) {
                 is AuthResult.Ok -> {
+                    Log.i(TAG, "clockOut() API ok")
                     _state.update {
                         it.copy(
                             acting = false,
@@ -104,20 +123,14 @@ class AttendanceViewModel @Inject constructor(
                             errorMessage = null,
                         )
                     }
-                    // Stop tracking REGARDLESS of clock-out API result on the
-                    // server. If the server failed, the medic can retry; the
-                    // foreground service running while clocked-out-locally is
-                    // worse UX than a stale clock-out row (the route
-                    // soft-rejects pings without an open attendance row anyway).
-                    _events.tryEmit(AttendanceEvent.StopTracking)
+                    val emitted = _events.tryEmit(AttendanceEvent.StopTracking)
+                    Log.i(TAG, "Emit StopTracking (tryEmit=$emitted)")
                 }
                 is AuthResult.Err -> {
+                    Log.w(TAG, "clockOut() API err: ${result.message}; stopping service locally")
                     _state.update {
                         it.copy(acting = false, errorMessage = result.message)
                     }
-                    // Network drop on clock-out — stop the service locally so
-                    // we're not pinging while the medic thinks they're off
-                    // duty. The next clock-in will start it again.
                     _events.tryEmit(AttendanceEvent.StopTracking)
                 }
             }
