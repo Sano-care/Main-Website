@@ -288,3 +288,123 @@ export function verifyDoctorToken(token: string | undefined | null): VerifiedDoc
     verifiedAt: payload.verifiedAt,
   };
 }
+
+// ===== Medic session token (T65 Phase 1 C2) =====
+// Same HMAC-SHA256 mechanism + same OTP_TOKEN_SECRET as the patient +
+// doctor tokens. Distinguished by:
+//   1. A `kind: "medic"` discriminator in the payload — verifyMedicToken
+//      rejects any token without it, so a customer/doctor token replayed
+//      under MEDIC_COOKIE_NAME cannot satisfy the medic verifier.
+//   2. The medic_id field — verifyMedicToken requires a uuid-shaped value.
+//
+// Supports the same staySignedIn long-TTL + sliding-renewal pattern as
+// the Pulse customer cookie (T90) — medics use the app daily, so a 30-min
+// session would be punitive. 1-year persistent cookie + sliding renewal
+// on every /api/medic-app/* hit when staySignedIn=true.
+
+export const MEDIC_COOKIE_NAME = "sanocare_medic_verify";
+
+interface MedicTokenPayload {
+  kind: "medic";
+  medic_id: string;
+  phone: string;
+  verifiedAt: number; // unix seconds
+  exp: number; // unix seconds
+  staySignedIn: boolean;
+}
+
+export function mintMedicToken(input: {
+  medic_id: string;
+  phone: string;
+  staySignedIn: boolean;
+}): string {
+  const now = Math.floor(Date.now() / 1000);
+  const ttl = input.staySignedIn ? PULSE_LONG_TTL_SECONDS : TOKEN_TTL_SECONDS;
+  const payload: MedicTokenPayload = {
+    kind: "medic",
+    medic_id: input.medic_id,
+    phone: input.phone,
+    verifiedAt: now,
+    exp: now + ttl,
+    staySignedIn: input.staySignedIn,
+  };
+  const encodedPayload = b64url(JSON.stringify(payload));
+  const sig = sign(encodedPayload);
+  return `${encodedPayload}.${sig}`;
+}
+
+export interface VerifiedMedicToken {
+  medic_id: string;
+  phone: string;
+  verifiedAt: number;
+  staySignedIn: boolean;
+}
+
+/**
+ * Returns the verified medic payload if the token is well-formed, signed,
+ * still within TTL, AND carries the `kind: "medic"` discriminator. Returns
+ * null on any failure — never throws so callers can keep a uniform
+ * "reject with 401" path.
+ */
+export function verifyMedicToken(token: string | undefined | null): VerifiedMedicToken | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [encodedPayload, providedSig] = parts;
+  const expectedSig = sign(encodedPayload);
+  if (providedSig.length !== expectedSig.length) return null;
+  if (!timingSafeEqual(Buffer.from(providedSig), Buffer.from(expectedSig))) {
+    return null;
+  }
+  let payload: Partial<MedicTokenPayload>;
+  try {
+    payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+  if (!payload || payload.kind !== "medic") return null;
+  if (typeof payload.medic_id !== "string" || !UUID_RE.test(payload.medic_id)) return null;
+  if (typeof payload.phone !== "string") return null;
+  if (typeof payload.exp !== "number") return null;
+  if (typeof payload.verifiedAt !== "number") return null;
+  if (Math.floor(Date.now() / 1000) >= payload.exp) return null;
+  return {
+    medic_id: payload.medic_id,
+    phone: payload.phone,
+    verifiedAt: payload.verifiedAt,
+    staySignedIn: payload.staySignedIn ?? true,
+  };
+}
+
+/** Sliding-renewal helper. Mirrors `renewVerificationToken` for Pulse. */
+export function renewMedicToken(verified: VerifiedMedicToken): string {
+  return mintMedicToken({
+    medic_id: verified.medic_id,
+    phone: verified.phone,
+    staySignedIn: verified.staySignedIn,
+  });
+}
+
+/**
+ * Single source of truth for the medic verify cookie's security flags.
+ * Both verify-otp (initial mint) and requireMedic (sliding renewal) must
+ * call this so flags can't drift.
+ *
+ * Pass `maxAge` in seconds for a persistent cookie (long TTL path), or
+ * `null` for a session cookie. Mirrors `pulseCookieOptions`.
+ */
+export function medicCookieOptions(maxAge: number | null): {
+  httpOnly: true;
+  secure: boolean;
+  sameSite: "lax";
+  path: "/";
+  maxAge?: number;
+} {
+  const base = {
+    httpOnly: true as const,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/" as const,
+  };
+  return maxAge === null ? base : { ...base, maxAge };
+}

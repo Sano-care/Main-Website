@@ -33,7 +33,7 @@ export const runtime = "nodejs";
  *   500 { error }  — env / supabase issue
  */
 export async function POST(req: NextRequest) {
-  let body: { phone?: string; channel?: string };
+  let body: { phone?: string; channel?: string; medic?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -47,6 +47,37 @@ export async function POST(req: NextRequest) {
       { error: "Please enter a valid 10-digit Indian mobile number." },
       { status: 400 },
     );
+  }
+
+  // T65 Phase 1 — closed signup for the Medic App. When the request comes
+  // from the medic Android client (body.medic === true), reject phones
+  // that aren't in the medics table BEFORE wasting an OTP send. Ops onboards
+  // medics ahead of time; this surface never auto-creates a medic row.
+  // Customer + doctor flows are unaffected (they don't set body.medic).
+  if (body.medic === true) {
+    const supabaseMedicCheck = createServiceClient();
+    if (!supabaseMedicCheck) {
+      return NextResponse.json(
+        { error: "Server is misconfigured. Please try again later." },
+        { status: 500 },
+      );
+    }
+    const { data: medicRow } = await supabaseMedicCheck
+      .from("medics")
+      .select("id")
+      .eq("phone", phone)
+      .eq("active", true)
+      .maybeSingle();
+    if (!medicRow) {
+      console.log("[send-otp] medic closed-signup rejection", { phone });
+      return NextResponse.json(
+        {
+          error:
+            "This phone is not registered as a Sanocare medic. Contact ops to onboard.",
+        },
+        { status: 403 },
+      );
+    }
   }
 
   const requested = String(body.channel ?? "auto").toLowerCase();
