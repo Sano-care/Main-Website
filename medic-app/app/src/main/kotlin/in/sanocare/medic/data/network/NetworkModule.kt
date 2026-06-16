@@ -65,4 +65,9 @@ object NetworkModule {
     @Singleton
     fun provideAttendanceApi(retrofit: Retrofit): AttendanceApi =
         retrofit.create(AttendanceApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideLocationApi(retrofit: Retrofit): LocationApi =
+        retrofit.create(LocationApi::class.java)
 }

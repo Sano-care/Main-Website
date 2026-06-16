@@ -32,4 +32,10 @@
     <string name="attendance_clocked_in_since">Since %1$s</string>
     <string name="attendance_clocked_in_coords">Location: %1$.4f, %2$.4f</string>
     <string name="attendance_clock_out_cta">Clock out</string>
+
+    <!-- Phase 1.5 — foreground service notification -->
+    <string name="notification_channel_attendance_name">Attendance tracking</string>
+    <string name="notification_channel_attendance_description">Shown while you\'re clocked in to track adherence.</string>
+    <string name="notification_attendance_title">Sanocare Medic</string>
+    <string name="notification_attendance_body">Tracking attendance — tap to view</string>
 </resources>
