@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -34,6 +36,8 @@ import `in`.sanocare.medic.R
 import `in`.sanocare.medic.attendance.MedicAttendanceService
 import `in`.sanocare.medic.data.network.AttendanceRow
 
+private const val TAG = "AttendanceScreen"
+
 // T65 Phase 1 C4 + Phase 1.5 — AttendanceScreen.
 //
 // Phase 1.5 additions:
@@ -54,11 +58,20 @@ fun AttendanceScreen() {
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
+        Log.i(TAG, "LaunchedEffect: starting collect on vm.events")
         vm.events.collect { event ->
+            Log.i(TAG, "Event received: $event")
             val intent = Intent(context, MedicAttendanceService::class.java)
             when (event) {
-                AttendanceEvent.StartTracking -> ContextCompat.startForegroundService(context, intent)
-                AttendanceEvent.StopTracking -> context.stopService(intent)
+                AttendanceEvent.StartTracking -> {
+                    Log.i(TAG, "Calling ContextCompat.startForegroundService")
+                    Toast.makeText(context, "START: foreground service", Toast.LENGTH_SHORT).show()
+                    ContextCompat.startForegroundService(context, intent)
+                }
+                AttendanceEvent.StopTracking -> {
+                    Log.i(TAG, "Calling context.stopService")
+                    context.stopService(intent)
+                }
             }
         }
     }
@@ -76,7 +89,16 @@ fun AttendanceScreen() {
         val notificationsOk =
             Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
                 results[Manifest.permission.POST_NOTIFICATIONS] == true
+        val fineOk = results[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_FINE_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
+        Log.i(
+            TAG,
+            "Permission result: notif=$notificationsOk fine=$fineOk results=$results",
+        )
         if (!notificationsOk) {
+            Log.w(TAG, "POST_NOTIFICATIONS denied — blocking clock-in")
             vm.setError(
                 "Notifications are required to track your shift. " +
                     "Enable Sanocare Medic notifications in Settings.",
@@ -91,13 +113,21 @@ fun AttendanceScreen() {
 
     val requestPermissionsOrClockIn = remember(context, permissionLauncher) {
         {
-            val allGranted = requiredPermissions.all { perm ->
+            Toast.makeText(context, "TAP: Clock In", Toast.LENGTH_SHORT).show()
+            val perPermState = requiredPermissions.associateWith { perm ->
                 ContextCompat.checkSelfPermission(context, perm) ==
                     PackageManager.PERMISSION_GRANTED
             }
+            val allGranted = perPermState.values.all { it }
+            Log.i(
+                TAG,
+                "TAP Clock In: sdk=${Build.VERSION.SDK_INT} perms=$perPermState allGranted=$allGranted",
+            )
             if (allGranted) {
+                Log.i(TAG, "All permissions granted, calling vm.clockIn() directly")
                 vm.clockIn()
             } else {
+                Log.i(TAG, "Launching permission request for ${requiredPermissions.toList()}")
                 permissionLauncher.launch(requiredPermissions)
             }
         }

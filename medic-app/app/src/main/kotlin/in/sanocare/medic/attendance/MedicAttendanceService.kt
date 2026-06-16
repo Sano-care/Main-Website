@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -72,16 +73,34 @@ class MedicAttendanceService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.i(TAG, "Starting foreground attendance service")
-        startForegroundWithNotification()
-        startLocationUpdates()
-        startBatchLoop()
+        Log.i(TAG, "Service onStartCommand entered (sdk=${Build.VERSION.SDK_INT})")
+        Toast.makeText(applicationContext, "SERVICE: onStartCommand", Toast.LENGTH_SHORT).show()
+        try {
+            startForegroundWithNotification()
+            Log.i(TAG, "startForeground() returned successfully")
+            startLocationUpdates()
+            startBatchLoop()
+        } catch (t: Throwable) {
+            // Diagnostic crash trap. Without this, startForeground throwing
+            // on API 34+ (missing perms / type mismatch / etc) silently kills
+            // the service and the user sees nothing. Surface as a Toast +
+            // ERROR log so the founder UAT pass captures the cause.
+            Log.e(TAG, "Service start failed", t)
+            Toast.makeText(
+                applicationContext,
+                "CRASH: ${t.javaClass.simpleName}: ${t.message?.take(60)}",
+                Toast.LENGTH_LONG,
+            ).show()
+            stopSelf()
+        }
         return START_STICKY
     }
 
     private fun startForegroundWithNotification() {
+        Log.i(TAG, "startForegroundWithNotification(): ensuring channel + building notification")
         ensureChannel()
         val notification = buildNotification()
+        Log.i(TAG, "Calling ServiceCompat.startForeground (type=LOCATION on sdk>=Q)")
         ServiceCompat.startForeground(
             this,
             NOTIFICATION_ID,
@@ -124,6 +143,7 @@ class MedicAttendanceService : Service() {
             fusedLocationClient.requestLocationUpdates(
                 request, callback, Looper.getMainLooper(),
             )
+            Log.i(TAG, "Location updates requested ($LOCATION_INTERVAL_MS ms interval)")
         } catch (e: SecurityException) {
             Log.w(TAG, "Location permission revoked — stopping service", e)
             stopSelf()
