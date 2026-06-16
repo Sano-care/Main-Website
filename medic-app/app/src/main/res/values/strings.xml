@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Sanocare Medic</string>
+
+    <!-- Login flow -->
+    <string name="login_phone_title">Sign in</string>
+    <string name="login_phone_subtitle">We\'ll send a one-time code to your WhatsApp.</string>
+    <string name="login_phone_input_label">Phone number</string>
+    <string name="login_phone_input_hint">10-digit mobile</string>
+    <string name="login_phone_cta">Send OTP via WhatsApp</string>
+
+    <string name="login_otp_title">Enter the code</string>
+    <string name="login_otp_subtitle">We sent a 6-digit code to your WhatsApp.</string>
+    <string name="login_otp_input_label">6-digit code</string>
+    <string name="login_otp_cta">Verify</string>
+    <string name="login_otp_resend">Resend code</string>
+    <string name="login_otp_back">Use a different number</string>
+</resources>
