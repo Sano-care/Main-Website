@@ -5,10 +5,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +28,8 @@ import `in`.sanocare.medic.R
 @Composable
 fun PhoneEntryScreen(
     contentPadding: PaddingValues,
+    sending: Boolean,
+    errorMessage: String?,
     onSendOtp: (String) -> Unit,
 ) {
     var phone by remember { mutableStateOf("") }
@@ -38,31 +43,46 @@ fun PhoneEntryScreen(
     ) {
         Text(
             text = stringResource(R.string.login_phone_title),
-            style = androidx.compose.material3.MaterialTheme.typography.headlineLarge,
+            style = MaterialTheme.typography.headlineLarge,
         )
         Text(
             text = stringResource(R.string.login_phone_subtitle),
-            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
             value = phone,
-            onValueChange = { input ->
-                // Only digits, max 10 (Indian mobile).
-                phone = input.filter { it.isDigit() }.take(10)
-            },
+            onValueChange = { input -> phone = input.filter { it.isDigit() }.take(10) },
             label = { Text(stringResource(R.string.login_phone_input_label)) },
             placeholder = { Text(stringResource(R.string.login_phone_input_hint)) },
+            prefix = { Text("+91 ") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
             singleLine = true,
-            modifier = Modifier.fillMaxSize().height(72.dp),
+            isError = errorMessage != null,
+            modifier = Modifier.fillMaxWidth(),
         )
+        if (errorMessage != null) {
+            Text(
+                text = errorMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         Button(
             onClick = { onSendOtp(phone) },
-            enabled = phone.length == 10,
-            modifier = Modifier.fillMaxSize().height(56.dp),
+            enabled = phone.length == 10 && !sending,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
         ) {
-            Text(stringResource(R.string.login_phone_cta))
+            if (sending) {
+                CircularProgressIndicator(
+                    modifier = Modifier.height(24.dp),
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Text(stringResource(R.string.login_phone_cta))
+            }
         }
     }
 }

@@ -14,4 +14,13 @@
     <string name="login_otp_cta">Verify</string>
     <string name="login_otp_resend">Resend code</string>
     <string name="login_otp_back">Use a different number</string>
+
+    <!-- Main shell -->
+    <string name="shell_title">Sanocare Medic</string>
+    <string name="tab_duty">Duty</string>
+    <string name="tab_payouts">Payouts</string>
+    <string name="tab_me">Me</string>
+    <string name="tab_payouts_placeholder">Payouts open after the first completed visit.</string>
+    <string name="duty_placeholder">Attendance opens in C4.</string>
+    <string name="me_sign_out">Sign out</string>
 </resources>
