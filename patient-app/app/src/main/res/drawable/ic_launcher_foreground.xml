@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phase 0 placeholder: white "S" centered on the Sanocare-blue square
+     adaptive-icon background. Real lockup icon design lands at Phase 6
+     polish per the brief. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,30 m-18,0 a18,18 0 1,0 36,0 a18,18 0 1,0 -36,0 M54,50 L54,78 M44,68 L64,68"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
