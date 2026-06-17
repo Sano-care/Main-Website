@@ -39,19 +39,26 @@ export type BookingRow = {
   gps_location?: GPSLocation | null;
   status: BookingStatus;
   amount?: number | null;
-  assigned_paramedic?: string | null;
-  assigned_paramedic_id?: string | null;
+  // T65 Phase 2 (M053/M054): paramedics retired, medic_id replaces
+  // assigned_paramedic_id. assigned_paramedic (denormalised name) is dead.
+  medic_id?: string | null;
   dispatched_at?: string | null;
   notes?: string | null;
 };
 
-export type Paramedic = {
+// T65 Phase 2 — Medic replaces Paramedic. New schema (M049):
+// full_name, qualification (CHECK GNM|B.Sc Nursing), license_number,
+// hire_date, active. Older `specialty` + `per_visit_payout_paise` columns
+// don't exist — ledger owns money (M056).
+export type Medic = {
   id: string;
   created_at: string;
-  name: string;
+  full_name: string;
   phone: string;
-  specialty: string;
-  is_active: boolean;
+  qualification: "GNM" | "B.Sc Nursing";
+  license_number: string | null;
+  hire_date: string | null;
+  active: boolean;
 };
 
 // Status types
