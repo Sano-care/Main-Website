@@ -7,6 +7,7 @@ import { formatIST } from "@/lib/time/formatIST";
 import { ProfileTab } from "./ProfileTab";
 import { TabPlaceholder } from "./TabPlaceholder";
 import { DocsTab, type MedicDoc } from "./DocsTab";
+import { PayoutTab, type Settlement } from "./PayoutTab";
 
 export const metadata: Metadata = {
   title: "Ops · Medic detail",
@@ -143,6 +144,23 @@ export default async function MedicDetailPage({
     }));
   }
 
+  // Last-5 settlements for the Payout tab. Server-fetched (no dedicated GET
+  // route — they only change on a settle, after which the tab calls
+  // router.refresh()). The ledger itself is loaded client-side via the
+  // paginated GET .../ledger route.
+  let settlements: Settlement[] = [];
+  if (tab === "payout") {
+    const { data: settlementRows } = await supabase
+      .from("medic_payout_settlements")
+      .select(
+        "id, amount_paise, reference_text, payout_method, settled_at, proof_doc_id, notes",
+      )
+      .eq("medic_id", id)
+      .order("settled_at", { ascending: false })
+      .limit(5);
+    settlements = ((settlementRows ?? []) as Settlement[]);
+  }
+
   return (
     <div className="px-8 py-8 max-w-4xl">
       {showAddedToast && (
@@ -218,7 +236,9 @@ export default async function MedicDetailPage({
       {tab === "docs" && (
         <DocsTab medicId={id} docs={docs} isAdmin={isAdmin} />
       )}
-      {tab === "payout" && <TabPlaceholder title="Payout" comingIn="C5a" />}
+      {tab === "payout" && (
+        <PayoutTab medicId={id} isAdmin={isAdmin} settlements={settlements} />
+      )}
       {tab === "attendance" && (
         <TabPlaceholder title="Attendance" comingIn="C5b" />
       )}

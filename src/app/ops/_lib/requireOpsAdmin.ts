@@ -40,3 +40,17 @@ export async function requireOpsAdminApi(): Promise<
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 }
+
+// requireOpsUserApi(): any active ops user (admin OR agent). For route
+// handlers whose READ is open to both roles (e.g. GET medic ledger) while
+// the WRITE on the same surface stays admin-only via requireOpsAdminApi().
+// Same redirect-can't-happen-in-a-route handling as above → 401.
+export async function requireOpsUserApi(): Promise<
+  CurrentOpsUser | NextResponse
+> {
+  try {
+    return await getCurrentOpsUser();
+  } catch {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+}
