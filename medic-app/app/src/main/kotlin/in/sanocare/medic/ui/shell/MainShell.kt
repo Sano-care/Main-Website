@@ -88,7 +88,7 @@ fun MainShell(
     ) { inner ->
         Box(modifier = Modifier.fillMaxSize().padding(inner)) {
             when (selected) {
-                Tab.Duty -> DutyTab()
+                Tab.Duty -> DutyTab(onSignOut = onSignOut)
                 Tab.Payouts -> PlaceholderTab(stringResource(R.string.tab_payouts_placeholder))
                 Tab.Me -> MeTab(profile = profile, onSignOut = onSignOut)
             }
