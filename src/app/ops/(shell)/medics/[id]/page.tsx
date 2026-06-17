@@ -6,6 +6,7 @@ import { getCurrentOpsUser } from "../../../_lib/getCurrentOpsUser";
 import { formatIST } from "@/lib/time/formatIST";
 import { ProfileTab } from "./ProfileTab";
 import { TabPlaceholder } from "./TabPlaceholder";
+import { DocsTab, type MedicDoc } from "./DocsTab";
 
 export const metadata: Metadata = {
   title: "Ops · Medic detail",
@@ -88,6 +89,60 @@ export default async function MedicDetailPage({
     .limit(1)
     .maybeSingle();
 
+  // Docs for the Documents tab. Fetched server-side regardless of which
+  // tab is active so SSR-rendered counts are immediately accurate when
+  // tabs are switched. Soft-deleted rows filtered by deleted_at IS NULL.
+  let docs: MedicDoc[] = [];
+  if (tab === "docs") {
+    const { data: docRows } = await supabase
+      .from("medic_documents")
+      .select(
+        "id, doc_type, file_path, file_size_bytes, mime_type, label, uploaded_at, uploaded_by",
+      )
+      .eq("medic_id", id)
+      .is("deleted_at", null)
+      .order("uploaded_at", { ascending: false });
+    const rows = (docRows ?? []) as Array<{
+      id: string;
+      doc_type: string;
+      file_path: string;
+      file_size_bytes: number;
+      mime_type: string;
+      label: string | null;
+      uploaded_at: string;
+      uploaded_by: string | null;
+    }>;
+    // Resolve uploader names (small batch lookup).
+    const uploaderIds = Array.from(
+      new Set(rows.map((r) => r.uploaded_by).filter((x): x is string => !!x)),
+    );
+    const uploaderNameById = new Map<string, string>();
+    if (uploaderIds.length > 0) {
+      const { data: uploaders } = await supabase
+        .from("ops_users")
+        .select("id, full_name")
+        .in("id", uploaderIds);
+      for (const u of (uploaders ?? []) as Array<{
+        id: string;
+        full_name: string;
+      }>) {
+        uploaderNameById.set(u.id, u.full_name);
+      }
+    }
+    docs = rows.map((r) => ({
+      id: r.id,
+      doc_type: r.doc_type,
+      file_path: r.file_path,
+      file_size_bytes: r.file_size_bytes,
+      mime_type: r.mime_type,
+      label: r.label,
+      uploaded_at: r.uploaded_at,
+      uploaded_by_name: r.uploaded_by
+        ? uploaderNameById.get(r.uploaded_by) ?? null
+        : null,
+    }));
+  }
+
   return (
     <div className="px-8 py-8 max-w-4xl">
       {showAddedToast && (
@@ -160,7 +215,9 @@ export default async function MedicDetailPage({
 
       {/* Tab body */}
       {tab === "profile" && <ProfileTab medic={medic} isAdmin={isAdmin} />}
-      {tab === "docs" && <TabPlaceholder title="Documents" comingIn="C4" />}
+      {tab === "docs" && (
+        <DocsTab medicId={id} docs={docs} isAdmin={isAdmin} />
+      )}
       {tab === "payout" && <TabPlaceholder title="Payout" comingIn="C5a" />}
       {tab === "attendance" && (
         <TabPlaceholder title="Attendance" comingIn="C5b" />
