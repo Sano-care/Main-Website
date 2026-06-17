@@ -23,6 +23,13 @@ export const AuditEvent = {
   SIGNATURE_VERIFICATION_FAILED: "signature_verification_failed",
   UNSUPPORTED_MESSAGE_RECEIVED: "unsupported_message_received",
   OUTBOUND_SEND_FAILED: "outbound_send_failed",
+  // Slice 2b — sender hardening: differentiated outbound lifecycle events.
+  OUTBOUND_SEND_ATTEMPTED: "outbound_send_attempted",
+  OUTBOUND_SENT: "outbound_sent",
+  OUTBOUND_SEND_FAILED_TRANSIENT: "outbound_send_failed_transient",
+  OUTBOUND_SEND_FAILED_PERMANENT: "outbound_send_failed_permanent",
+  OUTBOUND_SESSION_EXPIRED: "outbound_session_expired",
+  OUTBOUND_TEMPLATE_SENT: "outbound_template_sent",
   // Week 2 (LLM)
   AGENT_RESPONSE: "agent_response",
   AGENT_ERROR: "agent_error",

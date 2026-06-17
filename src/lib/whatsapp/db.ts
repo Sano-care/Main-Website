@@ -10,7 +10,7 @@
 //   * messages / audit_log are append-only.
 
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { sendTextMessage } from "@/lib/whatsapp/cloud-api";
+import { sendHardenedText } from "@/lib/whatsapp/sender";
 import { AuditEvent, writeAudit } from "@/lib/whatsapp/safety/audit";
 import { log, maskPhone } from "@/lib/whatsapp/log";
 import type { NormalizedInbound } from "@/types/whatsapp";
@@ -155,37 +155,22 @@ export async function dispatchTextMessage(args: {
     return { sent: false, blocked: true };
   }
 
-  try {
-    const { providerMessageId } = await sendTextMessage({ to: phone, body });
+  // Slice 2b — delegate the actual send to the hardened sender, which handles
+  // idempotency, the 24h session-window check, classify+retry of transient
+  // failures, the outbound message-row persist, and the differentiated audit
+  // events. dispatchTextMessage keeps ownership only of the opt-out gate above
+  // and the DispatchResult contract its callers depend on.
+  const result = await sendHardenedText({ conversationId, phone, body, safetyFlags });
 
-    await supabaseAdmin.from("messages").insert({
-      conversation_id: conversationId,
-      direction: "outbound",
-      content: body,
-      content_type: "text",
-      provider_message_id: providerMessageId ?? null,
-      safety_flags: safetyFlags ?? {},
-    });
-
-    await supabaseAdmin
-      .from("conversations")
-      .update({
-        last_bot_msg_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", conversationId);
-
-    return { sent: true, providerMessageId };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "send_failed";
-    log.error("outbound send failed", maskPhone(phone), message);
-    await writeAudit({
-      conversationId,
-      eventType: AuditEvent.OUTBOUND_SEND_FAILED,
-      eventData: { phone, error: message },
-    });
-    return { sent: false, blocked: false, error: message };
+  if (result.ok) {
+    return { sent: true, providerMessageId: result.providerMessageId };
   }
+  if (result.reason === "session_expired") {
+    // Caller can fall back to a template send (sendHardenedTemplate).
+    log.warn("outbound refused: session window closed", maskPhone(phone));
+    return { sent: false, blocked: false, error: "session_expired" };
+  }
+  return { sent: false, blocked: false, error: result.error.classification };
 }
 
 /**
