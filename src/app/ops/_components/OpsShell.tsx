@@ -10,6 +10,7 @@ import {
   Users,
   Building2,
   Stethoscope,
+  HeartPulse,
   Microscope,
   Settings,
   LogOut,
@@ -33,6 +34,12 @@ const NAV: NavItem[] = [
   { href: "/ops/patients", label: "Patients", icon: Users },
   { href: "/ops/partners", label: "Partners", icon: Building2 },
   { href: "/ops/doctors", label: "Doctors", icon: Stethoscope },
+  // T65 Phase 2A — interim entry pointing at the add-form. The full
+  // Hub list page (/ops/medics) ships in Phase 2B; until then this
+  // link bounces admins straight to the create form. Page enforces
+  // admin role; this flat NAV list has no per-role filter so the
+  // entry stays visible to agents (who hit the role gate on click).
+  { href: "/ops/medics/new", label: "Medics", icon: HeartPulse },
   { href: "/ops/prescriptions", label: "Prescriptions", icon: FileText },
   { href: "/ops/labs", label: "Labs", icon: Microscope },
   { href: "/ops/settings", label: "Settings", icon: Settings },
