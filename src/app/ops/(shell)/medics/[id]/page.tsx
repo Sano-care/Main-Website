@@ -5,9 +5,10 @@ import { createOpsRSCClient } from "@/lib/supabase-rsc";
 import { getCurrentOpsUser } from "../../../_lib/getCurrentOpsUser";
 import { formatIST } from "@/lib/time/formatIST";
 import { ProfileTab } from "./ProfileTab";
-import { TabPlaceholder } from "./TabPlaceholder";
 import { DocsTab, type MedicDoc } from "./DocsTab";
 import { PayoutTab, type Settlement } from "./PayoutTab";
+import { AttendanceTab } from "./AttendanceTab";
+import { LocationTab } from "./LocationTab";
 
 export const metadata: Metadata = {
   title: "Ops · Medic detail",
@@ -239,10 +240,8 @@ export default async function MedicDetailPage({
       {tab === "payout" && (
         <PayoutTab medicId={id} isAdmin={isAdmin} settlements={settlements} />
       )}
-      {tab === "attendance" && (
-        <TabPlaceholder title="Attendance" comingIn="C5b" />
-      )}
-      {tab === "location" && <TabPlaceholder title="Location" comingIn="C5b" />}
+      {tab === "attendance" && <AttendanceTab medicId={id} />}
+      {tab === "location" && <LocationTab medicId={id} />}
     </div>
   );
 }
