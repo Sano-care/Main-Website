@@ -412,7 +412,7 @@ export async function reschedule(formData: FormData) {
  * Slice 2a — confirm the phlebotomist + collection slot for a lab booking
  * and notify the patient (sanocare_lab_collection_scheduled).
  *
- * Lab bookings don't flow through assignParamedic (that gates to homecare
+ * Lab bookings don't flow through assignMedic (that gates to homecare
  * / chronic only), so the phlebotomist is recorded on the legacy text
  * column `bookings.assigned_paramedic`. This action writes that +
  * scheduled_for, guards that the row is a lab/diagnostics booking, then
@@ -626,7 +626,7 @@ export async function linkPartner(formData: FormData) {
 // Service-category gating (founder brief table, mapped to canonical
 // SERVICE_CATEGORIES from bookingStatus.ts):
 //   - assignDoctor:     teleconsult, homecare, chronic
-//   - assignParamedic:  homecare, chronic
+//   - assignMedic:      homecare, chronic
 //   - assignPartner:    diagnostics
 //
 // The brief used informal labels "nursing" (mapped to chronic) and
@@ -746,25 +746,24 @@ export async function assignDoctor(formData: FormData) {
 }
 
 /**
- * Assign a paramedic (medic) to a booking. M032 added both the
- * assigned_paramedic_id column and the (assigned_at, assigned_by)
- * audit columns. Empty target unassigns.
+ * Assign a medic to a booking. T65 Phase 2 (M053+M054, 2026-06-17):
+ * paramedics table retired; medics is canonical (M049). Finishes the
+ * half-done refactor (the old comment about "table is called paramedics
+ * for legacy reasons" is now resolved).
  *
- * Service category must allow a medic (homecare / chronic). UI
- * label is "Medic" — the table is called paramedics for legacy
- * reasons (Q3 confirmation).
+ * M032 added (assigned_at, assigned_by) audit columns — both still
+ * populated. The old assigned_paramedic_id column dropped in M054;
+ * medic_id (M053) replaces it. Empty target unassigns.
  *
- * Note: paramedics.name (not full_name) is the display column —
- * the table is sparser than doctors/partners and uses a different
- * naming convention.
+ * Service category must allow a medic (homecare / chronic).
  */
-export async function assignParamedic(formData: FormData) {
+export async function assignMedic(formData: FormData) {
   const opsUser = await getCurrentOpsUser();
   const bookingId = getRequired(formData, "booking_id");
   const supabase = await createOpsRSCClient();
 
-  const target = getString(formData, "paramedic_id");
-  let assigned_paramedic_id: string | null = null;
+  const target = getString(formData, "medic_id");
+  let medic_id: string | null = null;
 
   if (target) {
     if (!UUID_RE.test(target)) {
@@ -777,24 +776,24 @@ export async function assignParamedic(formData: FormData) {
       );
     }
     const { data: medic } = await supabase
-      .from("paramedics")
-      .select("id, is_active")
+      .from("medics")
+      .select("id, active")
       .eq("id", target)
       .maybeSingle();
     if (!medic) throw new Error("Medic not found.");
-    if (medic.is_active === false) {
+    if (medic.active === false) {
       throw new Error("That medic is inactive — pick an active one.");
     }
-    assigned_paramedic_id = medic.id;
+    medic_id = medic.id;
   }
 
-  const update: Record<string, unknown> = assigned_paramedic_id
+  const update: Record<string, unknown> = medic_id
     ? {
-        assigned_paramedic_id,
+        medic_id,
         assigned_at: new Date().toISOString(),
         assigned_by: opsUser.id,
       }
-    : { assigned_paramedic_id: null };
+    : { medic_id: null };
 
   const { error } = await supabase
     .from("bookings")

@@ -18,7 +18,7 @@ import {
   linkCustomer,
   linkPartner,
   assignDoctor,
-  assignParamedic,
+  assignMedic,
   assignPartner,
   confirmLabCollection,
 } from "../actions";
@@ -71,11 +71,13 @@ type BookingDetail = {
   partner_id: string | null;
   doctor_id: string | null;
   // M032 — Ops Framework Phase 1 assignment + audit columns
-  assigned_paramedic_id: string | null;
+  // T65 Phase 2 (M053+M054): assigned_paramedic_id → medic_id (FK → medics).
+  medic_id: string | null;
   assigned_partner_id: string | null;
   assigned_by: string | null;
   // Legacy text phlebotomist column — used by Slice 2a lab-collection
-  // confirmation (lab bookings don't flow through assigned_paramedic_id).
+  // confirmation (lab bookings don't flow through medic_id). Distinct
+  // from the dropped assigned_paramedic_id UUID column.
   assigned_paramedic: string | null;
   customer: {
     id: string;
@@ -96,12 +98,13 @@ type BookingDetail = {
     full_name: string;
     doctor_type: "freelancer" | "salaried";
   } | null;
-  // M032: assigned-resource joins
-  paramedic: {
+  // M032: assigned-resource joins (T65 Phase 2: medic shape switched
+  // from paramedics(name, specialty) → medics(full_name, qualification))
+  medic: {
     id: string;
-    name: string;
+    full_name: string;
     phone: string | null;
-    specialty: string | null;
+    qualification: string | null;
   } | null;
   assigned_partner: {
     id: string;
@@ -122,11 +125,11 @@ type ActiveDoctor = {
   doctor_type: "freelancer" | "salaried";
 };
 
-type ActiveParamedic = {
+type ActiveMedic = {
   id: string;
-  name: string;
+  full_name: string;
   phone: string | null;
-  specialty: string | null;
+  qualification: string | null;
 };
 
 type ActivePartner = {
@@ -143,20 +146,20 @@ type ActivePartner = {
 // diagnostics respectively.
 function pickersFor(serviceCategory: string | null): {
   doctor: boolean;
-  paramedic: boolean;
+  medic: boolean;
   partner: boolean;
 } {
   switch (serviceCategory) {
     case "teleconsult":
-      return { doctor: true, paramedic: false, partner: false };
+      return { doctor: true, medic: false, partner: false };
     case "homecare":
-      return { doctor: true, paramedic: true, partner: false };
+      return { doctor: true, medic: true, partner: false };
     case "chronic":
-      return { doctor: true, paramedic: true, partner: false };
+      return { doctor: true, medic: true, partner: false };
     case "diagnostics":
-      return { doctor: false, paramedic: false, partner: true };
+      return { doctor: false, medic: false, partner: true };
     default:
-      return { doctor: false, paramedic: false, partner: false };
+      return { doctor: false, medic: false, partner: false };
   }
 }
 
@@ -214,7 +217,7 @@ export default async function BookingDetailPage({
      assigned_at, dispatched_at, completed_at, cancelled_at,
      cancellation_reason, ops_notes,
      customer_id, partner_id, doctor_id,
-     assigned_paramedic_id, assigned_partner_id, assigned_by,
+     medic_id, assigned_partner_id, assigned_by,
      assigned_paramedic`;
 
   const UUID_RE =
@@ -224,7 +227,7 @@ export default async function BookingDetailPage({
   const [
     { data: bookingBase, error: bookingErr },
     { data: doctorsData, error: doctorsErr },
-    { data: paramedicsData, error: paramedicsErr },
+    { data: medicsData, error: medicsErr },
     { data: partnersData, error: partnersErr },
   ] = await Promise.all([
     // Try UUID first if it parses as one; otherwise go straight to
@@ -248,10 +251,10 @@ export default async function BookingDetailPage({
       .eq("is_active", true)
       .order("full_name", { ascending: true }),
     supabase
-      .from("paramedics")
-      .select("id, name, phone, specialty")
-      .eq("is_active", true)
-      .order("name", { ascending: true }),
+      .from("medics")
+      .select("id, full_name, phone, qualification")
+      .eq("active", true)
+      .order("full_name", { ascending: true }),
     supabase
       .from("partners")
       .select("id, partner_code, name, partner_type")
@@ -293,8 +296,8 @@ export default async function BookingDetailPage({
   if (doctorsErr) {
     console.error("[ops/bookings/[id]] active doctors lookup error", doctorsErr);
   }
-  if (paramedicsErr) {
-    console.error("[ops/bookings/[id]] active paramedics lookup error", paramedicsErr);
+  if (medicsErr) {
+    console.error("[ops/bookings/[id]] active medics lookup error", medicsErr);
   }
   if (partnersErr) {
     console.error("[ops/bookings/[id]] active partners lookup error", partnersErr);
@@ -364,12 +367,12 @@ export default async function BookingDetailPage({
   // list (no join fields yet); join fields are populated in Stage 2.
   type BookingBase = Omit<
     BookingDetail,
-    "customer" | "partner" | "doctor" | "paramedic" | "assigned_partner" | "assigned_by_user"
+    "customer" | "partner" | "doctor" | "medic" | "assigned_partner" | "assigned_by_user"
   >;
   const base = resolvedBooking as unknown as BookingBase;
 
   const activeDoctors = (doctorsData as ActiveDoctor[] | null) ?? [];
-  const activeParamedics = (paramedicsData as ActiveParamedic[] | null) ?? [];
+  const activeMedics = (medicsData as ActiveMedic[] | null) ?? [];
   const activePartners = (partnersData as ActivePartner[] | null) ?? [];
 
   // Stage 2: six parallel FK-target lookups.
@@ -377,7 +380,7 @@ export default async function BookingDetailPage({
     customerRow,
     partnerRow,
     doctorRow,
-    paramedicRow,
+    medicRow,
     assignedPartnerRow,
     assignedByUserRow,
   ] = await Promise.all([
@@ -405,11 +408,11 @@ export default async function BookingDetailPage({
           .maybeSingle()
           .then((r) => r.data)
       : Promise.resolve(null),
-    base.assigned_paramedic_id
+    base.medic_id
       ? supabase
-          .from("paramedics")
-          .select("id, name, phone, specialty")
-          .eq("id", base.assigned_paramedic_id)
+          .from("medics")
+          .select("id, full_name, phone, qualification")
+          .eq("id", base.medic_id)
           .maybeSingle()
           .then((r) => r.data)
       : Promise.resolve(null),
@@ -436,7 +439,7 @@ export default async function BookingDetailPage({
     customer: (customerRow as BookingDetail["customer"]) ?? null,
     partner: (partnerRow as BookingDetail["partner"]) ?? null,
     doctor: (doctorRow as BookingDetail["doctor"]) ?? null,
-    paramedic: (paramedicRow as BookingDetail["paramedic"]) ?? null,
+    medic: (medicRow as BookingDetail["medic"]) ?? null,
     assigned_partner:
       (assignedPartnerRow as BookingDetail["assigned_partner"]) ?? null,
     assigned_by_user:
@@ -680,7 +683,7 @@ export default async function BookingDetailPage({
           The (assigned_at, assigned_by) audit columns are most-recent
           across all roles per Phase-3 flag from founder (any role
           touched). */}
-      {(booking.doctor || booking.paramedic || booking.assigned_partner) &&
+      {(booking.doctor || booking.medic || booking.assigned_partner) &&
         booking.assigned_at && (
           <div className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2 mb-6 text-[11px] text-slate-600">
             Last assignment{" "}
@@ -766,24 +769,24 @@ export default async function BookingDetailPage({
       </div>
       )}
 
-      {/* Assigned medic (paramedics table; UI label "Medic" per Q3) —
+      {/* Assigned medic (T65 Phase 2 — medics table is canonical) —
           shown for homecare + chronic. Mirrors the doctor block shape. */}
-      {pickers.paramedic && (
+      {pickers.medic && (
       <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
         <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-3">
           Assigned medic
         </div>
-        {booking.paramedic ? (
+        {booking.medic ? (
           <div>
             <div className="text-base font-semibold text-slate-900">
-              {booking.paramedic.name}
+              {booking.medic.full_name}
             </div>
             <div className="text-sm text-slate-500 mt-0.5">
-              {booking.paramedic.phone ?? "—"}
-              {booking.paramedic.specialty && (
+              {booking.medic.phone ?? "—"}
+              {booking.medic.qualification && (
                 <>
                   {" · "}
-                  {booking.paramedic.specialty}
+                  {booking.medic.qualification}
                 </>
               )}
             </div>
@@ -794,28 +797,28 @@ export default async function BookingDetailPage({
           </div>
         )}
         <form
-          action={assignParamedic}
+          action={assignMedic}
           className="flex flex-wrap items-end gap-2 mt-4 pt-4 border-t border-slate-100"
         >
           <input type="hidden" name="booking_id" value={booking.id} />
           <div className="grow min-w-[260px]">
             <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-1">
-              {booking.paramedic ? "Reassign" : "Assign medic"}
+              {booking.medic ? "Reassign" : "Assign medic"}
             </label>
             <select
-              name="paramedic_id"
-              defaultValue={booking.assigned_paramedic_id ?? ""}
+              name="medic_id"
+              defaultValue={booking.medic_id ?? ""}
               className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
             >
               <option value="">— Unassigned —</option>
-              {activeParamedics.map((p) => (
+              {activeMedics.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name}
-                  {p.specialty ? ` (${p.specialty})` : ""}
+                  {p.full_name}
+                  {p.qualification ? ` (${p.qualification})` : ""}
                 </option>
               ))}
             </select>
-            {activeParamedics.length === 0 && (
+            {activeMedics.length === 0 && (
               <p className="text-[11px] text-slate-500 mt-1">
                 No active medics on file. Add via SQL or the future
                 /ops/medics admin (Phase 3).
