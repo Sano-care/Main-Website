@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getCurrentOpsUser } from "../../_lib/getCurrentOpsUser";
+import { getCurrentOpsUser } from "../../../_lib/getCurrentOpsUser";
 import { CreateMedicForm } from "./CreateMedicForm";
 
 export const metadata: Metadata = {

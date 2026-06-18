@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
-import { getCurrentOpsUser } from "../../_lib/getCurrentOpsUser";
+import { getCurrentOpsUser } from "../../../_lib/getCurrentOpsUser";
 
 // T65 Phase 2 C3-quick — interim Add-Medic server action.
 //
@@ -109,21 +109,28 @@ export async function createMedicAction(
     };
   }
 
-  const { error: insertErr } = await supabase.from("medics").insert({
-    full_name,
-    phone,
-    qualification,
-    license_number,
-    hire_date,
-    active,
-  });
-  if (insertErr) {
+  const { data: created, error: insertErr } = await supabase
+    .from("medics")
+    .insert({
+      full_name,
+      phone,
+      qualification,
+      license_number,
+      hire_date,
+      active,
+    })
+    .select("id")
+    .single();
+  if (insertErr || !created) {
     console.error("[ops/medics/new] insert failed", insertErr);
-    return { ok: false, error: `Could not add medic: ${insertErr.message}` };
+    return {
+      ok: false,
+      error: `Could not add medic: ${insertErr?.message ?? "unknown"}`,
+    };
   }
 
-  // C3-full will ship a list page; for now, bounce ops back to /ops/bookings
-  // which is where they'll go to assign this medic to a booking.
-  revalidatePath("/ops/bookings");
-  redirect("/ops/bookings?medic_added=1");
+  // T65 Phase 2B — natural flow into the new detail page (C3-full landed
+  // the Hub). The `?medic_added=1` query surfaces a success toast there.
+  revalidatePath("/ops/medics");
+  redirect(`/ops/medics/${created.id}?medic_added=1`);
 }

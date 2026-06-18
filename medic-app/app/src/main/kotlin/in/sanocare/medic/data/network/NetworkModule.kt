@@ -70,4 +70,9 @@ object NetworkModule {
     @Singleton
     fun provideLocationApi(retrofit: Retrofit): LocationApi =
         retrofit.create(LocationApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideDutyApi(retrofit: Retrofit): DutyApi =
+        retrofit.create(DutyApi::class.java)
 }
