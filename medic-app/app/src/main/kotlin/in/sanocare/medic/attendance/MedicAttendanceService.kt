@@ -14,7 +14,6 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
-import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -73,34 +72,28 @@ class MedicAttendanceService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.i(TAG, "Service onStartCommand entered (sdk=${Build.VERSION.SDK_INT})")
-        Toast.makeText(applicationContext, "SERVICE: onStartCommand", Toast.LENGTH_SHORT).show()
+        Log.d(TAG, "Service onStartCommand entered (sdk=${Build.VERSION.SDK_INT})")
         try {
             startForegroundWithNotification()
-            Log.i(TAG, "startForeground() returned successfully")
+            Log.d(TAG, "startForeground() returned successfully")
             startLocationUpdates()
             startBatchLoop()
         } catch (t: Throwable) {
-            // Diagnostic crash trap. Without this, startForeground throwing
-            // on API 34+ (missing perms / type mismatch / etc) silently kills
-            // the service and the user sees nothing. Surface as a Toast +
-            // ERROR log so the founder UAT pass captures the cause.
+            // Defensive crash trap. Without this, startForeground throwing on
+            // API 34+ (missing perms / type mismatch / etc) silently kills the
+            // service. Keep the ERROR log for ops/crash reporting; the medic-
+            // facing diagnostic Toast was removed in the Phase 1.5 polish pass.
             Log.e(TAG, "Service start failed", t)
-            Toast.makeText(
-                applicationContext,
-                "CRASH: ${t.javaClass.simpleName}: ${t.message?.take(60)}",
-                Toast.LENGTH_LONG,
-            ).show()
             stopSelf()
         }
         return START_STICKY
     }
 
     private fun startForegroundWithNotification() {
-        Log.i(TAG, "startForegroundWithNotification(): ensuring channel + building notification")
+        Log.d(TAG, "startForegroundWithNotification(): ensuring channel + building notification")
         ensureChannel()
         val notification = buildNotification()
-        Log.i(TAG, "Calling ServiceCompat.startForeground (type=LOCATION on sdk>=Q)")
+        Log.d(TAG, "Calling ServiceCompat.startForeground (type=LOCATION on sdk>=Q)")
         ServiceCompat.startForeground(
             this,
             NOTIFICATION_ID,
@@ -143,7 +136,7 @@ class MedicAttendanceService : Service() {
             fusedLocationClient.requestLocationUpdates(
                 request, callback, Looper.getMainLooper(),
             )
-            Log.i(TAG, "Location updates requested ($LOCATION_INTERVAL_MS ms interval)")
+            Log.d(TAG, "Location updates requested ($LOCATION_INTERVAL_MS ms interval)")
         } catch (e: SecurityException) {
             Log.w(TAG, "Location permission revoked — stopping service", e)
             stopSelf()
@@ -171,7 +164,7 @@ class MedicAttendanceService : Service() {
             if (!response.isSuccessful) {
                 Log.w(TAG, "Batch HTTP ${response.code()} — ${toSend.size} pings dropped")
             } else {
-                Log.i(TAG, "Batch ok — ${toSend.size} pings accepted")
+                Log.d(TAG, "Batch ok — ${toSend.size} pings accepted")
             }
         } catch (e: Exception) {
             Log.w(TAG, "Batch send failed — ${toSend.size} pings dropped (v0 has no offline queue)", e)
@@ -216,7 +209,7 @@ class MedicAttendanceService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.notification_attendance_title))
             .setContentText(getString(R.string.notification_attendance_body))
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -225,7 +218,7 @@ class MedicAttendanceService : Service() {
     }
 
     override fun onDestroy() {
-        Log.i(TAG, "Service onDestroy — final flush + teardown")
+        Log.d(TAG, "Service onDestroy — final flush + teardown")
         locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
         locationCallback = null
         // Best-effort final flush before the scope cancels. 2s ceiling so a
