@@ -13,22 +13,13 @@ import { PHONE_DISPLAY } from "@/lib/contact";
 const TOKEN_TTL_MS = 30 * 60 * 1000;
 const RESEND_COOLDOWN_SECONDS = 30;
 
-type Channel = "whatsapp" | "sms" | "rampwin";
+type Channel = "whatsapp" | "sms";
 
 // Channel availability is driven entirely by env flags so we can flip
 // primary/secondary without code changes:
-//   NEXT_PUBLIC_OTP_DEFAULT_CHANNEL    — "rampwin" (current), "whatsapp", or "sms"
-//   NEXT_PUBLIC_RAMPWIN_OTP_ENABLED    — "true" to allow Rampwin-routed WhatsApp
-//   NEXT_PUBLIC_WHATSAPP_OTP_ENABLED   — "true" to allow Meta-direct WhatsApp
+//   NEXT_PUBLIC_OTP_DEFAULT_CHANNEL    — "whatsapp" (current) or "sms"
+//   NEXT_PUBLIC_WHATSAPP_OTP_ENABLED   — "true" to allow WhatsApp Cloud API direct
 //   NEXT_PUBLIC_SMS_OTP_ENABLED        — "true" to allow MSG91 SMS
-//
-// Rampwin and Meta-direct both deliver a WhatsApp message to the patient —
-// the patient never sees the provider name; CHANNEL_LABEL below maps both
-// to "WhatsApp". The distinction matters only for which BSP signs the
-// delivery (Meta direct stays available as a manual fallback while
-// Rampwin is the new default).
-const RAMPWIN_ENABLED =
-  process.env.NEXT_PUBLIC_RAMPWIN_OTP_ENABLED === "true";
 const WHATSAPP_ENABLED =
   process.env.NEXT_PUBLIC_WHATSAPP_OTP_ENABLED === "true";
 const SMS_ENABLED = process.env.NEXT_PUBLIC_SMS_OTP_ENABLED === "true";
@@ -37,41 +28,33 @@ function pickPrimaryChannel(): Channel {
   const configured = process.env.NEXT_PUBLIC_OTP_DEFAULT_CHANNEL as
     | Channel
     | undefined;
-  if (configured === "rampwin" && RAMPWIN_ENABLED) return "rampwin";
   if (configured === "whatsapp" && WHATSAPP_ENABLED) return "whatsapp";
   if (configured === "sms" && SMS_ENABLED) return "sms";
-  // Fall-through priority: rampwin > whatsapp > sms. The market is
-  // WhatsApp-heavy and the template message renders better than SMS.
-  if (RAMPWIN_ENABLED) return "rampwin";
+  // Fall-through priority: whatsapp > sms. The market is WhatsApp-heavy
+  // and the template message renders better than SMS.
   if (WHATSAPP_ENABLED) return "whatsapp";
   if (SMS_ENABLED) return "sms";
-  // No flag is set in env — fall back to "rampwin" so the UI still
+  // No flag is set in env — fall back to "whatsapp" so the UI still
   // renders sensibly. The server's send-otp route will return an
   // explanatory error if no channel is actually configured.
-  return "rampwin";
+  return "whatsapp";
 }
 
 const PRIMARY_CHANNEL: Channel = pickPrimaryChannel();
 
 // Fallback offered as a one-click link beneath the "send code" button.
-// Both Rampwin and Meta-direct ultimately deliver a WhatsApp message, so
-// when the primary IS already WhatsApp (rampwin or whatsapp) the only
-// useful cross-modal fallback is SMS. When the primary is SMS, the
-// fallback is whichever WhatsApp provider is enabled.
+// When the primary is WhatsApp, the only useful cross-modal fallback is
+// SMS. When the primary is SMS, the fallback is WhatsApp if enabled.
 const FALLBACK_CHANNEL: Channel | null =
   PRIMARY_CHANNEL === "sms"
-    ? RAMPWIN_ENABLED
-      ? "rampwin"
-      : WHATSAPP_ENABLED
-        ? "whatsapp"
-        : null
+    ? WHATSAPP_ENABLED
+      ? "whatsapp"
+      : null
     : SMS_ENABLED
       ? "sms"
       : null;
 
 const CHANNEL_LABEL: Record<Channel, string> = {
-  // Patients never see "Rampwin" — they get a WhatsApp message either way.
-  rampwin: "WhatsApp",
   whatsapp: "WhatsApp",
   sms: "SMS",
 };

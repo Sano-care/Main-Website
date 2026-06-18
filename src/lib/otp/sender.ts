@@ -3,8 +3,7 @@
 // other providers, the API routes, or the BookingGate UI.
 //
 // The dispatcher picks a channel:
-//   - 'rampwin'  (default):  WhatsApp via the Rampwin BSP — lib/otp/rampwin.ts
-//   - 'whatsapp' (fallback): WhatsApp Cloud API direct — lib/otp/whatsapp.ts
+//   - 'whatsapp' (default):  WhatsApp Cloud API direct — lib/otp/whatsapp.ts
 //   - 'sms'      (fallback): MSG91 — lib/otp/msg91.ts
 //
 // Each channel is independently flagged via its own *_OTP_ENABLED env var so
@@ -16,9 +15,8 @@
 
 import { sendWhatsAppOtp } from "./whatsapp";
 import { sendSmsOtp } from "./msg91";
-import { sendRampwinOtp } from "./rampwin";
 
-export type OtpChannel = "whatsapp" | "sms" | "rampwin";
+export type OtpChannel = "whatsapp" | "sms";
 
 export interface SendOtpInput {
   /** E.164-normalised phone, e.g. "+919711977782". */
@@ -52,16 +50,6 @@ export class OtpDeliveryError extends Error {
  */
 export async function sendOtp(input: SendOtpInput): Promise<SendOtpResult> {
   switch (input.channel) {
-    case "rampwin": {
-      const enabled = process.env.RAMPWIN_OTP_ENABLED === "true";
-      if (!enabled) {
-        throw new OtpDeliveryError(
-          "Rampwin OTP is not enabled in this environment.",
-          "rampwin",
-        );
-      }
-      return sendRampwinOtp(input);
-    }
     case "whatsapp":
       return sendWhatsAppOtp(input);
     case "sms": {

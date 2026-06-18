@@ -22,14 +22,12 @@ import { sanitizeNext } from "../../_lib/safeNext";
 // for first-time numbers and lives on its own route rather than in a modal.
 //
 // Channel selection mirrors BookingGate exactly — env-flag driven so we can
-// flip primary/secondary without code. Patients never see "Rampwin"; both
-// Rampwin and Meta-direct render as "WhatsApp".
+// flip primary/secondary without code.
 
 const RESEND_COOLDOWN_SECONDS = 30;
 
-type Channel = "whatsapp" | "sms" | "rampwin";
+type Channel = "whatsapp" | "sms";
 
-const RAMPWIN_ENABLED = process.env.NEXT_PUBLIC_RAMPWIN_OTP_ENABLED === "true";
 const WHATSAPP_ENABLED = process.env.NEXT_PUBLIC_WHATSAPP_OTP_ENABLED === "true";
 const SMS_ENABLED = process.env.NEXT_PUBLIC_SMS_OTP_ENABLED === "true";
 
@@ -37,30 +35,25 @@ function pickPrimaryChannel(): Channel {
   const configured = process.env.NEXT_PUBLIC_OTP_DEFAULT_CHANNEL as
     | Channel
     | undefined;
-  if (configured === "rampwin" && RAMPWIN_ENABLED) return "rampwin";
   if (configured === "whatsapp" && WHATSAPP_ENABLED) return "whatsapp";
   if (configured === "sms" && SMS_ENABLED) return "sms";
-  if (RAMPWIN_ENABLED) return "rampwin";
   if (WHATSAPP_ENABLED) return "whatsapp";
   if (SMS_ENABLED) return "sms";
-  return "rampwin";
+  return "whatsapp";
 }
 
 const PRIMARY_CHANNEL: Channel = pickPrimaryChannel();
 
 const FALLBACK_CHANNEL: Channel | null =
   PRIMARY_CHANNEL === "sms"
-    ? RAMPWIN_ENABLED
-      ? "rampwin"
-      : WHATSAPP_ENABLED
-        ? "whatsapp"
-        : null
+    ? WHATSAPP_ENABLED
+      ? "whatsapp"
+      : null
     : SMS_ENABLED
       ? "sms"
       : null;
 
 const CHANNEL_LABEL: Record<Channel, string> = {
-  rampwin: "WhatsApp",
   whatsapp: "WhatsApp",
   sms: "SMS",
 };
