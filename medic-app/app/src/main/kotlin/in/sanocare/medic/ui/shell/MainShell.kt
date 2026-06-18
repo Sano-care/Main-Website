@@ -28,10 +28,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import android.content.Intent
 import `in`.sanocare.medic.R
+import `in`.sanocare.medic.attendance.MedicAttendanceService
 import `in`.sanocare.medic.data.auth.CachedProfile
+import `in`.sanocare.medic.ui.duty.AttendanceViewModel
 import `in`.sanocare.medic.ui.duty.DutyTab
 
 // T65 Phase 1 — MainShell. Three tabs (Duty / Payouts / Me) wrapped in a
@@ -56,6 +61,19 @@ fun MainShell(
     onSignOut: () -> Unit,
 ) {
     var selected by remember { mutableStateOf(Tab.Duty) }
+
+    // Account-switch teardown (#88). The AttendanceViewModel is activity-scoped
+    // and survives sign-out, so on sign-out we explicitly stop the foreground
+    // service and wipe the VM — otherwise the next medic on this device
+    // inherits this medic's clocked-in state and never starts their own
+    // tracking. Same instance AttendanceSection uses (activity ViewModelStore).
+    val context = LocalContext.current
+    val attendanceVm: AttendanceViewModel = hiltViewModel()
+    val handleSignOut: () -> Unit = {
+        context.stopService(Intent(context, MedicAttendanceService::class.java))
+        attendanceVm.reset()
+        onSignOut()
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize().padding(contentPadding),
@@ -91,9 +109,9 @@ fun MainShell(
     ) { inner ->
         Box(modifier = Modifier.fillMaxSize().padding(inner)) {
             when (selected) {
-                Tab.Duty -> DutyTab(onSignOut = onSignOut)
+                Tab.Duty -> DutyTab(onSignOut = handleSignOut)
                 Tab.Payouts -> PlaceholderTab(stringResource(R.string.tab_payouts_placeholder))
-                Tab.Me -> MeTab(profile = profile, onSignOut = onSignOut)
+                Tab.Me -> MeTab(profile = profile, onSignOut = handleSignOut)
             }
         }
     }

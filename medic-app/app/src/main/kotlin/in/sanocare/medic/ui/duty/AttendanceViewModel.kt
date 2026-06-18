@@ -50,11 +50,11 @@ class AttendanceViewModel @Inject constructor(
     )
     val events: SharedFlow<AttendanceEvent> = _events.asSharedFlow()
 
-    init {
-        viewModelScope.launch { refresh() }
-    }
-
-    private suspend fun refresh() {
+    // No init-refresh: AttendanceSection calls refresh() on every mount
+    // (LaunchedEffect), so the single refresh path also re-syncs this
+    // (activity-scoped, sign-out-surviving) VM to whoever is signed in now —
+    // the account-switch fix. See reset() for the sign-out teardown.
+    suspend fun refresh() {
         _state.update { it.copy(loading = true, errorMessage = null) }
         when (val result = attendanceRepository.fetchOpen()) {
             is AuthResult.Ok -> {
@@ -66,7 +66,7 @@ class AttendanceViewModel @Inject constructor(
                 // clocked in). The service is single-instance so a duplicate
                 // start is a no-op when it's already running.
                 if (result.value != null) {
-                    Log.i(TAG, "refresh(): openRow already exists, emit StartTracking to re-arm")
+                    Log.d(TAG, "refresh(): openRow already exists, emit StartTracking to re-arm")
                     _events.tryEmit(AttendanceEvent.StartTracking)
                 }
             }
@@ -77,15 +77,15 @@ class AttendanceViewModel @Inject constructor(
     }
 
     fun clockIn() {
-        Log.i(TAG, "clockIn() entered (acting=${_state.value.acting})")
+        Log.d(TAG, "clockIn() entered (acting=${_state.value.acting})")
         if (_state.value.acting) return
         _state.update { it.copy(acting = true, errorMessage = null) }
         viewModelScope.launch {
             val coords: Coords? = locationProvider.current()
-            Log.i(TAG, "clockIn(): coords=${if (coords != null) "captured" else "null"}")
+            Log.d(TAG, "clockIn(): coords=${if (coords != null) "captured" else "null"}")
             when (val result = attendanceRepository.clockIn(coords?.lat, coords?.lng)) {
                 is AuthResult.Ok -> {
-                    Log.i(TAG, "clockIn() API ok, openRow=${result.value.id}")
+                    Log.d(TAG, "clockIn() API ok, openRow=${result.value.id}")
                     _state.update {
                         it.copy(
                             acting = false,
@@ -95,7 +95,7 @@ class AttendanceViewModel @Inject constructor(
                         )
                     }
                     val emitted = _events.tryEmit(AttendanceEvent.StartTracking)
-                    Log.i(TAG, "Emit StartTracking (tryEmit=$emitted)")
+                    Log.d(TAG, "Emit StartTracking (tryEmit=$emitted)")
                 }
                 is AuthResult.Err -> {
                     Log.w(TAG, "clockIn() API err: ${result.message} (code=${result.code})")
@@ -114,7 +114,7 @@ class AttendanceViewModel @Inject constructor(
             val coords: Coords? = locationProvider.current()
             when (val result = attendanceRepository.clockOut(coords?.lat, coords?.lng)) {
                 is AuthResult.Ok -> {
-                    Log.i(TAG, "clockOut() API ok")
+                    Log.d(TAG, "clockOut() API ok")
                     _state.update {
                         it.copy(
                             acting = false,
@@ -124,7 +124,7 @@ class AttendanceViewModel @Inject constructor(
                         )
                     }
                     val emitted = _events.tryEmit(AttendanceEvent.StopTracking)
-                    Log.i(TAG, "Emit StopTracking (tryEmit=$emitted)")
+                    Log.d(TAG, "Emit StopTracking (tryEmit=$emitted)")
                 }
                 is AuthResult.Err -> {
                     Log.w(TAG, "clockOut() API err: ${result.message}; stopping service locally")
@@ -143,6 +143,20 @@ class AttendanceViewModel @Inject constructor(
 
     fun clearError() {
         _state.update { it.copy(errorMessage = null) }
+    }
+
+    /**
+     * Account-switch teardown (T65 Phase 1.5 #88). This VM is activity-scoped
+     * and survives sign-out → sign-in on the same device, so the previous
+     * medic's state must be wiped explicitly. Clears the replay cache too, so
+     * the prior medic's buffered StartTracking is NOT re-delivered to the next
+     * medic's AttendanceSection (which would spuriously start tracking under a
+     * medic who never clocked in). Called from the sign-out path, which also
+     * stops the foreground service.
+     */
+    fun reset() {
+        _events.resetReplayCache()
+        _state.value = AttendanceState()
     }
 }
 
