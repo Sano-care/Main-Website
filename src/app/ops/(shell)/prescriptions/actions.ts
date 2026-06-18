@@ -21,9 +21,9 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 import { getCurrentOpsUser } from "../../_lib/getCurrentOpsUser";
 import {
   sendRxLink,
-  RampwinRxDeliveryError,
+  MetaRxDeliveryError,
   isRxDocumentHeaderEnabled,
-} from "@/lib/rx/rampwin";
+} from "@/lib/rx/meta";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRESCRIPTIONS_BUCKET = "prescriptions";
@@ -180,7 +180,7 @@ export async function resendRxWhatsApp(
       revalidatePath(`/ops/bookings/${rx.booking_id}`);
       return { ok: true, data: { whatsapp_sent: true, rx_url: rxUrl } };
     } catch (e) {
-      if (e instanceof RampwinRxDeliveryError) {
+      if (e instanceof MetaRxDeliveryError) {
         return { ok: false, error: `Rampwin: ${e.message}` };
       }
       return {
