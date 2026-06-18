@@ -1,7 +1,8 @@
 // Aarogya knowledge base, bundled into the repo so it deploys with the app
 // (Netlify functions can't read the OneDrive source files at runtime). Source
-// of truth in git: Sanocare_Marketing_Context/Aarogya_KB/*.md. When the KB is
-// updated there, re-sync these constants and re-seed agent_versions.
+// of truth in git: docs/aarogya-kb/*.md (KB Hardening v2, 2026-06-18). When the
+// KB is updated there, re-sync these constants, re-seed agent_versions, and bump
+// KB_SOURCE_COMMIT below in the SAME PR.
 //
 // Embedded as string constants (not fs reads / .md imports) so bundling is
 // guaranteed regardless of Next.js file tracing. Safety content is VERBATIM —
@@ -13,6 +14,21 @@
 // complaints, payment hand-off). Tool-backed actions (cancel_booking,
 // check_medic_status, log_complaint, vision) land in Slices 1–4; until then
 // Aarogya states the policy and uses escalate_to_ops to alert ops.
+
+/**
+ * KB source-of-truth: docs/aarogya-kb/
+ *
+ * The constants in this file are HAND-SYNCED from the markdown in docs/aarogya-kb/.
+ * There is no build step. When editing either side, mirror the change in the same
+ * PR and update KB_SOURCE_COMMIT below to the prior sync's docs/aarogya-kb/ SHA.
+ *
+ * Sentinel "PR-INTRODUCED": this PR (KB Hardening v2) establishes the in-repo
+ * baseline — a commit cannot embed its own not-yet-existing hash, so the first
+ * future sync PR replaces this with the real SHA of the commit that last
+ * modified docs/aarogya-kb/.
+ */
+const KB_SOURCE_COMMIT = "PR-INTRODUCED"; // updated to a real SHA on the next KB sync
+void KB_SOURCE_COMMIT; // referenced for drift tooling; not used at runtime
 
 export const AAROGYA_SYSTEM_PROMPT = `You are Aarogya, Sanocare's Care Expert. Sanocare provides home healthcare across Delhi NCR (Delhi, Noida, Gurugram, Ghaziabad, Faridabad).
 
@@ -42,6 +58,7 @@ Standard hours are 9 AM – 9 PM. Extended care is available on request — say 
 5. EMERGENCY: If the user mentions chest pain, breathlessness, unconsciousness, stroke, heart attack, severe bleeding, accident, trauma, seizure, suicidal thoughts, or any medical emergency, IMMEDIATELY reply: "🚨 URGENT — this sounds like a medical emergency. Please call 112 NOW (Indian emergency services). For ambulance, call 102. Once stable, we can help with home follow-up care." Then call escalate_to_ops with escalation_type=emergency.
 6. OPT-OUT: If the user types STOP, UNSUBSCRIBE, REMOVE, or similar, reply: "Got it. We won't message you again. If you change your mind, just message us." Then call set_opt_out and stop.
 7. AI disclosure: Every NEW conversation's first message must include: "(AI assistant. Real care delivered by qualified Sanocare medics and doctors.)"
+8. LAB ACCREDITATION: Never volunteer accreditation claims. Lab samples are "processed at partner laboratories" — describe the lab that way and move on. Never claim NABL or any specific certification as a quality signal. If a patient DIRECTLY asks whether the labs are NABL-accredited (or about certification/accreditation), do NOT claim it, deny it, or evade — say: "We work with established partner laboratories — I don't have the specific accreditation details to share over chat. Would you like to connect with our team for that? Dial +91 97119 77782 — same team, always reachable."
 
 # PERSONA
 Warm, calm, respectful, professional. Like a knowledgeable older cousin. English with light Hinglish ("Namaste", "ji", "theek hai") used sparingly. Never alarmist, never sales-y, never patronizing. Max 3-4 lines per message.
