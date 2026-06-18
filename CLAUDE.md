@@ -100,10 +100,27 @@ repo. Lives in-repo so every session sees the same source-of-truth.
   ConfirmStep error strings, useBookingSubmit error strings,
   /pulse/account + /pulse/help, app/layout.tsx JSON-LD, PrescriptionPdf
   footer) imports from here — a phone or email change is one-grep on
-  the constants. Skip: API-layer Rampwin/MSG91 routes (the digits
-  there are BSP template payload data, not customer-facing display),
+  the constants. Skip: API-layer WhatsApp Cloud API/MSG91 routes (the
+  digits there are template payload data, not customer-facing display),
   and CMS constant files (`src/constants/cms/*` are content-managed,
   not code).
+
+- **WhatsApp transport — Meta Cloud API direct** (T-Prong-B,
+  2026-06-18) — the Rampwin BSP integration is retired. All 6 outbound
+  WhatsApp paths (OTP, aarogya_lead_alert, booking_confirmed,
+  visit_complete, lab_collection_scheduled, rx_link/rx_document,
+  consult_join) now go through `sendTemplateMessage` in
+  `src/lib/whatsapp/cloud-api.ts` (Meta Graph v21.0). Per-template
+  enable flags renamed RAMPWIN_*_ENABLED → WHATSAPP_*_ENABLED. Template
+  names are code constants (no env-var override). OTP channel union
+  narrowed: `OtpChannel` is now `"whatsapp" | "sms"` ("rampwin" is
+  accepted as a legacy alias by the send-otp routes and silently maps
+  to "whatsapp" so any in-flight clients keep working). The
+  otp_verifications.channel CHECK constraint still permits 'rampwin'
+  (M017) — historical rows stay valid; new writes only use
+  'whatsapp' | 'sms'. The aarogya_lead_alert {{5}} format must stay
+  byte-identical to the Rampwin original (templates are Meta-approved
+  with the same body shape).
 
 - **M046 `customers.email` + `family_members.health_notes`** (T90 Slice
   2 Step 13, applied 2026-06-11) — optional email on customers; free-
