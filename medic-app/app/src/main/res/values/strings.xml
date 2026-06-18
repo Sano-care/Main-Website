@@ -23,6 +23,10 @@
     <string name="tab_payouts_placeholder">Payouts open after the first completed visit.</string>
     <string name="me_sign_out">Sign out</string>
 
+    <!-- Track A — WhatsApp → Aarogya FAB -->
+    <string name="whatsapp_fab_label">Ask Aarogya</string>
+    <string name="whatsapp_fab_greeting">Hi Aarogya, %1$s here.</string>
+
     <!-- Attendance (Duty tab) -->
     <string name="attendance_clocked_out_title">Off duty</string>
     <string name="attendance_clocked_out_subtitle">Tap to start your shift. We\'ll capture your location at clock-in.</string>

@@ -2,6 +2,9 @@
 // about WhatsApp — adapters translate each channel to/from these types so the
 // website widget (Week 4) and mobile app (Week 5) reuse the same orchestrator.
 
+// Type-only import (erased at compile time → no agent↔whatsapp runtime cycle).
+import type { Identity } from "@/lib/whatsapp/identity";
+
 export type Channel = "whatsapp" | "website" | "mobile";
 
 export type ServiceIntent =
@@ -34,6 +37,14 @@ export interface AgentTurnInput {
    * second line only; the canned 112 reply + escalation already happened.
    */
   emergencyPreCheckFired?: boolean;
+  /**
+   * T-Aarogya-P1 C2 — adapter-resolved caller identity (doctor / medic /
+   * customer / new). Adapter-injected ONLY — never derived from model output
+   * (prompt-injection guard). Present for context + future medic-mode routing;
+   * the orchestrator does NOT branch persona on it in this PR (medic KB is a
+   * later, separately-gated PR), so customer/new behaviour is unchanged.
+   */
+  identity?: Identity;
 }
 
 /** A tool the model asked us to run (validated/executed by the adapter layer). */

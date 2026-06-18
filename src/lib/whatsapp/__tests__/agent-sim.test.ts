@@ -133,6 +133,13 @@ vi.mock("@/lib/whatsapp/safety/audit", () => ({
   }),
 }));
 
+// Identity resolution (T-Aarogya-P1) talks to Supabase directly; stub it so the
+// sim stays DB-free. role:"new" → existing patient flow, behaviour unchanged.
+vi.mock("@/lib/whatsapp/identity", () => ({
+  resolveIdentity: vi.fn(async () => ({ role: "new" })),
+  identityForAudit: (id: { role: string }) => ({ role: id.role, identifiers: {} }),
+}));
+
 import { processWebhook } from "@/lib/whatsapp/adapter";
 
 function envelope(from: string, text: string) {
