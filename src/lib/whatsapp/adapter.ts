@@ -23,6 +23,7 @@ import {
   detectOptOut,
 } from "@/lib/whatsapp/safety/opt-out";
 import { AuditEvent, writeAudit } from "@/lib/whatsapp/safety/audit";
+import { identityForAudit, resolveIdentity } from "@/lib/whatsapp/identity";
 import {
   countInboundMessages,
   createEscalation,
@@ -322,10 +323,28 @@ export async function handleInboundMessage(
   });
   if (!inserted) return; // idempotent: Meta retry
 
-  await writeAudit({
-    conversationId: conversation.id,
-    eventType: AuditEvent.MESSAGE_RECEIVED,
-    eventData: { type: inbound.type, provider_message_id: inbound.providerMessageId },
+  // ---- Identity resolution (T-Aarogya-P1 C2/C3) --------------------------
+  // Resolve WHO this number is, ONCE, at conversation start (after the
+  // idempotency guard so Meta retries don't re-query). Adapter-injected into
+  // the orchestrator turn + stamped on every audit row from here on — the
+  // model never sees the raw phone, only the role + IDs. The single resolved
+  // value threaded through the handler IS the conversation-scoped cache.
+  const identity = await resolveIdentity(inbound.phone);
+  const auditIdentity = identityForAudit(identity);
+  const audit = (
+    eventType: (typeof AuditEvent)[keyof typeof AuditEvent],
+    eventData?: Record<string, unknown>,
+  ) =>
+    writeAudit({
+      conversationId: conversation.id,
+      eventType,
+      eventData,
+      identity: auditIdentity,
+    });
+
+  await audit(AuditEvent.MESSAGE_RECEIVED, {
+    type: inbound.type,
+    provider_message_id: inbound.providerMessageId,
   });
 
   // ---- "Mark as Attended" button reply (from the ops number) -------------
@@ -335,10 +354,10 @@ export async function handleInboundMessage(
       escId ? "escalation marked attended" : "button reply matched no open escalation",
       maskPhone(inbound.phone),
     );
-    await writeAudit({
-      conversationId: conversation.id,
-      eventType: AuditEvent.OPS_ATTENDED,
-      eventData: { escalation_id: escId, context_id: inbound.contextId, matched: Boolean(escId) },
+    await audit(AuditEvent.OPS_ATTENDED, {
+      escalation_id: escId,
+      context_id: inbound.contextId,
+      matched: Boolean(escId),
     });
     return;
   }
@@ -346,11 +365,7 @@ export async function handleInboundMessage(
   // ---- Non-text (and not a handled button): log-and-skip -----------------
   if (inbound.type !== "text") {
     log.info("non-text message recorded; no handler", inbound.type);
-    await writeAudit({
-      conversationId: conversation.id,
-      eventType: AuditEvent.UNSUPPORTED_MESSAGE_RECEIVED,
-      eventData: { type: inbound.type },
-    });
+    await audit(AuditEvent.UNSUPPORTED_MESSAGE_RECEIVED, { type: inbound.type });
     return;
   }
 
@@ -378,10 +393,9 @@ export async function handleInboundMessage(
       context: `EMERGENCY: ${text.slice(0, 60)}`,
       patientMobile: inbound.phone,
     });
-    await writeAudit({
-      conversationId: conversation.id,
-      eventType: AuditEvent.EMERGENCY_DETECTED,
-      eventData: { keyword: emergency.keyword, category: emergency.category },
+    await audit(AuditEvent.EMERGENCY_DETECTED, {
+      keyword: emergency.keyword,
+      category: emergency.category,
     });
     return;
   }
@@ -396,11 +410,7 @@ export async function handleInboundMessage(
       safetyFlags: { opt_out_confirmation: true },
     });
     await setOptOut({ conversationId: conversation.id, leadId: conversation.lead_id });
-    await writeAudit({
-      conversationId: conversation.id,
-      eventType: AuditEvent.OPT_OUT_SET,
-      eventData: { keyword: optOut.keyword },
-    });
+    await audit(AuditEvent.OPT_OUT_SET, { keyword: optOut.keyword });
     return;
   }
 
@@ -422,6 +432,7 @@ export async function handleInboundMessage(
       history,
       turnCount,
       emergencyPreCheckFired: false,
+      identity,
     });
     reply = res.replyText;
     toolCalls = res.toolCalls.map((t) => ({ name: t.name, input: t.input }));
@@ -430,10 +441,8 @@ export async function handleInboundMessage(
     tokensOut = res.tokensOut;
   } catch (err) {
     log.error("agent turn failed", maskPhone(inbound.phone), err);
-    await writeAudit({
-      conversationId: conversation.id,
-      eventType: AuditEvent.AGENT_ERROR,
-      eventData: { error: err instanceof Error ? err.message : "unknown" },
+    await audit(AuditEvent.AGENT_ERROR, {
+      error: err instanceof Error ? err.message : "unknown",
     });
     await dispatchTextMessage({
       conversationId: conversation.id,
@@ -494,15 +503,11 @@ export async function handleInboundMessage(
   // opt-out flips the permanent gate AFTER the reply is dispatched.
   if (optOutCall) await executeSetOptOut(conversation);
 
-  await writeAudit({
-    conversationId: conversation.id,
-    eventType: AuditEvent.AGENT_RESPONSE,
-    eventData: {
-      model,
-      tokens_in: tokensIn,
-      tokens_out: tokensOut,
-      tools: toolCalls.map((t) => t.name),
-    },
+  await audit(AuditEvent.AGENT_RESPONSE, {
+    model,
+    tokens_in: tokensIn,
+    tokens_out: tokensOut,
+    tools: toolCalls.map((t) => t.name),
   });
 }
 

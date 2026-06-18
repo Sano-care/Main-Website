@@ -39,11 +39,26 @@ export const AuditEvent = {
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
 
+/**
+ * T-Aarogya-P1 C3 — phone-free caller identity stamped onto audit rows.
+ * DPDP traceability comes from the staff/customer ID, never the raw number.
+ */
+export interface AuditIdentity {
+  role: string;
+  identifiers: { doctor_id?: string; medic_id?: string; customer_id?: string };
+}
+
 export interface AuditEntry {
   /** Null for events with no conversation (e.g. signature failures). */
   conversationId?: string | null;
   eventType: AuditEventType;
   eventData?: Record<string, unknown>;
+  /**
+   * Optional resolved identity. When present it is merged into the row's
+   * event_data as `event_data.identity` — additive, no shape break for the
+   * many callers that don't pass it.
+   */
+  identity?: AuditIdentity;
 }
 
 /**
@@ -52,10 +67,13 @@ export interface AuditEntry {
  */
 export async function writeAudit(entry: AuditEntry): Promise<boolean> {
   try {
+    const eventData = entry.identity
+      ? { ...(entry.eventData ?? {}), identity: entry.identity }
+      : entry.eventData ?? {};
     const { error } = await supabaseAdmin.from("audit_log").insert({
       conversation_id: entry.conversationId ?? null,
       event_type: entry.eventType,
-      event_data: entry.eventData ?? {},
+      event_data: eventData,
     });
     if (error) {
       log.error("audit insert failed", entry.eventType, error.message);
