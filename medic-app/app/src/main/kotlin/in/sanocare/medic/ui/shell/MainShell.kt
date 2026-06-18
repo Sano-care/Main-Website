@@ -85,6 +85,9 @@ fun MainShell(
                 }
             }
         },
+        // Track A — WhatsApp → Aarogya entry point, present on the home shell
+        // across all tabs (floats above the bottom nav).
+        floatingActionButton = { AarogyaWhatsAppFab(medicFullName = profile.fullName) },
     ) { inner ->
         Box(modifier = Modifier.fillMaxSize().padding(inner)) {
             when (selected) {
