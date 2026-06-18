@@ -19,7 +19,7 @@ import {
   sendVisitComplete,
   sendLabCollectionScheduled,
   labTimeWindowFromDate,
-} from "@/lib/aarogya/rampwin";
+} from "@/lib/aarogya/meta";
 import { serviceCategoryToSlug } from "@/lib/aarogya/labels";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
