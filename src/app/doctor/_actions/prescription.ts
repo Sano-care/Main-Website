@@ -43,9 +43,9 @@ import type { PrescriptionPdfData } from "@/lib/rx/pdf/PrescriptionPdf";
 import { generateRxPatientViewToken } from "@/lib/rx/tokens";
 import {
   sendRxLink,
-  RampwinRxDeliveryError,
+  MetaRxDeliveryError,
   isRxDocumentHeaderEnabled,
-} from "@/lib/rx/rampwin";
+} from "@/lib/rx/meta";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRESCRIPTIONS_BUCKET = "prescriptions";
@@ -1036,7 +1036,7 @@ export async function sendPrescription(
           .eq("id", rx.id);
         whatsappSent = true;
       } catch (e) {
-        if (e instanceof RampwinRxDeliveryError) {
+        if (e instanceof MetaRxDeliveryError) {
           console.warn(
             `[sendPrescription] WhatsApp delivery failed for ${rx.prescription_code}; ops can deliver ${rxUrl} manually. Cause:`,
             e.message,

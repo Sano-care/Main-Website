@@ -37,7 +37,8 @@
  *   SUPABASE_SERVICE_ROLE_KEY
  *
  * Plus when running OUTSIDE dry-run mode (real WhatsApp send):
- *   RAMPWIN_BASE_URL, RAMPWIN_API_KEY, RAMPWIN_RX_TEMPLATE_*
+ *   WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN,
+ *   WHATSAPP_RX_ENABLED, WHATSAPP_RX_TEMPLATE_DOCUMENT_HEADER_OK
  *   NEXT_PUBLIC_SITE_URL
  *
  * Sanity-checks the service-role key payload to refuse running with
@@ -98,8 +99,8 @@ import type {
 import {
   sendRxLink,
   isRxDocumentHeaderEnabled,
-  RampwinRxDeliveryError,
-} from "../src/lib/rx/rampwin";
+  MetaRxDeliveryError,
+} from "../src/lib/rx/meta";
 
 // ---------------------------------------------------------------------
 // Helpers
@@ -524,13 +525,13 @@ async function main() {
       patientViewToken: head.patient_view_token,
       signedPdfUrl,
       prescriptionCode: head.prescription_code,
-      consultationDateIso, // body-only template {{3}} — see rampwin.ts
+      consultationDateIso, // body-only template {{3}} — see rx/meta.ts
     });
     console.log(
       `[dry_render_rx] WhatsApp OK (messageId=${send.providerMessageId ?? "<none>"}).`,
     );
   } catch (e) {
-    if (e instanceof RampwinRxDeliveryError) {
+    if (e instanceof MetaRxDeliveryError) {
       console.warn(
         `[dry_render_rx] WhatsApp delivery failed: ${e.message}. Patient can still hit /rx/${head.patient_view_token}.`,
       );

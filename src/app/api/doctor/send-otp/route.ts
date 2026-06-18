@@ -22,7 +22,7 @@ export const runtime = "nodejs";
  * an ACTIVE row in public.doctors. This blocks "OTP fishing" — a random
  * phone can't probe whether it belongs to a doctor by trying to log in.
  *
- * Body: { phone: string, channel?: 'whatsapp' | 'sms' | 'rampwin' | 'auto' }
+ * Body: { phone: string, channel?: 'whatsapp' | 'sms' | 'auto' }
  *
  * Returns:
  *   200 { ok: true, channel, expiresInSeconds }
@@ -62,7 +62,6 @@ export async function POST(req: NextRequest) {
     requested,
     OTP_DEV_BYPASS: process.env.OTP_DEV_BYPASS ?? "(unset)",
     OTP_DEFAULT_CHANNEL: process.env.OTP_DEFAULT_CHANNEL ?? "(unset)",
-    RAMPWIN_OTP_ENABLED: process.env.RAMPWIN_OTP_ENABLED ?? "(unset)",
     WHATSAPP_OTP_ENABLED: process.env.WHATSAPP_OTP_ENABLED ?? "(unset)",
     SMS_OTP_ENABLED: process.env.SMS_OTP_ENABLED ?? "(unset)",
     bypassDispatch,
@@ -100,11 +99,9 @@ export async function POST(req: NextRequest) {
 
   // ===== Channel resolution (mirrors /api/auth/send-otp) =====
   const channel: OtpChannel | null = bypassDispatch
-    ? requested === "rampwin"
-      ? "rampwin"
-      : requested === "whatsapp"
-        ? "whatsapp"
-        : "sms"
+    ? requested === "whatsapp" || requested === "rampwin"
+      ? "whatsapp"
+      : "sms"
     : resolveChannel(requested);
   if (!channel) {
     console.log("[doctor-send-otp] no usable channel", { requested });
@@ -180,7 +177,7 @@ export async function POST(req: NextRequest) {
       await sendOtp({ phone, code, channel });
       console.log("[doctor-send-otp] dispatch ok", { channel });
     } catch (err) {
-      const channelLabel = channel === "whatsapp" || channel === "rampwin" ? "WhatsApp" : "SMS";
+      const channelLabel = channel === "whatsapp" ? "WhatsApp" : "SMS";
       console.error(`[doctor-send-otp] ${channelLabel} delivery failed:`, err);
       if (err instanceof OtpDeliveryError) {
         return NextResponse.json(
@@ -235,20 +232,19 @@ export async function POST(req: NextRequest) {
 
 function resolveChannel(requested: string): OtpChannel | null {
   // Mirrors /api/auth/send-otp's resolveChannel. Same defaults so doctor
-  // and patient OTPs use the same primary provider.
-  const defaultChannel = (process.env.OTP_DEFAULT_CHANNEL ?? "rampwin") as OtpChannel;
+  // and patient OTPs use the same primary provider. T-Prong-B retired
+  // Rampwin; legacy "rampwin" requests resolve to "whatsapp".
+  const defaultChannel = (process.env.OTP_DEFAULT_CHANNEL ?? "whatsapp") as OtpChannel;
   const smsEnabled = process.env.SMS_OTP_ENABLED === "true";
   const whatsappEnabled = process.env.WHATSAPP_OTP_ENABLED === "true";
-  const rampwinEnabled = process.env.RAMPWIN_OTP_ENABLED === "true";
 
-  if (requested === "rampwin") return rampwinEnabled ? "rampwin" : null;
   if (requested === "sms") return smsEnabled ? "sms" : null;
-  if (requested === "whatsapp") return whatsappEnabled ? "whatsapp" : null;
+  if (requested === "whatsapp" || requested === "rampwin") {
+    return whatsappEnabled ? "whatsapp" : null;
+  }
 
-  if (defaultChannel === "rampwin" && rampwinEnabled) return "rampwin";
   if (defaultChannel === "whatsapp" && whatsappEnabled) return "whatsapp";
   if (defaultChannel === "sms" && smsEnabled) return "sms";
-  if (rampwinEnabled) return "rampwin";
   if (whatsappEnabled) return "whatsapp";
   if (smsEnabled) return "sms";
   return null;

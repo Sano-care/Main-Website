@@ -6,8 +6,8 @@ import {
   normaliseIndianPhone,
   verifyToken,
 } from "@/lib/otp/token";
-import { sendAarogyaLeadAlert } from "@/lib/booking/rampwin";
-import { sendBookingConfirmed } from "@/lib/aarogya/rampwin";
+import { sendAarogyaLeadAlert } from "@/lib/booking/meta";
+import { sendBookingConfirmed } from "@/lib/aarogya/meta";
 import { formatLeadAlertContext } from "@/lib/booking/contextFormat";
 import {
   validatePatientName,

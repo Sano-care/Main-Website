@@ -13,11 +13,11 @@ import {
   sendBookingConfirmed,
   sendLabCollectionScheduled,
   sendVisitComplete,
-} from "./rampwin";
+} from "./meta";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-/** Pull the parsed Rampwin request body out of the mocked fetch call. */
+/** Pull the parsed Meta Cloud API request body out of the mocked fetch call. */
 function lastFetchBody(fetchMock: ReturnType<typeof vi.fn>) {
   const call = fetchMock.mock.calls.at(-1);
   if (!call) throw new Error("fetch was not called");
@@ -28,7 +28,8 @@ function okFetch() {
   return vi.fn().mockResolvedValue({
     ok: true,
     status: 200,
-    json: async () => ({ success: true, data: { messageId: "m_1" } }),
+    headers: new Headers(),
+    json: async () => ({ messages: [{ id: "wamid.test_1" }] }),
   });
 }
 
@@ -105,22 +106,26 @@ describe("collection date + window formatting (IST)", () => {
 
 // ── Senders ─────────────────────────────────────────────────────────
 
-describe("Rampwin patient senders", () => {
+describe("Aarogya patient senders (Meta Cloud API direct)", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    process.env.RAMPWIN_API_KEY = "test-key";
-    process.env.RAMPWIN_CHANNEL_ID = "test-channel";
-    delete process.env.RAMPWIN_API_URL;
-    delete process.env.RAMPWIN_BOOKING_CONFIRMED_ENABLED;
-    delete process.env.RAMPWIN_VISIT_COMPLETE_ENABLED;
-    delete process.env.RAMPWIN_LAB_COLLECTION_ENABLED;
+    // cloud-api.ts requires both — token value is never inspected by the
+    // mocked fetch, only that requireEnv() doesn't throw.
+    process.env.WHATSAPP_PHONE_NUMBER_ID = "test-phone-id";
+    process.env.WHATSAPP_ACCESS_TOKEN = "test-token";
+    process.env.WHATSAPP_BOOKING_CONFIRMED_ENABLED = "true";
+    process.env.WHATSAPP_VISIT_COMPLETE_ENABLED = "true";
+    process.env.WHATSAPP_LAB_COLLECTION_ENABLED = "true";
     fetchMock = okFetch();
     vi.stubGlobal("fetch", fetchMock);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    delete process.env.WHATSAPP_BOOKING_CONFIRMED_ENABLED;
+    delete process.env.WHATSAPP_VISIT_COMPLETE_ENABLED;
+    delete process.env.WHATSAPP_LAB_COLLECTION_ENABLED;
   });
 
   it("sendBookingConfirmed (home visit) builds the 4-var payload", async () => {
@@ -135,8 +140,9 @@ describe("Rampwin patient senders", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     const body = lastFetchBody(fetchMock);
+    expect(body.messaging_product).toBe("whatsapp");
     expect(body.template.name).toBe("sanocare_booking_confirmed");
-    expect(body.phone_number).toBe("919999988888");
+    expect(body.to).toBe("919999988888");
     const texts = body.template.components[0].parameters.map(
       (p: { text: string }) => p.text,
     );
@@ -157,7 +163,7 @@ describe("Rampwin patient senders", () => {
     });
 
     const body = lastFetchBody(fetchMock);
-    expect(body.phone_number).toBe("919999988888"); // normalized
+    expect(body.to).toBe("919999988888"); // normalized
     const texts = body.template.components[0].parameters.map(
       (p: { text: string }) => p.text,
     );
@@ -205,11 +211,14 @@ describe("Rampwin patient senders", () => {
     ]);
   });
 
-  it("returns delivered=false on a non-2xx Rampwin response", async () => {
+  it("returns delivered=false on a non-2xx Meta response", async () => {
     fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       status: 500,
-      json: async () => ({ success: false, message: "boom" }),
+      headers: new Headers(),
+      json: async () => ({
+        error: { code: 100, message: "boom", type: "OAuthException" },
+      }),
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -221,11 +230,14 @@ describe("Rampwin patient senders", () => {
     expect(res.delivered).toBe(false);
   });
 
-  it("returns delivered=false when success flag is missing (2xx but not success:true)", async () => {
+  it("returns delivered=false when Meta responds with json.error despite 2xx", async () => {
     fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({}), // empty body — the rampwin.ts false-502 shape
+      headers: new Headers(),
+      json: async () => ({
+        error: { code: 132000, message: "template params mismatch", type: "" },
+      }),
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -239,7 +251,7 @@ describe("Rampwin patient senders", () => {
   });
 
   it("no-ops (no fetch) when the per-template ENABLED flag is false", async () => {
-    process.env.RAMPWIN_VISIT_COMPLETE_ENABLED = "false";
+    process.env.WHATSAPP_VISIT_COMPLETE_ENABLED = "false";
     const res = await sendVisitComplete({
       patientName: "Asha",
       serviceSlug: "home-visit",

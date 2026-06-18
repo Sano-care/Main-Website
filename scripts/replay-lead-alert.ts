@@ -38,7 +38,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { sendAarogyaLeadAlert } from "../src/lib/booking/rampwin";
+import { sendAarogyaLeadAlert } from "../src/lib/booking/meta";
 import { formatLeadAlertContext } from "../src/lib/booking/contextFormat";
 import {
   dbToT85Slug,
