@@ -54,7 +54,7 @@ import {
  * /rx, /portal, /doctor) AND any /prefix/* sub-path, while leaving
  * /carehub and friends untouched.
  */
-const SUPPRESSED_PREFIXES = ["/c", "/doctor", "/ops", "/rx", "/portal"];
+const SUPPRESSED_PREFIXES = ["/c", "/doctor", "/ops", "/rx", "/portal", "/talk"];
 
 function isSuppressedPath(pathname: string | null): boolean {
   if (!pathname) return false;
