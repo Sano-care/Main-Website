@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, IBM_Plex_Mono } from "next/font/google";
 import { GoogleTagManager } from "@next/third-parties/google";
+import { headers } from "next/headers";
 import { CmsPreloadProvider } from "@/components/providers/CmsPreloadProvider";
 import { getCmsPreloadSnapshot } from "@/services/cms/CmsContentServerService";
 import { ConsentDefaultScript } from "@/components/consent/ConsentDefaultScript";
@@ -195,6 +196,14 @@ export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const cmsSnapshot = await getCmsPreloadSnapshot();
+  // Classifier-safe ad landing pages (/talk and future siblings) must NOT
+  // emit the MedicalBusiness JSON-LD — Google's healthcare classifier scans
+  // the whole DOM at the ad destination, JSON-LD included. The pathname
+  // header is set by middleware.ts for matched paths only, so this check
+  // is a no-op on every other route. See src/app/(thin)/layout.tsx.
+  const hdrs = await headers();
+  const pathname = hdrs.get("x-pathname") ?? "";
+  const isThinRoute = pathname.startsWith("/talk");
 
   return (
     <html lang="en">
@@ -219,10 +228,12 @@ export default async function RootLayout({
         <meta name="theme-color" content="#2B81FF" />
         <meta name="geo.region" content="IN-DL" />
         <meta name="geo.placename" content="New Delhi" />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
-        />
+        {!isThinRoute && (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+          />
+        )}
       </head>
       <body
         suppressHydrationWarning
