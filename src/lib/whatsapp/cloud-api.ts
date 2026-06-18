@@ -166,11 +166,21 @@ export async function sendTextMessage(input: {
 
 /**
  * Send a pre-approved template message. Used for the ops handoff
- * (aarogya_lead_alert) to the founder's WhatsApp, and for OTP post-cutover.
+ * (aarogya_lead_alert), patient-facing booking / Rx / consult templates,
+ * and OTP post-cutover.
  *
  * bodyParams fill the {{1}}..{{n}} placeholders in order. quickReplyPayload, if
  * given, is attached to the first quick-reply button so the inbound button tap
- * echoes it back (we use it to carry the escalation_id). Returns the send wamid.
+ * echoes it back (we use it to carry the escalation_id).
+ *
+ * T-Prong-B (2026-06-18): added optional headerDocument for templates
+ * approved with a Document header (currently sanocare_rx_document). Caller
+ * supplies exactly one of `id` (Meta media id from /media upload) or `link`
+ * (https:// URL Meta fetches during render). `filename` controls how the
+ * doc surfaces in chat. Doesn't touch the dispatcher chokepoint or any
+ * Slice 2b hardening — this helper sits below db.ts → dispatchTextMessage.
+ *
+ * Returns the send wamid.
  */
 export async function sendTemplateMessage(input: {
   to: string;
@@ -178,18 +188,47 @@ export async function sendTemplateMessage(input: {
   languageCode?: string;
   bodyParams: string[];
   quickReplyPayload?: string;
+  headerDocument?: {
+    id?: string;
+    link?: string;
+    filename?: string;
+  };
 }): Promise<{ providerMessageId?: string }> {
   const phoneNumberId = requireEnv("WHATSAPP_PHONE_NUMBER_ID");
   const accessToken = requireEnv("WHATSAPP_ACCESS_TOKEN");
   const apiVersion = process.env.WHATSAPP_API_VERSION ?? "v21.0";
   const to = input.to.replace(/[^\d]/g, "");
 
-  const components: Record<string, unknown>[] = [
-    {
-      type: "body",
-      parameters: input.bodyParams.map((text) => ({ type: "text", text })),
-    },
-  ];
+  const components: Record<string, unknown>[] = [];
+
+  // Header (optional) — must precede body per Meta's component ordering.
+  if (input.headerDocument) {
+    const { id, link, filename } = input.headerDocument;
+    if ((id && link) || (!id && !link)) {
+      throw new CloudApiError(
+        "headerDocument must specify exactly one of `id` or `link`.",
+      );
+    }
+    if (link && !/^https:\/\//i.test(link)) {
+      throw new CloudApiError(
+        "headerDocument.link must be an https:// URL — Meta refuses non-https media.",
+      );
+    }
+    const document: Record<string, string> = {};
+    if (id) document.id = id;
+    if (link) document.link = link;
+    if (filename) document.filename = filename;
+    components.push({
+      type: "header",
+      parameters: [{ type: "document", document }],
+    });
+  }
+
+  components.push({
+    type: "body",
+    parameters: input.bodyParams.map((text) => ({ type: "text", text })),
+  });
+
   if (input.quickReplyPayload !== undefined) {
     components.push({
       type: "button",
