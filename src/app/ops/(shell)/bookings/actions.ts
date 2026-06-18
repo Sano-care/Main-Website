@@ -14,7 +14,7 @@ import {
   generateConsultJoinToken,
   defaultJoinTokenExpiry,
 } from "@/lib/consult/tokens";
-import { sendConsultJoinLink } from "@/lib/consult/rampwin";
+import { sendConsultJoinLink } from "@/lib/consult/meta";
 import {
   sendVisitComplete,
   sendLabCollectionScheduled,

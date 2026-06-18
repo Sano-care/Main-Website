@@ -1,10 +1,10 @@
-// T-Prong-B C4 (shell, signatures only) — Meta-direct successor to
-// src/lib/consult/rampwin.ts. Single template (sanocare_consult_join).
+// T-Prong-B C4 — Meta-direct successor to src/lib/consult/rampwin.ts.
+// Single template (sanocare_consult_join).
 //
 // Throws MetaConsultDeliveryError on failure — call site at
-// ops/(shell)/bookings/actions.ts:1327 uses a plain try/catch (no
-// instanceof check), so rename from RampwinConsultDeliveryError is
-// safe + cleaner.
+// ops/(shell)/bookings/actions.ts uses a plain try/catch (no
+// instanceof check), so the rename from RampwinConsultDeliveryError
+// is safe + cleaner.
 //
 // Env vars:
 //   WHATSAPP_CONSULT_ENABLED — "true" to allow sends
@@ -12,6 +12,14 @@
 //                              build the join URL placed in body {{3}}.
 //
 // Template name is a code constant (no env override).
+
+import {
+  sendTemplateMessage,
+  CloudApiError,
+} from "@/lib/whatsapp/cloud-api";
+
+const TEMPLATE_NAME = "sanocare_consult_join";
+const DEFAULT_SITE_URL = "https://sanocare.in";
 
 export class MetaConsultDeliveryError extends Error {
   constructor(message: string, public readonly cause?: unknown) {
@@ -42,19 +50,47 @@ export interface SendConsultJoinLinkResult {
  * BODY VARS (positional, 3):
  *   {{1}} patientName
  *   {{2}} doctorName
- *   {{3}} `${siteUrl}/c/${joinToken}` — full URL renders inline as
- *         tappable link (template has NO URL button; URL sits in body)
- *
- * Throws MetaConsultDeliveryError on:
- *   - WHATSAPP_CONSULT_ENABLED not "true"
- *   - Phone not in "91XXXXXXXXXX" form after normalize
- *   - Meta Cloud API failure
+ *   {{3}} `${siteUrl}/c/${joinToken}` — full URL renders inline as a
+ *         tappable link (template has NO URL button; URL sits in body).
  */
 export async function sendConsultJoinLink(
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- shell only
   input: SendConsultJoinLinkInput,
 ): Promise<SendConsultJoinLinkResult> {
-  throw new MetaConsultDeliveryError(
-    "sendConsultJoinLink: implementation lands in C4",
-  );
+  if (process.env.WHATSAPP_CONSULT_ENABLED !== "true") {
+    throw new MetaConsultDeliveryError(
+      "WhatsApp consult send disabled — WHATSAPP_CONSULT_ENABLED must be \"true\".",
+    );
+  }
+
+  const phoneNumber = input.phone.replace(/\D/g, "");
+  if (!/^91\d{10}$/.test(phoneNumber)) {
+    throw new MetaConsultDeliveryError(
+      `Unexpected phone format: ${input.phone}`,
+    );
+  }
+
+  const siteUrl = (
+    process.env.NEXT_PUBLIC_SITE_URL?.trim() || DEFAULT_SITE_URL
+  ).replace(/\/+$/, "");
+  const joinUrl = `${siteUrl}/c/${input.joinToken}`;
+
+  try {
+    const result = await sendTemplateMessage({
+      to: phoneNumber,
+      templateName: TEMPLATE_NAME,
+      bodyParams: [input.patientName, input.doctorName, joinUrl],
+    });
+    return { providerMessageId: result.providerMessageId };
+  } catch (cause) {
+    if (cause instanceof CloudApiError) {
+      throw new MetaConsultDeliveryError(
+        `Meta Cloud API rejected consult-join send: ${cause.message}`,
+        cause,
+      );
+    }
+    throw new MetaConsultDeliveryError(
+      "Unexpected consult-join send failure",
+      cause,
+    );
+  }
 }
