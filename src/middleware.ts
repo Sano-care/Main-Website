@@ -19,6 +19,17 @@ import { createServerClient } from "@supabase/ssr";
 export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
+  // /talk (and any future classifier-safe ad landing pages) need the
+  // pathname surfaced to the root server layout so it can opt OUT of the
+  // MedicalBusiness JSON-LD on these routes. The matcher below includes
+  // /talk just for this header pass-through — no auth gating needed.
+  // See src/app/layout.tsx for the consumer of x-pathname.
+  if (pathname.startsWith("/talk")) {
+    const res = NextResponse.next({ request: req });
+    res.headers.set("x-pathname", pathname);
+    return res;
+  }
+
   // Don't gate the login or no-access screens.
   if (pathname === "/ops/login" || pathname === "/ops/no-access") {
     return NextResponse.next();
@@ -74,5 +85,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/ops/:path*"],
+  matcher: ["/ops/:path*", "/talk/:path*", "/talk"],
 };
