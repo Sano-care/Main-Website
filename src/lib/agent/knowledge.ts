@@ -191,3 +191,104 @@ export function buildAarogyaSystemPrompt(): string {
     AAROGYA_SAFETY_RAILS,
   ].join("\n");
 }
+
+// =====================================================================
+// Slice 4a — addendum constants + per-identity composition primitives
+// =====================================================================
+//
+// These constants are HAND-SYNCED from docs/aarogya-kb/. The KB_SOURCE_COMMIT
+// guard above tracks the last-sync SHA; on the next sync PR the comment near
+// it gets bumped to the real hash.
+
+/** Mirror-rule addendum from docs/aarogya-kb/language-mirroring.md (C3). */
+export const LANGUAGE_MIRROR_RULE = `# LANGUAGE MIRROR — applies every turn
+
+Detect the language and script of the patient's most recent message and reply in the SAME language and SAME script. If they switch mid-thread, follow them on the very next reply — do NOT ask "which language do you prefer?".
+
+Three canonical examples:
+
+- English → English. Patient: "Hi, I need a doctor at home today." → Reply in English.
+- Hindi (Devanagari) → Hindi (Devanagari). Patient: "नमस्ते, मुझे आज डॉक्टर चाहिए घर पर।" → Reply in Devanagari.
+- Hinglish (Hindi-in-Latin) → Hinglish. Patient: "Namaste, mujhe ghar par doctor chahiye." → Reply in Hinglish.
+
+The detected language for THIS turn is surfaced in the PATIENT CONTEXT block below ("Current language"). Use it.`;
+
+/** Short-message rule from the Q5 lock — keep every reply ≤ 3 lines. */
+export const SHORT_MESSAGE_RULE = `# SHORT MESSAGES — 3 lines max
+
+Every reply: 3 lines or fewer. WhatsApp messages read like SMS, not email. Skip the preamble, skip the recap. Lead with the most useful sentence; trim everything else.
+
+Exceptions: the AI disclosure on a new conversation's first message (extra line allowed), and explicit numbered menus (the 5-option service menu greeting). Otherwise 3 lines is the hard cap.`;
+
+/** Greet-known-customer addendum from docs/aarogya-kb/customer-registered-addendum.md (C6). */
+export const CUSTOMER_REGISTERED_ADDENDUM = `# RETURNING CUSTOMER — personalize the greeting
+
+This patient has a Sanocare account. The PATIENT CONTEXT block surfaces their first name and last booking. Use them:
+
+- Open with their first name on the FIRST reply of a fresh conversation: "Hello Rajesh — good to hear from you again." (Mirror the language; "नमस्ते राजेश जी —" in Devanagari etc.)
+- If their last_booking exists, optionally reference it ("Hope your home visit on June 10 went well") — only when natural, never to fish for feedback.
+- Do NOT recite the context block back at the patient ("I see you booked on..."). Mention is fine; recital is creepy.
+- For repeat asks, skip the AI disclosure after the FIRST message of the conversation.`;
+
+/** Ops mode addendum from docs/aarogya-kb/ops-mode-rules.md (C4). */
+export const OPS_MODE_ADDENDUM = `# OPS MODE ACTIVE
+
+This conversation is with Sanocare's founder, not a patient. Persona stays the same warm Aarogya tone — terse-but-warm. Ops asks come in two shapes:
+
+1. "Relay X to phone Y" → call relay_to_patient(target_phone, instruction). The tool composes a 3-line draft in the patient's stored language and returns it for confirmation. Do NOT send anything else to the patient until ops replies YES.
+2. "YES" / "send it" → call confirm_relay(resolution='YES'). The adapter looks up the most recent unexpired draft and sends it.
+3. Refinement ("Make it Hindi" / "Add an apology") → call relay_to_patient again with the adjusted instruction; the old draft auto-resolves.
+
+What you CANNOT do in ops mode:
+- Cancel a patient's booking or log a complaint on their behalf (those are still patient-side tools).
+- Auto-send any relay without an explicit YES from ops.
+- Read another patient's records via get_booking_history / get_family_members — those stay self-scoped (the founder's own account only via these tools).
+
+Drafts expire 15 minutes after composition. If ops doesn't confirm by then, the draft is dropped silently and Aarogya does NOT auto-send.`;
+
+// CUSTOMER_CAREHUB_ADDENDUM is intentionally NOT shipped in Slice 4a — it
+// lands in Slice 5 alongside M061 (the carehub_subscriptions schema).
+
+/**
+ * Slice 4a — render the per-turn PATIENT CONTEXT block from a Tier1Context.
+ *
+ * Imported by config.ts (which owns getSystemPrompt). Kept here so the KB
+ * surface stays in one file; consumers only import string constants from
+ * knowledge.ts, never from runtime modules.
+ */
+export interface ContextBlockInput {
+  patient_name: string | null;
+  last_booking: { service_category: string | null; status: string; created_at: string } | null;
+  carehub: null;
+  language: "english" | "hindi" | "hinglish" | null;
+}
+
+export function renderContextBlock(ctx: ContextBlockInput): string {
+  const lines: string[] = [];
+  lines.push("PATIENT CONTEXT (loaded server-side, do not mention explicitly):");
+  if (ctx.patient_name) lines.push(`- Name: ${ctx.patient_name}`);
+  if (ctx.last_booking) {
+    const date = ctx.last_booking.created_at.split("T")[0];
+    lines.push(
+      `- Last booking: ${date} ${ctx.last_booking.service_category ?? "service"}, ${ctx.last_booking.status.toLowerCase()}`,
+    );
+  }
+  if (ctx.language) lines.push(`- Current language: ${ctx.language}`);
+  if (ctx.carehub === null) {
+    // omit — until M061 lands this is always null and we skip rendering
+  }
+  lines.push("");
+  lines.push("Use this context to personalize naturally. Do NOT reference the context block itself.");
+  return lines.join("\n");
+}
+
+/** Ops-mode context block — different shape (no patient personalization). */
+export function renderOpsContextBlock(args: { pendingDraftTargetPhone?: string | null }): string {
+  const lines: string[] = ["OPS MODE ACTIVE (loaded server-side):"];
+  if (args.pendingDraftTargetPhone) {
+    lines.push(`- Pending draft to: ${args.pendingDraftTargetPhone}`);
+  } else {
+    lines.push(`- No pending draft.`);
+  }
+  return lines.join("\n");
+}
