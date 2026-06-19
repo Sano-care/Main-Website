@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -17,9 +18,12 @@ import {
   LogOut,
   Shield,
   FileText,
+  Menu,
+  X,
 } from "lucide-react";
 import Image from "next/image";
 import { useOpsAuth } from "../OpsAuthProvider";
+import { sidebarClassName } from "./opsShellClasses";
 
 type NavItem = {
   href: string;
@@ -55,25 +59,60 @@ interface OpsShellProps {
 export function OpsShell({ fullName, email, role, children }: OpsShellProps) {
   const pathname = usePathname();
   const { signOut } = useOpsAuth();
+  // Mobile sidebar open/closed. Local-only, defaults closed on every page load
+  // (WhatsApp-native pattern — navigation = focused intent). No persistence.
+  const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
+
+  // Esc closes the mobile sidebar.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      {/* Left nav */}
-      <aside className="w-64 shrink-0 bg-white border-r border-slate-200 flex flex-col">
-        <Link
-          href="/ops"
-          className="px-5 py-5 border-b border-slate-200 flex items-center gap-3 cursor-pointer hover:bg-slate-50 transition-colors"
-        >
-          <Image src="/logo.svg" alt="Sanocare" width={32} height={32} className="w-8 h-8" />
-          <div>
-            <div className="text-sm font-bold text-slate-900">Sanocare Ops</div>
-            <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500">
-              Internal · {role}
-            </div>
-          </div>
-        </Link>
+    <div className="min-h-screen bg-slate-50 lg:flex">
+      {/* Mobile backdrop — tap to dismiss. Below the sidebar (z-50), above
+          the app-bar (z-30) so the open sidebar owns the screen. */}
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          onClick={close}
+          aria-hidden="true"
+        />
+      )}
 
-        <nav className="flex-1 px-3 py-4">
+      {/* Left nav — fixed slide-in overlay on mobile, static column on desktop */}
+      <aside aria-label="Ops navigation" className={sidebarClassName(open)}>
+        <div className="flex items-center justify-between border-b border-slate-200 pr-2">
+          <Link
+            href="/ops"
+            onClick={close}
+            className="flex flex-1 items-center gap-3 px-5 py-5 cursor-pointer hover:bg-slate-50 transition-colors"
+          >
+            <Image src="/logo.svg" alt="Sanocare" width={32} height={32} className="w-8 h-8" />
+            <div>
+              <div className="text-sm font-bold text-slate-900">Sanocare Ops</div>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500">
+                Internal · {role}
+              </div>
+            </div>
+          </Link>
+          {/* Close (mobile only) */}
+          <button
+            type="button"
+            onClick={close}
+            aria-label="Close menu"
+            className="lg:hidden shrink-0 rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="space-y-1">
             {NAV.map((item) => {
               const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -82,6 +121,7 @@ export function OpsShell({ fullName, email, role, children }: OpsShellProps) {
                 <li key={item.href}>
                   <Link
                     href={item.href}
+                    onClick={close}
                     className={
                       "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors " +
                       (active
@@ -117,8 +157,24 @@ export function OpsShell({ fullName, email, role, children }: OpsShellProps) {
         </div>
       </aside>
 
-      {/* Main */}
-      <main className="flex-1 min-w-0">{children}</main>
+      {/* Right column: mobile app-bar (hamburger) + main content */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Mobile top app-bar — hidden on desktop (sidebar is always visible). */}
+        <header className="lg:hidden sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-slate-200 bg-white px-3">
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label="Open menu"
+            className="-ml-1 rounded-lg p-2 text-slate-700 hover:bg-slate-100"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <Image src="/logo.svg" alt="" width={24} height={24} className="h-6 w-6" />
+          <span className="text-sm font-bold text-slate-900">Sanocare Ops</span>
+        </header>
+
+        <main className="min-w-0 flex-1">{children}</main>
+      </div>
     </div>
   );
 }
