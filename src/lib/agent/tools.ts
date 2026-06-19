@@ -163,6 +163,53 @@ export const LOG_COMPLAINT: ToolSchema = {
   },
 };
 
+// --- Slice 4a — patient-scoped tier-2 data tools. ---------------------------
+// Both are auto-scoped to the inbound caller's customer_id (adapter-injected)
+// — the model can't supply or alter the scope. Patient mode and ops mode
+// both have access; ops mode is still self-scoped (ops can NOT use these to
+// peek at other patients — that's a future ops dashboard surface, not WA).
+
+export const GET_BOOKING_HISTORY: ToolSchema = {
+  name: "get_booking_history",
+  description:
+    "Return THIS patient's full booking history, optionally filtered. " +
+    "Distinct from check_medic_status (which is 'where is my CURRENT booking') " +
+    "— get_booking_history is 'show me all my bookings, ever'. Call when the " +
+    "patient asks 'what bookings have I made', 'show me my past visits', " +
+    "'what did I book last month', or wants a list of completed/cancelled " +
+    "items.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      filter: {
+        type: "string",
+        enum: ["all", "active", "completed"],
+        description:
+          "all = every booking; active = PENDING / CONFIRMED / DISPATCHED; " +
+          "completed = COMPLETED only. Defaults to 'all' when omitted.",
+      },
+    },
+    required: [],
+  },
+};
+
+export const GET_FAMILY_MEMBERS: ToolSchema = {
+  name: "get_family_members",
+  description:
+    "Return the family members linked to THIS patient's account (M042 " +
+    "family_members table, hard cap 8). Call when the patient asks 'who is " +
+    "on my account', 'my family', 'add my mother', or needs to confirm a " +
+    "name+relation before a booking. No arguments — auto-scoped to the " +
+    "caller's customer_id.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {},
+    required: [],
+  },
+};
+
 // --- Slice 4a — ops-only relay tools. ---------------------------------------
 // Only callable when identity.role === 'ops_founder'. The adapter rejects
 // these tool calls from any other identity (security gate). No phone is
