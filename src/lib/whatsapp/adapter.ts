@@ -41,6 +41,16 @@ import { sendTemplateMessage } from "@/lib/whatsapp/cloud-api";
 import { runAgentTurn } from "@/lib/agent/orchestrator";
 import { HISTORY_LIMIT } from "@/lib/agent/config";
 import { SERVICE_DISPLAY, type EscalateToOpsInput } from "@/lib/agent/types";
+import { loadTier1Context, type ContextIdentity } from "@/lib/whatsapp/customerContext";
+import {
+  executeConfirmRelay,
+  executeGetBookingHistory,
+  executeGetFamilyMembers,
+  executeRelayToPatient,
+  persistConversationLanguage,
+} from "@/lib/whatsapp/slice4aExecutors";
+import { findLatestUnexpiredRelayDraft } from "@/lib/whatsapp/opsRouter";
+import { generateResponse } from "@/lib/agent/client";
 import {
   cancelBookingById,
   findBookingsByPhone,
@@ -414,6 +424,19 @@ export async function handleInboundMessage(
     return;
   }
 
+  // ---- Slice 4a: per-turn language detection + Tier-1 context load -------
+  // Patient turns: detect + persist language so ops + relay drafts can mirror.
+  // Ops turns: skip the language write (we don't want ops's English overriding
+  // the patient's stored language) but still load context for the system prompt.
+  if (identity.role !== "ops_founder") {
+    await persistConversationLanguage(conversation.id, text);
+  }
+  const tier1 = await loadTier1Context(identity as ContextIdentity, inbound.phone, conversation.id);
+  const pendingDraft =
+    identity.role === "ops_founder"
+      ? await findLatestUnexpiredRelayDraft(conversation.id)
+      : null;
+
   // ---- Agent brain (Claude) ----------------------------------------------
   const historyPlusCurrent = await loadHistory(conversation.id, HISTORY_LIMIT + 1);
   const history = historyPlusCurrent.slice(0, -1); // drop the just-recorded current turn
@@ -433,6 +456,19 @@ export async function handleInboundMessage(
       turnCount,
       emergencyPreCheckFired: false,
       identity,
+      tier1ContextBlock: {
+        patient_name: tier1.customer?.full_name ?? null,
+        last_booking: tier1.last_booking
+          ? {
+              service_category: tier1.last_booking.service_category,
+              status: tier1.last_booking.status,
+              created_at: tier1.last_booking.created_at,
+            }
+          : null,
+        carehub: null,
+        language: tier1.language,
+      },
+      pendingRelayDraftTargetPhone: pendingDraft?.targetPhone ?? null,
     });
     reply = res.replyText;
     toolCalls = res.toolCalls.map((t) => ({ name: t.name, input: t.input }));
@@ -476,6 +512,54 @@ export async function handleInboundMessage(
           break;
         case "log_complaint":
           toolPatientMsg = await executeLogComplaint(conversation, inbound.phone, call.input as unknown as LogComplaintInput);
+          break;
+        case "get_booking_history":
+          toolPatientMsg = await executeGetBookingHistory(
+            inbound.phone,
+            call.input as unknown as { filter?: "all" | "active" | "completed" },
+          );
+          break;
+        case "get_family_members":
+          toolPatientMsg = await executeGetFamilyMembers(identity);
+          break;
+        case "relay_to_patient":
+          toolPatientMsg = await executeRelayToPatient(
+            {
+              identity,
+              opsConversationId: conversation.id,
+              input: call.input as unknown as { target_phone: string; instruction: string },
+            },
+            {
+              composeDraftBody: async ({ instruction, targetLanguage }) => {
+                // Inline Claude composer call. Focused system prompt;
+                // never call from patient mode (security gate above
+                // already rejects there).
+                const composerSystem =
+                  "You are Aarogya composing ONE WhatsApp message on behalf of Sanocare ops to a patient. " +
+                  "Write 3 lines max, warm + brief. " +
+                  "Mirror the patient's preferred language: " +
+                  (targetLanguage ?? "english") +
+                  ". " +
+                  "Do NOT include the AI disclosure. Do NOT add a signature. " +
+                  "End with — Aarogya only if it fits in 3 lines.";
+                const composerRes = await generateResponse({
+                  model: "claude-haiku-4-5-20251001",
+                  system: composerSystem,
+                  messages: [{ role: "user", content: `Compose a message to the patient based on this instruction:\n${instruction}` }],
+                  tools: [],
+                  maxTokens: 256,
+                });
+                return composerRes.text.trim();
+              },
+            },
+          );
+          break;
+        case "confirm_relay":
+          toolPatientMsg = await executeConfirmRelay({
+            identity,
+            opsConversationId: conversation.id,
+            input: call.input as unknown as { resolution: "YES" | "CANCEL" },
+          });
           break;
         default:
           log.warn("unknown tool call ignored", call.name);

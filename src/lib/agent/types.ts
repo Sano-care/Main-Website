@@ -45,6 +45,25 @@ export interface AgentTurnInput {
    * later, separately-gated PR), so customer/new behaviour is unchanged.
    */
   identity?: Identity;
+  /**
+   * Slice 4a — Tier-1 patient context block input, shape matching
+   * renderContextBlock() in knowledge.ts. When provided alongside
+   * identity, the orchestrator uses getSystemPromptForTurn() for a
+   * personalized system prompt. Absent → falls back to the legacy
+   * getSystemPrompt() (no personalization).
+   */
+  tier1ContextBlock?: {
+    patient_name: string | null;
+    last_booking: {
+      service_category: string | null;
+      status: string;
+      created_at: string;
+    } | null;
+    carehub: null;
+    language: "english" | "hindi" | "hinglish" | null;
+  };
+  /** Slice 4a — surfaced into the OPS MODE context block (ops mode only). */
+  pendingRelayDraftTargetPhone?: string | null;
 }
 
 /** A tool the model asked us to run (validated/executed by the adapter layer). */
