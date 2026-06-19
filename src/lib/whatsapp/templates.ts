@@ -41,6 +41,24 @@ export const TEMPLATES = {
     description:
       "Booking reminder: 'Reminder: your visit is scheduled for {{1}} at {{2}}. Reply YES to confirm.'",
   },
+  // Slice 3 (T66) — medic-app event templates. Both APPROVED in Meta
+  // Business Manager (verified 2026-06-18).
+  aarogya_medic_departed: {
+    name: "aarogya_medic_departed",
+    language: "en",
+    bodyVars: ["medic_first_name"],
+    hasQuickReplies: false,
+    description:
+      "Medic en route: 'Your Sanocare medic {{1}} has left for your home and will arrive shortly.' Re-opens the 24h customer-service window.",
+  },
+  aarogya_medic_at_door: {
+    name: "aarogya_medic_at_door",
+    language: "en",
+    bodyVars: ["medic_first_name", "medic_phone"],
+    hasQuickReplies: false,
+    description:
+      "No-show recovery: 'Your Sanocare medic {{1}} is at your door. Please reply here or call {{2}}.' Sent when medic-app emits patient_no_show.",
+  },
 } as const satisfies Record<string, TemplateDef>;
 
 export type TemplateName = keyof typeof TEMPLATES;

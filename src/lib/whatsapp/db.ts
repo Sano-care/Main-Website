@@ -10,7 +10,8 @@
 //   * messages / audit_log are append-only.
 
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { sendHardenedText } from "@/lib/whatsapp/sender";
+import { sendHardenedTemplate, sendHardenedText } from "@/lib/whatsapp/sender";
+import { isTemplateName, type TemplateName } from "@/lib/whatsapp/templates";
 import { AuditEvent, writeAudit } from "@/lib/whatsapp/safety/audit";
 import { log, maskPhone } from "@/lib/whatsapp/log";
 import type { NormalizedInbound } from "@/types/whatsapp";
@@ -168,6 +169,79 @@ export async function dispatchTextMessage(args: {
   if (result.reason === "session_expired") {
     // Caller can fall back to a template send (sendHardenedTemplate).
     log.warn("outbound refused: session window closed", maskPhone(phone));
+    return { sent: false, blocked: false, error: "session_expired" };
+  }
+  return { sent: false, blocked: false, error: result.error.classification };
+}
+
+/**
+ * Slice 3 (T66) — template-sender mirror of dispatchTextMessage.
+ *
+ * Same contract: re-reads opt_out IMMEDIATELY before sending (never trusts a
+ * cached value), records OPT_OUT_SEND_BLOCKED on block, otherwise delegates
+ * to Slice 2b's `sendHardenedTemplate` (idempotency + retry + audit + persist).
+ *
+ * Templates are named in `src/lib/whatsapp/templates.ts` and resolved via
+ * `renderTemplate` inside `sendHardenedTemplate` — the registry enforces that
+ * required {{1}}..{{n}} vars are present and consistently ordered.
+ *
+ * Returns the same DispatchResult shape as dispatchTextMessage so the Slice 3
+ * dispatcher's call sites can treat both paths uniformly.
+ */
+export async function dispatchTemplateMessage(args: {
+  conversationId: string;
+  phone: string;
+  templateName: string;
+  vars: Record<string, string>;
+  safetyFlags?: Record<string, unknown>;
+}): Promise<DispatchResult> {
+  const { conversationId, phone, templateName, vars, safetyFlags } = args;
+
+  if (!isTemplateName(templateName)) {
+    // A template name the registry doesn't know — refuse rather than try a
+    // raw Cloud API call. This is a programming error, not a runtime one.
+    log.error("dispatchTemplateMessage: unknown template", templateName);
+    return { sent: false, blocked: false, error: "unknown_template" };
+  }
+  const knownTemplate: TemplateName = templateName;
+
+  // Fresh opt-out check — mirror of dispatchTextMessage. Cached flags are
+  // never trusted here; the read happens immediately before the send.
+  const { data: convo, error: readErr } = await supabaseAdmin
+    .from("conversations")
+    .select("opt_out")
+    .eq("id", conversationId)
+    .single();
+  if (readErr) {
+    log.error("opt_out precheck read failed (template)", readErr.message);
+    return { sent: false, blocked: false, error: "opt_out_precheck_failed" };
+  }
+  if (convo?.opt_out === true) {
+    log.warn("template outbound blocked: opt_out", maskPhone(phone));
+    await writeAudit({
+      conversationId,
+      eventType: AuditEvent.OPT_OUT_SEND_BLOCKED,
+      eventData: { phone, template_name: knownTemplate },
+    });
+    return { sent: false, blocked: true };
+  }
+
+  const result = await sendHardenedTemplate({
+    conversationId,
+    phone,
+    templateName: knownTemplate,
+    vars,
+    safetyFlags,
+  });
+
+  if (result.ok) {
+    return { sent: true, providerMessageId: result.providerMessageId };
+  }
+  if (result.reason === "session_expired") {
+    // Template sends are themselves the outside-window fallback, so this
+    // shouldn't happen — but if it does (e.g. the hardened sender's window
+    // gate widens to template later), surface a useful classification.
+    log.warn("template send refused: session window check", maskPhone(phone));
     return { sent: false, blocked: false, error: "session_expired" };
   }
   return { sent: false, blocked: false, error: result.error.classification };
