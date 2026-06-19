@@ -803,6 +803,18 @@ export async function assignMedic(formData: FormData) {
     throw new Error(`Could not assign medic: ${error.message}`);
   }
 
+  // Slice 3 (T66) — fire the patient-facing `medic_assigned` notification.
+  // Only on a real assignment (not on unassign / medic_id = null).
+  // CRITICAL: notification failure must NOT block the assignment from the
+  // ops user's perspective — the helper itself is best-effort + never-
+  // throws; revalidateBooking runs regardless.
+  if (medic_id) {
+    const { notifyOnMedicAssigned } = await import(
+      "@/lib/whatsapp/slice3Dispatcher"
+    );
+    void (await notifyOnMedicAssigned(supabase, bookingId, medic_id));
+  }
+
   revalidateBooking(bookingId);
 }
 

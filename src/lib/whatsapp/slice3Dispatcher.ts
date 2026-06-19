@@ -262,3 +262,63 @@ export async function dispatchEventNotification(
     },
   });
 }
+
+/** Minimal supabase-like shape the assignMedic hook uses. Kept here so the
+ *  helper is unit-testable without an RSC-client mock. */
+export interface AssignNotifyClient {
+  from(table: string): {
+    select(fields: string): {
+      eq(col: string, val: string): {
+        maybeSingle(): Promise<{
+          data: Record<string, unknown> | null;
+          error: unknown;
+        }>;
+      };
+    };
+  };
+}
+
+/**
+ * Helper for the `assignMedic()` server action — fetches booking + medic
+ * via the caller's supabase client and dispatches a `medic_assigned`
+ * notification. Never throws. The caller (ops action) uses this so its
+ * own concerns (auth, revalidation) stay surgical.
+ */
+export async function notifyOnMedicAssigned(
+  supabase: AssignNotifyClient,
+  bookingId: string,
+  medicId: string,
+): Promise<DispatchEventResult | { sent: false; blocked: false; error: string }> {
+  try {
+    const { data: bookingForDispatch } = await supabase
+      .from("bookings")
+      .select("id, phone, patient_name, status")
+      .eq("id", bookingId)
+      .maybeSingle();
+    const { data: medicForDispatch } = await supabase
+      .from("medics")
+      .select("id, full_name, phone")
+      .eq("id", medicId)
+      .maybeSingle();
+    if (!bookingForDispatch || !medicForDispatch) {
+      return { sent: false, blocked: false, error: "booking_or_medic_lookup_failed" };
+    }
+    return await dispatchEventNotification({
+      event: "medic_assigned",
+      booking: {
+        id: bookingForDispatch.id as string,
+        phone: bookingForDispatch.phone as string,
+        patient_name: (bookingForDispatch.patient_name as string | null) ?? null,
+        status: (bookingForDispatch.status as string | null) ?? null,
+      },
+      medic: {
+        id: medicForDispatch.id as string,
+        full_name: (medicForDispatch.full_name as string | null) ?? null,
+        phone: medicForDispatch.phone as string,
+      },
+    });
+  } catch (e) {
+    log.error("notifyOnMedicAssigned failed", e);
+    return { sent: false, blocked: false, error: "notify_threw" };
+  }
+}

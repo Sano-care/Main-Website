@@ -85,7 +85,10 @@ vi.mock("@/lib/whatsapp/log", () => ({
   maskPhone: (p: string) => p,
 }));
 
-import { dispatchEventNotification } from "@/lib/whatsapp/slice3Dispatcher";
+import {
+  dispatchEventNotification,
+  notifyOnMedicAssigned,
+} from "@/lib/whatsapp/slice3Dispatcher";
 
 const baseBooking = {
   id: "bk-1",
@@ -307,5 +310,72 @@ describe("dispatchEventNotification — visit_done Google review nudge", () => {
     process.env.NEXT_PUBLIC_GOOGLE_REVIEW_URL = "https://g.page/r/CfG3dtgPmMKnEBM/review";
     await dispatchEventNotification({ event: "reached", booking: baseBooking, medic: baseMedic });
     expect(h.textCalls[0].body).not.toMatch(/google review/i);
+  });
+});
+
+describe("notifyOnMedicAssigned — assignMedic() server action hook", () => {
+  function makeRscClient(args: {
+    booking: Record<string, unknown> | null;
+    medic: Record<string, unknown> | null;
+  }) {
+    return {
+      from(table: string) {
+        return {
+          select() {
+            return {
+              eq() {
+                return {
+                  maybeSingle: () =>
+                    Promise.resolve({
+                      data: table === "bookings" ? args.booking : args.medic,
+                      error: null,
+                    }),
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+  }
+
+  it("dispatches medic_assigned with both rows present, returns DispatchResult", async () => {
+    const rsc = makeRscClient({
+      booking: { id: "bk-1", phone: "+919811100001", patient_name: "Rajesh", status: "CONFIRMED" },
+      medic: { id: "med-1", full_name: "Sunita Sharma", phone: "+919876543210" },
+    });
+    const result = await notifyOnMedicAssigned(rsc, "bk-1", "med-1");
+    expect(result).toMatchObject({ sent: true });
+    expect(h.textCalls).toHaveLength(1);
+    expect(h.textCalls[0].body).toMatch(/Sunita/);
+  });
+
+  it("missing booking → returns lookup_failed without dispatching", async () => {
+    const rsc = makeRscClient({
+      booking: null,
+      medic: { id: "med-1", full_name: "Sunita", phone: "+919876543210" },
+    });
+    const result = await notifyOnMedicAssigned(rsc, "bk-1", "med-1");
+    expect(result).toEqual({ sent: false, blocked: false, error: "booking_or_medic_lookup_failed" });
+    expect(h.textCalls).toHaveLength(0);
+  });
+
+  it("missing medic → returns lookup_failed", async () => {
+    const rsc = makeRscClient({
+      booking: { id: "bk-1", phone: "+919811100001", patient_name: "X", status: "CONFIRMED" },
+      medic: null,
+    });
+    const result = await notifyOnMedicAssigned(rsc, "bk-1", "med-1");
+    expect(result).toEqual({ sent: false, blocked: false, error: "booking_or_medic_lookup_failed" });
+  });
+
+  it("rsc throws → caught as notify_threw, never escapes", async () => {
+    const rsc = {
+      from() {
+        throw new Error("rsc client died");
+      },
+    } as unknown as Parameters<typeof notifyOnMedicAssigned>[0];
+    const result = await notifyOnMedicAssigned(rsc, "bk-1", "med-1");
+    expect(result).toEqual({ sent: false, blocked: false, error: "notify_threw" });
   });
 });
