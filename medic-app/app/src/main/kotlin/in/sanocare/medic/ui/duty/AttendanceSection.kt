@@ -5,7 +5,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -66,6 +65,12 @@ fun AttendanceSection(modifier: Modifier = Modifier) {
             }
         }
     }
+
+    // Re-sync attendance state to the currently signed-in medic on every mount
+    // (first sign-in AND re-entry after an account switch — this VM is
+    // activity-scoped and survives sign-out, so without this it would show the
+    // previous medic's state). #88 account-switch fix.
+    LaunchedEffect(Unit) { vm.refresh() }
 
     val requiredPermissions = remember {
         MedicAttendanceService.requiredRuntimePermissions()
