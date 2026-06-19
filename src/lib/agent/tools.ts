@@ -163,6 +163,114 @@ export const LOG_COMPLAINT: ToolSchema = {
   },
 };
 
+// --- Slice 4a — patient-scoped tier-2 data tools. ---------------------------
+// Both are auto-scoped to the inbound caller's customer_id (adapter-injected)
+// — the model can't supply or alter the scope. Patient mode and ops mode
+// both have access; ops mode is still self-scoped (ops can NOT use these to
+// peek at other patients — that's a future ops dashboard surface, not WA).
+
+export const GET_BOOKING_HISTORY: ToolSchema = {
+  name: "get_booking_history",
+  description:
+    "Return THIS patient's full booking history, optionally filtered. " +
+    "Distinct from check_medic_status (which is 'where is my CURRENT booking') " +
+    "— get_booking_history is 'show me all my bookings, ever'. Call when the " +
+    "patient asks 'what bookings have I made', 'show me my past visits', " +
+    "'what did I book last month', or wants a list of completed/cancelled " +
+    "items.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      filter: {
+        type: "string",
+        enum: ["all", "active", "completed"],
+        description:
+          "all = every booking; active = PENDING / CONFIRMED / DISPATCHED; " +
+          "completed = COMPLETED only. Defaults to 'all' when omitted.",
+      },
+    },
+    required: [],
+  },
+};
+
+export const GET_FAMILY_MEMBERS: ToolSchema = {
+  name: "get_family_members",
+  description:
+    "Return the family members linked to THIS patient's account (M042 " +
+    "family_members table, hard cap 8). Call when the patient asks 'who is " +
+    "on my account', 'my family', 'add my mother', or needs to confirm a " +
+    "name+relation before a booking. No arguments — auto-scoped to the " +
+    "caller's customer_id.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {},
+    required: [],
+  },
+};
+
+// --- Slice 4a — ops-only relay tools. ---------------------------------------
+// Only callable when identity.role === 'ops_founder'. The adapter rejects
+// these tool calls from any other identity (security gate). No phone is
+// taken for target lookup beyond what ops passes — the adapter resolves
+// the target patient's stored language before composing.
+
+export const RELAY_TO_PATIENT: ToolSchema = {
+  name: "relay_to_patient",
+  description:
+    "OPS-ONLY. Compose a warm 3-line message to a patient on behalf of " +
+    "ops. Call this when the ops user (founder) asks you to relay an " +
+    "instruction to a specific patient phone — e.g. 'Tell +91 98765 43210 " +
+    "the medic will be 15 min late.' Returns a draft for ops to confirm; " +
+    "DOES NOT auto-send. The patient receives nothing until ops replies " +
+    "YES (then call confirm_relay).",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      target_phone: {
+        type: "string",
+        description:
+          "Patient's WhatsApp phone in any common format (e.g. '+91 98765 43210', " +
+          "'9876543210', '+919876543210'). The adapter normalises.",
+      },
+      instruction: {
+        type: "string",
+        description:
+          "The ops user's instruction in their words. Used to compose the " +
+          "patient-facing draft. Keep verbatim from ops's message.",
+      },
+    },
+    required: ["target_phone", "instruction"],
+  },
+};
+
+export const CONFIRM_RELAY: ToolSchema = {
+  name: "confirm_relay",
+  description:
+    "OPS-ONLY companion to relay_to_patient. Call when ops replies YES " +
+    "to a pending draft (resolution='YES') or refines/cancels (use the " +
+    "describe-change pattern: re-call relay_to_patient with new draft " +
+    "and then confirm_relay with resolution='CANCEL' against the prior " +
+    "draft if needed). No draft_id needed — the adapter looks up the " +
+    "most recent unexpired draft for this ops conversation.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      resolution: {
+        type: "string",
+        enum: ["YES", "CANCEL"],
+        description:
+          "YES → send the pending draft to the patient. CANCEL → mark the " +
+          "draft cancelled (use when ops wants to abandon without sending).",
+      },
+    },
+    required: ["resolution"],
+  },
+};
+
 export const AAROGYA_TOOLS: ToolSchema[] = [
   ESCALATE_TO_OPS,
   SET_OPT_OUT,
@@ -170,3 +278,8 @@ export const AAROGYA_TOOLS: ToolSchema[] = [
   CANCEL_BOOKING,
   LOG_COMPLAINT,
 ];
+
+/** Slice 4a — the tool subset available only when identity is ops_founder.
+ *  The adapter merges this with AAROGYA_TOOLS for ops turns and uses
+ *  AAROGYA_TOOLS alone for patient turns. */
+export const AAROGYA_OPS_TOOLS: ToolSchema[] = [RELAY_TO_PATIENT, CONFIRM_RELAY];

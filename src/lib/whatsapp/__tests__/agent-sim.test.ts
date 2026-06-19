@@ -140,6 +140,58 @@ vi.mock("@/lib/whatsapp/identity", () => ({
   identityForAudit: (id: { role: string }) => ({ role: id.role, identifiers: {} }),
 }));
 
+// Slice 4a — adapter.ts now imports modules that touch supabase-server at
+// module-load. Stub the supabase client so this test can run without env vars
+// AND short-circuit the new context loaders to no-ops (sim covers the existing
+// patient flow; the new tools are unit-tested separately).
+vi.mock("@/lib/supabase-server", () => ({
+  supabaseAdmin: {
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: () => Promise.resolve({ data: null, error: null }),
+          single: () => Promise.resolve({ data: null, error: null }),
+        }),
+        ilike: () => ({
+          order: () => ({
+            limit: () => ({
+              maybeSingle: () => Promise.resolve({ data: null, error: null }),
+            }),
+          }),
+        }),
+        order: () => ({
+          limit: () => Promise.resolve({ data: [], error: null }),
+        }),
+      }),
+      update: () => ({ eq: () => Promise.resolve({ error: null }) }),
+      insert: () => ({
+        select: () => ({
+          single: () => Promise.resolve({ data: null, error: null }),
+        }),
+      }),
+    }),
+  },
+}));
+vi.mock("@/lib/whatsapp/customerContext", () => ({
+  loadTier1Context: vi.fn(async () => ({
+    identity: { role: "new" },
+    customer: null,
+    last_booking: null,
+    carehub: null,
+    language: null,
+  })),
+}));
+vi.mock("@/lib/whatsapp/opsRouter", () => ({
+  findLatestUnexpiredRelayDraft: vi.fn(async () => null),
+}));
+vi.mock("@/lib/whatsapp/slice4aExecutors", () => ({
+  executeConfirmRelay: vi.fn(async () => "stub"),
+  executeGetBookingHistory: vi.fn(async () => "stub"),
+  executeGetFamilyMembers: vi.fn(async () => "stub"),
+  executeRelayToPatient: vi.fn(async () => "stub"),
+  persistConversationLanguage: vi.fn(async () => undefined),
+}));
+
 import { processWebhook } from "@/lib/whatsapp/adapter";
 
 function envelope(from: string, text: string) {

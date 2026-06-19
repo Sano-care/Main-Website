@@ -12,8 +12,14 @@
 // and persisting messages/audit rows.
 
 import { generateResponse } from "@/lib/agent/client";
-import { getSystemPrompt, selectModel, HISTORY_LIMIT, MAX_OUTPUT_TOKENS } from "@/lib/agent/config";
-import { AAROGYA_TOOLS } from "@/lib/agent/tools";
+import {
+  getSystemPrompt,
+  getSystemPromptForTurn,
+  selectModel,
+  HISTORY_LIMIT,
+  MAX_OUTPUT_TOKENS,
+} from "@/lib/agent/config";
+import { AAROGYA_OPS_TOOLS, AAROGYA_TOOLS } from "@/lib/agent/tools";
 import type { AgentTurnInput, AgentTurnResult } from "@/lib/agent/types";
 
 /**
@@ -21,8 +27,25 @@ import type { AgentTurnInput, AgentTurnResult } from "@/lib/agent/types";
  * returns a result; persistence + tool execution happen in the adapter.
  */
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResult> {
-  const system = getSystemPrompt();
+  // Slice 4a — when identity + context are threaded by the adapter, use the
+  // hybrid composer (mirror rule + short-message rule + per-identity
+  // addendums + per-turn context block). Otherwise stay on the legacy
+  // zero-arg path for non-Aarogya channels / call sites that don't supply.
+  const system =
+    input.identity && input.tier1ContextBlock
+      ? getSystemPromptForTurn(input.identity, input.tier1ContextBlock, {
+          pendingDraftTargetPhone: input.pendingRelayDraftTargetPhone ?? null,
+        })
+      : getSystemPrompt();
   const model = selectModel(input);
+
+  // Slice 4a — ops_founder gets the relay tools merged in. Patients see
+  // only the patient-side tools (relay is a security-gated executor too,
+  // but withholding the schema from the model is defense-in-depth).
+  const tools =
+    input.identity?.role === "ops_founder"
+      ? [...AAROGYA_TOOLS, ...AAROGYA_OPS_TOOLS]
+      : AAROGYA_TOOLS;
 
   // Build the message list: capped history (oldest → newest) + the new user turn.
   const trimmed = input.history.slice(-HISTORY_LIMIT);
@@ -35,7 +58,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
     model,
     system,
     messages,
-    tools: AAROGYA_TOOLS,
+    tools,
     maxTokens: MAX_OUTPUT_TOKENS,
   });
 

@@ -23,6 +23,7 @@
 
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { findBookingsByPhone, normalizePhoneLast10 } from "@/lib/agent/bookings";
+import { FOUNDER_OPS_PHONE } from "@/lib/whatsapp/constants";
 
 export type StaffRole = "doctor" | "medic";
 export type CustomerSubRole = "new" | "registered" | "carehub";
@@ -31,6 +32,11 @@ export type Identity =
   | { role: "doctor"; doctorId: string; fullName: string }
   | { role: "medic"; medicId: string; fullName: string }
   | { role: "customer"; subRole: CustomerSubRole; customerId?: string; fullName?: string }
+  // Slice 4a — founder/ops mode. resolveIdentity short-circuits to this
+  // BEFORE any DB lookup when the inbound phone matches FOUNDER_OPS_PHONE.
+  // Phone is the only field; ops_founder is a phone-number assertion, not
+  // a DB-backed identity (no `staff` table for "ops" exists).
+  | { role: "ops_founder"; phone: string }
   | { role: "new" };
 
 type PhoneRow = { id: string; full_name: string | null; phone: string };
@@ -67,6 +73,15 @@ export async function resolveIdentity(phone: string): Promise<Identity> {
   const last10 = normalizePhoneLast10(phone);
   // Too few digits to match anything reliably → treat as new.
   if (last10.length < 10) return { role: "new" };
+
+  // 0. Founder/ops short-circuit — phone-only, no DB.
+  //    The founder ALSO has a customers row (via co-founder testing) so
+  //    without this, resolveIdentity would land on role: "customer". We
+  //    want ops_founder to win, so the check goes BEFORE the doctor/
+  //    medic/customer lookups.
+  if (normalizePhoneLast10(FOUNDER_OPS_PHONE) === last10) {
+    return { role: "ops_founder", phone: FOUNDER_OPS_PHONE };
+  }
 
   // 1. Doctor
   const doctor = await matchByPhoneSuffix("doctors", last10);
@@ -122,6 +137,11 @@ export function identityForAudit(identity: Identity): {
         role: `customer:${identity.subRole}`,
         identifiers: identity.customerId ? { customer_id: identity.customerId } : {},
       };
+    case "ops_founder":
+      // Phone-anchored identity — no DB id to stamp. The phone itself
+      // is the identifier; audit rows that need to link to ops_founder
+      // can stamp it from the conversation row.
+      return { role: "ops_founder", identifiers: {} };
     case "new":
       return { role: "new", identifiers: {} };
   }
