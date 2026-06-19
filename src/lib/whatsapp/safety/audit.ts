@@ -41,6 +41,23 @@ export const AuditEvent = {
   OPS_RELAY_CONFIRMED: "ops_relay_confirmed",
   OPS_RELAY_CANCELLED: "ops_relay_cancelled",
   OPS_RELAY_EXPIRED: "ops_relay_expired",
+  // Slice 3 (T66) — medic-app event → Aarogya notification dispatcher.
+  MEDIC_EVENT_RECEIVED: "medic_event_received",
+  MEDIC_EVENT_INSERTED: "medic_event_inserted",
+  MEDIC_EVENT_IDEMPOTENT_RETURN: "medic_event_idempotent_return",
+  MEDIC_EVENT_UNKNOWN_BOOKING: "medic_event_unknown_booking",
+  MEDIC_EVENT_CANCELLED_BOOKING: "medic_event_cancelled_booking",
+  MEDIC_EVENT_BOOKING_STATUS_UPDATED: "medic_event_booking_status_updated",
+  MEDIC_EVENT_NOTIFICATION_SENT: "medic_event_notification_sent",
+  MEDIC_EVENT_NOTIFICATION_FAILED: "medic_event_notification_failed",
+  MEDIC_EVENT_NOTIFICATION_SKIPPED_OPTOUT: "medic_event_notification_skipped_optout",
+  MEDIC_EVENT_NOTIFICATION_SKIPPED_WINDOW: "medic_event_notification_skipped_window",
+  NO_SHOW_ESCALATION_PENDING: "no_show_escalation_pending",
+  // The pg_cron job emits NO_SHOW_ESCALATION_FIRED and
+  // NO_SHOW_RECOVERY_INBOUND directly — listed here for traceability so
+  // consumers reading AuditEvent know the full Slice 3 vocabulary.
+  NO_SHOW_ESCALATION_FIRED: "no_show_escalation_fired",
+  NO_SHOW_RECOVERY_INBOUND: "no_show_recovery_inbound",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
