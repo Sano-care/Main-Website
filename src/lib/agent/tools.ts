@@ -163,6 +163,67 @@ export const LOG_COMPLAINT: ToolSchema = {
   },
 };
 
+// --- Slice 4a — ops-only relay tools. ---------------------------------------
+// Only callable when identity.role === 'ops_founder'. The adapter rejects
+// these tool calls from any other identity (security gate). No phone is
+// taken for target lookup beyond what ops passes — the adapter resolves
+// the target patient's stored language before composing.
+
+export const RELAY_TO_PATIENT: ToolSchema = {
+  name: "relay_to_patient",
+  description:
+    "OPS-ONLY. Compose a warm 3-line message to a patient on behalf of " +
+    "ops. Call this when the ops user (founder) asks you to relay an " +
+    "instruction to a specific patient phone — e.g. 'Tell +91 98765 43210 " +
+    "the medic will be 15 min late.' Returns a draft for ops to confirm; " +
+    "DOES NOT auto-send. The patient receives nothing until ops replies " +
+    "YES (then call confirm_relay).",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      target_phone: {
+        type: "string",
+        description:
+          "Patient's WhatsApp phone in any common format (e.g. '+91 98765 43210', " +
+          "'9876543210', '+919876543210'). The adapter normalises.",
+      },
+      instruction: {
+        type: "string",
+        description:
+          "The ops user's instruction in their words. Used to compose the " +
+          "patient-facing draft. Keep verbatim from ops's message.",
+      },
+    },
+    required: ["target_phone", "instruction"],
+  },
+};
+
+export const CONFIRM_RELAY: ToolSchema = {
+  name: "confirm_relay",
+  description:
+    "OPS-ONLY companion to relay_to_patient. Call when ops replies YES " +
+    "to a pending draft (resolution='YES') or refines/cancels (use the " +
+    "describe-change pattern: re-call relay_to_patient with new draft " +
+    "and then confirm_relay with resolution='CANCEL' against the prior " +
+    "draft if needed). No draft_id needed — the adapter looks up the " +
+    "most recent unexpired draft for this ops conversation.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      resolution: {
+        type: "string",
+        enum: ["YES", "CANCEL"],
+        description:
+          "YES → send the pending draft to the patient. CANCEL → mark the " +
+          "draft cancelled (use when ops wants to abandon without sending).",
+      },
+    },
+    required: ["resolution"],
+  },
+};
+
 export const AAROGYA_TOOLS: ToolSchema[] = [
   ESCALATE_TO_OPS,
   SET_OPT_OUT,
@@ -170,3 +231,8 @@ export const AAROGYA_TOOLS: ToolSchema[] = [
   CANCEL_BOOKING,
   LOG_COMPLAINT,
 ];
+
+/** Slice 4a — the tool subset available only when identity is ops_founder.
+ *  The adapter merges this with AAROGYA_TOOLS for ops turns and uses
+ *  AAROGYA_TOOLS alone for patient turns. */
+export const AAROGYA_OPS_TOOLS: ToolSchema[] = [RELAY_TO_PATIENT, CONFIRM_RELAY];

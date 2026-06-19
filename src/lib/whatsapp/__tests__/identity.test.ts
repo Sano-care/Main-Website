@@ -68,7 +68,9 @@ describe("resolveIdentity — precedence", () => {
   });
 
   it("doctor wins when the same number is in all three tables", async () => {
-    const phone = "+919760059900";
+    // Slice 4a: ops_founder (+919760059900) now wins over every DB tier,
+    // so this precedence test uses a non-ops phone.
+    const phone = "+919811100099";
     h.rows.doctors = [{ id: "d", full_name: "D", phone }];
     h.rows.medics = [{ id: "m", full_name: "M", phone }];
     h.rows.customers = [{ id: "c", full_name: "C", phone }];
@@ -76,12 +78,22 @@ describe("resolveIdentity — precedence", () => {
     expect(id.role).toBe("doctor");
     expect(h.fromCalls).toEqual(["doctors"]);
   });
+
+  it("Slice 4a — ops_founder phone short-circuits BEFORE any DB lookup", async () => {
+    // Even if Shashwat has a customers row, ops_founder wins.
+    h.rows.customers = [{ id: "cus-1", full_name: "Shashwat", phone: "+919760059900" }];
+    const id = await resolveIdentity("+919760059900");
+    expect(id).toEqual({ role: "ops_founder", phone: "+919760059900" });
+    expect(h.fromCalls).toEqual([]); // no DB lookups happened
+  });
 });
 
 describe("resolveIdentity — customer sub-roles", () => {
   it("a customers row → subRole 'registered' with id + name", async () => {
-    h.rows.customers = [{ id: "cus-1", full_name: "Shashwat", phone: "+919760059900" }];
-    const id = await resolveIdentity("+919760059900");
+    // Slice 4a: switched from +919760059900 (now ops_founder) to a
+    // non-ops phone so this test exercises the customers branch.
+    h.rows.customers = [{ id: "cus-1", full_name: "Shashwat", phone: "+919898989898" }];
+    const id = await resolveIdentity("+919898989898");
     expect(id).toEqual({
       role: "customer",
       subRole: "registered",

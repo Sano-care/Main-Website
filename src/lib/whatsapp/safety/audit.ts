@@ -35,6 +35,12 @@ export const AuditEvent = {
   AGENT_ERROR: "agent_error",
   OPS_ALERT_SENT: "ops_alert_sent",
   OPS_ATTENDED: "ops_attended",
+  // Slice 4a — ops mode (founder phone inbound + relay flow).
+  OPS_MESSAGE_RECEIVED: "ops_message_received",
+  OPS_RELAY_DRAFTED: "ops_relay_drafted",
+  OPS_RELAY_CONFIRMED: "ops_relay_confirmed",
+  OPS_RELAY_CANCELLED: "ops_relay_cancelled",
+  OPS_RELAY_EXPIRED: "ops_relay_expired",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
