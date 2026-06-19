@@ -57,7 +57,9 @@ export function ConversationsShell({
   }
 
   return (
-    <div className="flex h-[100dvh] flex-col">
+    // h-14 = OpsShell's mobile app-bar; subtract it so the viewer fills the
+    // remaining viewport on mobile. Desktop has no app-bar → full 100dvh.
+    <div className="flex h-[calc(100dvh_-_3.5rem)] flex-col lg:h-[100dvh]">
       {/* Page header */}
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
         <div className="flex items-center gap-2">
