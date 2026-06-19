@@ -812,7 +812,15 @@ export async function assignMedic(formData: FormData) {
     const { notifyOnMedicAssigned } = await import(
       "@/lib/whatsapp/slice3Dispatcher"
     );
-    void (await notifyOnMedicAssigned(supabase, bookingId, medic_id));
+    // Supabase's generic builder type doesn't structurally unify with the
+    // dispatcher's narrow client shape — cast through unknown. Runtime
+    // behavior is identical; this is purely an inference shortcut.
+    type NotifyClient = Parameters<typeof notifyOnMedicAssigned>[0];
+    void (await notifyOnMedicAssigned(
+      supabase as unknown as NotifyClient,
+      bookingId,
+      medic_id,
+    ));
   }
 
   revalidateBooking(bookingId);
