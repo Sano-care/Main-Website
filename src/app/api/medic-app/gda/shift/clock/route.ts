@@ -14,8 +14,10 @@ export const runtime = "nodejs";
 // Status machine: scheduled → in_progress (clock_in) → done (clock_out), with
 // undo_clock_out reverting done → in_progress.
 //
-// The money path (post/reverse the gda_shift earning) is wired into clock_out /
-// undo_clock_out in C4 — this commit handles the status transitions only.
+// clock_out posts the gda_shift earning (post_gda_shift_earning, idempotent),
+// undo_clock_out reverses it (reverse_gda_shift_earning, append-only). Both DB
+// functions are SECURITY DEFINER + idempotent, so a retried request never
+// double-posts.
 
 const ACTIONS = new Set(["clock_in", "clock_out", "undo_clock_out"]);
 
@@ -102,8 +104,29 @@ export async function POST(request: NextRequest) {
       console.error("[medic-app/gda/clock] clock_out failed", error);
       return NextResponse.json({ error: "update_failed" }, { status: 500 });
     }
-    // C4 posts the gda_shift earning here.
-    return NextResponse.json({ status: "done", clock_out_at: nowIso });
+    // Money path — post the shift earning. Idempotent + append-only in the DB
+    // function (one 'gda_shift' row per shift; no-op if already posted or if no
+    // payout is configured yet). Best-effort: the clock-out itself stands even
+    // if the post is deferred — re-running it is a no-op, so nothing double-pays.
+    const { data: ledgerId, error: rpcErr } = await supabase.rpc(
+      "post_gda_shift_earning",
+      { p_shift_id: shiftId },
+    );
+    if (rpcErr) {
+      console.error("[medic-app/gda/clock] payout post failed", rpcErr);
+      return NextResponse.json({
+        status: "done",
+        clock_out_at: nowIso,
+        payout_posted: false,
+        warning: "payout_post_deferred",
+      });
+    }
+    return NextResponse.json({
+      status: "done",
+      clock_out_at: nowIso,
+      ledger_entry_id: (ledgerId as string | null) ?? null,
+      payout_posted: ledgerId != null,
+    });
   }
 
   // undo_clock_out
@@ -121,6 +144,24 @@ export async function POST(request: NextRequest) {
     console.error("[medic-app/gda/clock] undo failed", error);
     return NextResponse.json({ error: "update_failed" }, { status: 500 });
   }
-  // C4 reverses the gda_shift earning here.
-  return NextResponse.json({ status: "in_progress", clock_out_at: null });
+  // Money path — reverse the shift earning (append-only: posts a compensating
+  // 'reversal' row, never UPDATE/DELETE). Idempotent + no-op if nothing accrued.
+  const { data: revId, error: rpcErr } = await supabase.rpc(
+    "reverse_gda_shift_earning",
+    { p_shift_id: shiftId },
+  );
+  if (rpcErr) {
+    console.error("[medic-app/gda/clock] payout reversal failed", rpcErr);
+    return NextResponse.json({
+      status: "in_progress",
+      clock_out_at: null,
+      reversal_posted: false,
+      warning: "reversal_deferred",
+    });
+  }
+  return NextResponse.json({
+    status: "in_progress",
+    clock_out_at: null,
+    reversal_entry_id: (revId as string | null) ?? null,
+  });
 }
