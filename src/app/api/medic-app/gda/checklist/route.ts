@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireMedic } from "@/lib/auth/requireMedic";
-import { UUID_RE, isGdaTaskKey } from "@/lib/gda/shared";
+import {
+  UUID_RE,
+  isGdaTaskKey,
+  isVitalTaskKey,
+  parseVital,
+} from "@/lib/gda/shared";
 
 export const runtime = "nodejs";
 
@@ -14,8 +19,11 @@ export const runtime = "nodejs";
 // for vital tasks (bp/pulse/sugar/temperature) or a free note otherwise.
 // Cookie-auth; the shift must belong to the cookied GDA.
 //
-// The vitals mirror (vital task_keys → vital_readings) is wired in C5 — this
-// commit persists the checklist row only.
+// Vitals mirror (C5): when a vital task (bp/pulse/sugar/temperature) is marked
+// done with a parseable reading AND the deployment is linked to a real customer,
+// the reading is also written to vital_readings (omit unit → DB default 'auto';
+// source='device'). Unparseable readings or unlinked deployments save the
+// checklist row only — never block the GDA's flow.
 
 function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -74,6 +82,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "shift_not_found" }, { status: 404 });
   }
 
+  // The linked deployment's customer_id drives the vitals mirror (null → checklist-only).
+  const { data: deployment } = await supabase
+    .from("gda_deployments")
+    .select("customer_id")
+    .eq("id", shift.deployment_id)
+    .maybeSingle();
+  const customerId =
+    (deployment as { customer_id: string | null } | null)?.customer_id ?? null;
+
   const { error: upsertErr } = await supabase
     .from("gda_shift_checklist")
     .upsert(
@@ -93,5 +110,34 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ ok: true, task_key: taskKey, done });
+  // Vitals mirror — only for a completed vital task with a parseable reading on a
+  // customer-linked deployment. Anything else is checklist-only (no error).
+  let vitalMirrored = false;
+  if (done && isVitalTaskKey(taskKey) && value && customerId) {
+    const parsed = parseVital(taskKey, value);
+    if (parsed) {
+      const { error: vitalErr } = await supabase.from("vital_readings").insert({
+        customer_id: customerId,
+        kind: parsed.kind,
+        value_numeric: parsed.value_numeric,
+        value_secondary: parsed.value_secondary,
+        taken_at: new Date().toISOString(),
+        source: "device",
+        // unit omitted → DB default 'auto'.
+      });
+      if (vitalErr) {
+        // Records-side best-effort: the checklist row is saved either way.
+        console.error("[medic-app/gda/checklist] vital mirror failed", vitalErr);
+      } else {
+        vitalMirrored = true;
+      }
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    task_key: taskKey,
+    done,
+    vital_mirrored: vitalMirrored,
+  });
 }
