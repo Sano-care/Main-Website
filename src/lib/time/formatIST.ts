@@ -189,6 +189,30 @@ function formatIso(d: Date): string {
 }
 
 /**
+ * The IST calendar date as "YYYY-MM-DD" for the given instant — the key
+ * shape for presence_date / work_date (C3), which must align to the IST day,
+ * not UTC. A 23:30 IST heartbeat is still "today" in Delhi even though it's
+ * already tomorrow in UTC; a 04:00 IST heartbeat is still "today" even though
+ * it's still yesterday in UTC. Either case keys the wrong calendar day if you
+ * use the raw UTC date.
+ *
+ * Reuses the memoised "iso" formatter (en-CA, Asia/Kolkata), whose
+ * year/month/day parts are already zero-padded and independent of the
+ * hour="24"-at-midnight quirk that formatIso() normalises. Returns null for
+ * nullish / unparseable input (callers fail closed).
+ */
+export function istDateISO(
+  input: string | number | Date | null | undefined,
+): string | null {
+  const d = toDate(input);
+  if (!d) return null;
+  const parts = getFormatter("iso").formatToParts(d);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+/**
  * Render a datetime value in IST.
  *
  * @param input  ISO string, epoch ms, or Date. null/undefined renders "—".
