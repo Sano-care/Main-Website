@@ -58,6 +58,21 @@ export const AuditEvent = {
   // consumers reading AuditEvent know the full Slice 3 vocabulary.
   NO_SHOW_ESCALATION_FIRED: "no_show_escalation_fired",
   NO_SHOW_RECOVERY_INBOUND: "no_show_recovery_inbound",
+  // Slice 5b — CareHub proactive offer + monthly visit reminder sweeps.
+  // Every send/skip/block is audited (phone-free where possible).
+  CAREHUB_OFFER_SWEEP_RUN: "carehub_offer_sweep_run",
+  CAREHUB_OFFER_SENT: "carehub_offer_sent",
+  CAREHUB_OFFER_BLOCKED_OPTOUT: "carehub_offer_blocked_optout",
+  CAREHUB_OFFER_FAILED: "carehub_offer_failed",
+  CAREHUB_REMINDER_SWEEP_RUN: "carehub_reminder_sweep_run",
+  CAREHUB_REMINDER_SENT: "carehub_reminder_sent",
+  CAREHUB_REMINDER_SKIPPED_ALREADY_SENT: "carehub_reminder_skipped_already_sent",
+  CAREHUB_REMINDER_SKIPPED_VISIT_BOOKED: "carehub_reminder_skipped_visit_booked",
+  CAREHUB_REMINDER_BLOCKED_OPTOUT: "carehub_reminder_blocked_optout",
+  CAREHUB_REMINDER_FAILED: "carehub_reminder_failed",
+  // Emitted once per sweep when the feature flag is OFF — proves a
+  // flags-off run sent NOTHING.
+  CAREHUB_SKIPPED_FLAG_OFF: "carehub_skipped_flag_off",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
