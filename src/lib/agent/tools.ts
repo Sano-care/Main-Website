@@ -271,15 +271,66 @@ export const CONFIRM_RELAY: ToolSchema = {
   },
 };
 
+// --- Slice 5 — CareHub awareness. ------------------------------------------
+// register_carehub_interest is advertised to every patient turn (the model
+// calls it only when a NON-member expresses interest; the executor no-ops for
+// existing members). surface_carehub_benefits is advertised ONLY to carehub
+// identities (orchestrator subset) AND gated at the executor level —
+// defense-in-depth so a non-member can never read benefits.
+
+export const REGISTER_CAREHUB_INTEREST: ToolSchema = {
+  name: "register_carehub_interest",
+  description:
+    "Capture this person's interest in a Sanocare CareHub membership so sales " +
+    "can follow up. Call when a customer or new visitor asks about CareHub, the " +
+    "membership, the ₹199/month plan, or says they'd like to join / know more. " +
+    "Do NOT call for someone who is already a CareHub member. No phone argument " +
+    "— the lead is keyed to this conversation's number.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      notes: {
+        type: "string",
+        description: "What the person said about their interest, in their words (optional).",
+      },
+    },
+    required: [],
+  },
+};
+
+export const SURFACE_CAREHUB_BENEFITS: ToolSchema = {
+  name: "surface_carehub_benefits",
+  description:
+    "Surface THIS CareHub member's current benefits and remaining monthly perks " +
+    "(free vitals visit, 20% off, priority dispatch, member-since date). Call when " +
+    "the member asks 'what are my benefits', 'what does CareHub include', 'what do " +
+    "I get', or 'show my membership'. ONLY callable for CareHub members — the " +
+    "executor rejects any other identity. No arguments.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {},
+    required: [],
+  },
+};
+
 export const AAROGYA_TOOLS: ToolSchema[] = [
   ESCALATE_TO_OPS,
   SET_OPT_OUT,
   CHECK_MEDIC_STATUS,
   CANCEL_BOOKING,
   LOG_COMPLAINT,
+  REGISTER_CAREHUB_INTEREST,
 ];
 
 /** Slice 4a — the tool subset available only when identity is ops_founder.
  *  The adapter merges this with AAROGYA_TOOLS for ops turns and uses
  *  AAROGYA_TOOLS alone for patient turns. */
 export const AAROGYA_OPS_TOOLS: ToolSchema[] = [RELAY_TO_PATIENT, CONFIRM_RELAY];
+
+/** Slice 5 — the tool subset merged in only when identity is a CareHub
+ *  member (customer / subRole 'carehub'). surface_carehub_benefits is
+ *  withheld from every other identity's tool list (defense-in-depth on top
+ *  of the executor-level gate). */
+export const AAROGYA_CAREHUB_TOOLS: ToolSchema[] = [SURFACE_CAREHUB_BENEFITS];

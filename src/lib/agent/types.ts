@@ -59,7 +59,8 @@ export interface AgentTurnInput {
       status: string;
       created_at: string;
     } | null;
-    carehub: null;
+    // Slice 5 — populated for active CareHub members (M061), else null.
+    carehub: { active: boolean; started_at: string; monthly_inr: number } | null;
     language: "english" | "hindi" | "hinglish" | null;
   };
   /** Slice 4a — surfaced into the OPS MODE context block (ops mode only). */

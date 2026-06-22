@@ -22,10 +22,14 @@ type BookingRow = {
 };
 type ConversationRow = { id: string; language: string | null };
 
+type CarehubRow = { started_at: string; cycle: string; monthly_inr: number };
+
 const h = vi.hoisted(() => ({
   customers: {} as Record<string, CustomerRow | undefined>,
   bookings: {} as Record<string, BookingRow | undefined>,
   conversations: {} as Record<string, ConversationRow | undefined>,
+  // carehub_subscriptions keyed by customer_id (Slice 5 / M061).
+  carehub: {} as Record<string, CarehubRow | undefined>,
   bookingLookupResult: { latest: null } as {
     latest: null | { id: string; service_category: string | null; status: string; created_at: string; phone: string };
   },
@@ -34,31 +38,24 @@ const h = vi.hoisted(() => ({
 vi.mock("@/lib/supabase-server", () => ({
   supabaseAdmin: {
     from: (table: string) => {
-      let eqId: string | null = null;
+      // Track conditions by column so multi-eq queries (carehub uses
+      // customer_id + active) key correctly, not just on the last eq value.
+      const conds: Record<string, string> = {};
       const responder = {
         select: () => responder,
-        eq: (_col: string, val: string) => {
-          eqId = val;
+        eq: (col: string, val: string | boolean) => {
+          conds[col] = String(val);
           return responder;
         },
-        maybeSingle: () =>
-          Promise.resolve({
-            data:
-              table === "customers"
-                ? eqId
-                  ? (h.customers[eqId] ?? null)
-                  : null
-                : table === "bookings"
-                  ? eqId
-                    ? (h.bookings[eqId] ?? null)
-                    : null
-                  : table === "conversations"
-                    ? eqId
-                      ? (h.conversations[eqId] ?? null)
-                      : null
-                    : null,
-            error: null,
-          }),
+        maybeSingle: () => {
+          let data: unknown = null;
+          if (table === "customers") data = conds.id ? (h.customers[conds.id] ?? null) : null;
+          else if (table === "bookings") data = conds.id ? (h.bookings[conds.id] ?? null) : null;
+          else if (table === "conversations") data = conds.id ? (h.conversations[conds.id] ?? null) : null;
+          else if (table === "carehub_subscriptions")
+            data = conds.customer_id ? (h.carehub[conds.customer_id] ?? null) : null;
+          return Promise.resolve({ data, error: null });
+        },
       };
       return responder;
     },
@@ -80,6 +77,7 @@ beforeEach(() => {
   h.customers = {};
   h.bookings = {};
   h.conversations = {};
+  h.carehub = {};
   h.bookingLookupResult = { latest: null };
 });
 
@@ -193,12 +191,28 @@ describe("loadTier1Context", () => {
     expect(ctx.language).toBeNull();
   });
 
-  it("carehub is ALWAYS null in v1 (regression guard for the M061 deferral)", async () => {
+  it("Slice 5 — active CareHub member → carehub populated from M061", async () => {
     h.customers["cus-cb"] = { id: "cus-cb", full_name: "Member", created_at: "2026-01-01T00:00:00Z" };
+    h.carehub["cus-cb"] = { started_at: "2026-06-20T08:00:00Z", cycle: "monthly", monthly_inr: 199 };
     const ctx = await loadTier1Context(
       { role: "customer", subRole: "carehub", customerId: "cus-cb", fullName: "Member" },
       "+919811100002",
       "conv-cb",
+    );
+    expect(ctx.carehub).toEqual({
+      active: true,
+      cycle: "monthly",
+      started_at: "2026-06-20T08:00:00Z",
+      monthly_inr: 199,
+    });
+  });
+
+  it("Slice 5 — customer with NO carehub row → carehub null", async () => {
+    h.customers["cus-2"] = { id: "cus-2", full_name: "Asha", created_at: "2026-06-01T00:00:00Z" };
+    const ctx = await loadTier1Context(
+      { role: "customer", subRole: "registered", customerId: "cus-2", fullName: "Asha" },
+      "+919898989898",
+      "conv-2",
     );
     expect(ctx.carehub).toBeNull();
   });

@@ -4,6 +4,7 @@ import { describe, it, expect } from "vitest";
 
 import { getSystemPromptForTurn } from "@/lib/agent/config";
 import {
+  CUSTOMER_CAREHUB_ADDENDUM,
   CUSTOMER_REGISTERED_ADDENDUM,
   LANGUAGE_MIRROR_RULE,
   OPS_MODE_ADDENDUM,
@@ -99,5 +100,42 @@ describe("getSystemPromptForTurn — composition", () => {
     );
     expect(docPrompt).not.toContain(CUSTOMER_REGISTERED_ADDENDUM);
     expect(docPrompt).not.toContain(OPS_MODE_ADDENDUM);
+  });
+
+  // --- Slice 5 — CareHub composition --------------------------------------
+
+  it("carehub member → BOTH registered personalization AND CareHub addendum", () => {
+    const prompt = getSystemPromptForTurn(
+      { role: "customer", subRole: "carehub", customerId: "cus-care", fullName: "Meera" },
+      {
+        patient_name: "Meera",
+        last_booking: null,
+        carehub: { active: true, started_at: "2026-06-20T08:00:00Z", monthly_inr: 199 },
+        language: null,
+      },
+    );
+    expect(prompt).toContain(CUSTOMER_REGISTERED_ADDENDUM);
+    expect(prompt).toContain(CUSTOMER_CAREHUB_ADDENDUM);
+  });
+
+  it("carehub context → PATIENT CONTEXT renders the member-since line", () => {
+    const prompt = getSystemPromptForTurn(
+      { role: "customer", subRole: "carehub", customerId: "cus-care", fullName: "Meera" },
+      {
+        patient_name: "Meera",
+        last_booking: null,
+        carehub: { active: true, started_at: "2026-06-20T08:00:00Z", monthly_inr: 199 },
+        language: null,
+      },
+    );
+    expect(prompt).toContain("CareHub member since 2026-06-20 (₹199/month)");
+  });
+
+  it("registered (non-carehub) member → CareHub addendum is NOT appended", () => {
+    const prompt = getSystemPromptForTurn(
+      { role: "customer", subRole: "registered", customerId: "cus-1", fullName: "Rajesh" },
+      { ...baseContext, patient_name: "Rajesh" },
+    );
+    expect(prompt).not.toContain(CUSTOMER_CAREHUB_ADDENDUM);
   });
 });

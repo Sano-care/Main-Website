@@ -49,6 +49,10 @@ import {
   executeRelayToPatient,
   persistConversationLanguage,
 } from "@/lib/whatsapp/slice4aExecutors";
+import {
+  executeRegisterCarehubInterest,
+  executeSurfaceCarehubBenefits,
+} from "@/lib/whatsapp/slice5Executors";
 import { findLatestUnexpiredRelayDraft } from "@/lib/whatsapp/opsRouter";
 import { generateResponse } from "@/lib/agent/client";
 import {
@@ -465,7 +469,13 @@ export async function handleInboundMessage(
               created_at: tier1.last_booking.created_at,
             }
           : null,
-        carehub: null,
+        carehub: tier1.carehub
+          ? {
+              active: tier1.carehub.active,
+              started_at: tier1.carehub.started_at,
+              monthly_inr: tier1.carehub.monthly_inr,
+            }
+          : null,
         language: tier1.language,
       },
       pendingRelayDraftTargetPhone: pendingDraft?.targetPhone ?? null,
@@ -521,6 +531,19 @@ export async function handleInboundMessage(
           break;
         case "get_family_members":
           toolPatientMsg = await executeGetFamilyMembers(identity);
+          break;
+        case "register_carehub_interest":
+          toolPatientMsg = await executeRegisterCarehubInterest({
+            identity,
+            phone: inbound.phone,
+            // source_message_id is nullable (M062); wiring the recorded inbound
+            // message row id is a later refinement — null keeps the lead valid.
+            sourceMessageId: null,
+            input: call.input as unknown as { notes?: string },
+          });
+          break;
+        case "surface_carehub_benefits":
+          toolPatientMsg = await executeSurfaceCarehubBenefits(identity);
           break;
         case "relay_to_patient":
           toolPatientMsg = await executeRelayToPatient(

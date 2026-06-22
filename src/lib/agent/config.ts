@@ -14,6 +14,7 @@ import {
   LANGUAGE_MIRROR_RULE,
   SHORT_MESSAGE_RULE,
   CUSTOMER_REGISTERED_ADDENDUM,
+  CUSTOMER_CAREHUB_ADDENDUM,
   OPS_MODE_ADDENDUM,
   renderContextBlock,
   renderOpsContextBlock,
@@ -67,10 +68,18 @@ export function getSystemPromptForTurn(
     SHORT_MESSAGE_RULE,
   ];
 
-  if (identity.role === "customer" && identity.subRole === "registered") {
+  // Registered AND carehub members are both known returning customers — both
+  // get the name/last-booking personalization. CareHub members get the
+  // member-benefits addendum layered on top.
+  if (
+    identity.role === "customer" &&
+    (identity.subRole === "registered" || identity.subRole === "carehub")
+  ) {
     sections.push(CUSTOMER_REGISTERED_ADDENDUM);
   }
-  // identity.subRole === 'carehub' addendum lands in Slice 5 (M061).
+  if (identity.role === "customer" && identity.subRole === "carehub") {
+    sections.push(CUSTOMER_CAREHUB_ADDENDUM);
+  }
 
   if (identity.role === "ops_founder") {
     sections.push(OPS_MODE_ADDENDUM);
