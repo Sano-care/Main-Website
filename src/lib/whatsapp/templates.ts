@@ -59,6 +59,25 @@ export const TEMPLATES = {
     description:
       "No-show recovery: 'Your Sanocare medic {{1}} is at your door. Please reply here or call {{2}}.' Sent when medic-app emits patient_no_show.",
   },
+  // Slice 5b — CareHub proactive outbound. {{1}} = patient first name in BOTH.
+  // CareHub's free monthly benefit is a COMPLETE home visit (Medic visit +
+  // Doctor consultation) — NOT vitals-only; copy reflects that.
+  aarogya_carehub_offer: {
+    name: "aarogya_carehub_offer",
+    language: "en",
+    bodyVars: ["first_name"],
+    hasQuickReplies: false,
+    description:
+      "MARKETING (APPROVED 2026-06-22). Proactive CareHub offer to an interested lead: 'Hi {{1}}, …' — CareHub membership includes a free complete home visit each month (medic + doctor). One offer per lead, ever. Gated by WHATSAPP_CAREHUB_OFFER_ENABLED + opt_out.",
+  },
+  aarogya_carehub_monthly_visit_reminder: {
+    name: "aarogya_carehub_monthly_visit_reminder",
+    language: "en",
+    bodyVars: ["first_name"],
+    hasQuickReplies: false,
+    description:
+      "UTILITY (IN REVIEW as of 2026-06-22 — ship behind WHATSAPP_CAREHUB_VISIT_REMINDER_ENABLED=off, enable on approval). Monthly nudge to active members: 'Hi {{1}}, your CareHub home visit for this month is ready to book…' (complete visit: medic + doctor). Once per member per IST month.",
+  },
 } as const satisfies Record<string, TemplateDef>;
 
 export type TemplateName = keyof typeof TEMPLATES;
