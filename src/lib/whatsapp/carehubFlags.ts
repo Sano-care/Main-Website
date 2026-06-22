@@ -12,14 +12,12 @@
 export const CAREHUB_OFFER_FLAG = "WHATSAPP_CAREHUB_OFFER_ENABLED";
 export const CAREHUB_VISIT_REMINDER_FLAG = "WHATSAPP_CAREHUB_VISIT_REMINDER_ENABLED";
 
-export function isCarehubOfferEnabled(
-  env: NodeJS.ProcessEnv = process.env,
-): boolean {
+type EnvLike = Record<string, string | undefined>;
+
+export function isCarehubOfferEnabled(env: EnvLike = process.env): boolean {
   return env[CAREHUB_OFFER_FLAG] === "true";
 }
 
-export function isCarehubVisitReminderEnabled(
-  env: NodeJS.ProcessEnv = process.env,
-): boolean {
+export function isCarehubVisitReminderEnabled(env: EnvLike = process.env): boolean {
   return env[CAREHUB_VISIT_REMINDER_FLAG] === "true";
 }
