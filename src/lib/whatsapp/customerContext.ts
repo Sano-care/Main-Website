@@ -10,10 +10,9 @@
 // Tier-2 tool-call territory (get_booking_history, get_family_members in
 // this slice; get_health_records / get_vitals in Slice 6).
 //
-// CareHub: schema doesn't exist yet (no carehub_subscriptions table — M061
-// lands in Slice 5). Until then, `carehub` is ALWAYS `null`. The loader is
-// shaped to receive a real row when M061 ships — Slice 5 extends THIS
-// function, not a new one.
+// CareHub (Slice 5): `carehub` is populated from carehub_subscriptions (M061)
+// when the customer has an ACTIVE membership; otherwise `null`. Only customers
+// carry a customerId, so doctor/medic/ops/new turns are always `null` here.
 //
 // All DB reads use supabaseAdmin per the RLS-deny-all-tables rule
 // (messages/conversations/audit_log are deny-all; bookings/customers are
@@ -53,11 +52,15 @@ export interface Tier1Context {
     scheduled_for: string | null;
     created_at: string;
   } | null;
-  /** CareHub membership info. NULL until M061 lands in Slice 5. The
-   *  shape will become { active: boolean; cycle: string | null;
-   *  started_at: string | null; } at that point — Slice 5 widens this
-   *  type AND populates it in the same PR. */
-  carehub: null;
+  /** CareHub membership info (Slice 5 / M061). Non-null only when the
+   *  resolved customer has an ACTIVE carehub_subscriptions row. Used to
+   *  surface member benefits + member-rate pricing in the system prompt. */
+  carehub: {
+    active: true;
+    cycle: string;
+    started_at: string;
+    monthly_inr: number;
+  } | null;
   /** Last-known language from conversations.language. The CURRENT-turn
    *  detection runs separately (C3) and overrides this for the reply
    *  language; stored value is for ops-side visibility ("which patients
@@ -83,9 +86,10 @@ export async function loadTier1Context(
   phone: string,
   conversationId: string,
 ): Promise<Tier1Context> {
-  const [customer, lastBooking, language] = await Promise.all([
+  const [customer, lastBooking, carehub, language] = await Promise.all([
     loadCustomer(identity),
     loadLastBooking(phone),
+    loadCarehub(identity),
     loadStoredLanguage(conversationId),
   ]);
 
@@ -93,8 +97,41 @@ export async function loadTier1Context(
     identity,
     customer,
     last_booking: lastBooking,
-    carehub: null,
+    carehub,
     language,
+  };
+}
+
+/**
+ * Load the customer's ACTIVE CareHub membership (Slice 5 / M061), or null.
+ *
+ * Only customers carry a customerId, so every other identity short-circuits
+ * to null. `active = true` is the partial-index predicate, so this is a cheap
+ * point lookup. Soft-fail: any error returns null (no membership beats a
+ * blown-up turn — the patient just sees the non-member experience).
+ */
+async function loadCarehub(
+  identity: ContextIdentity,
+): Promise<Tier1Context["carehub"]> {
+  if (identity.role !== "customer" || !("customerId" in identity) || !identity.customerId) {
+    return null;
+  }
+  const { data, error } = await supabaseAdmin
+    .from("carehub_subscriptions")
+    .select("started_at, cycle, monthly_inr")
+    .eq("customer_id", identity.customerId)
+    .eq("active", true)
+    .maybeSingle();
+  if (error) {
+    log.error("loadTier1Context.carehub read failed", error.message);
+    return null;
+  }
+  if (!data) return null;
+  return {
+    active: true,
+    cycle: data.cycle as string,
+    started_at: data.started_at as string,
+    monthly_inr: data.monthly_inr as number,
   };
 }
 
