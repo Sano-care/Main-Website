@@ -11,10 +11,10 @@
 // status — identity answers "whose number is this", not "are they on shift"
 // (and it sidesteps the doctors.is_active vs medics.active column split).
 //
-// CareHub: there is no carehub/subscription table in the schema yet, so
-// subRole "carehub" is currently unreachable — see TODO(carehub). Until then a
-// customer with a `customers` row resolves to "registered"; a number with only
-// booking history (no customers row) resolves to subRole "new".
+// CareHub (Slice 5): a customer with an ACTIVE carehub_subscriptions row (M061)
+// resolves to subRole "carehub" (precedence above "registered"); a plain
+// `customers` row resolves to "registered"; a number with only booking history
+// (no customers row) resolves to subRole "new".
 //
 // Phone matching reuses normalizePhoneLast10() (the booking-side helper): we
 // match on the last 10 digits. Staff/customer phones are stored clean E.164;
@@ -64,6 +64,23 @@ async function matchByPhoneSuffix(
 }
 
 /**
+ * True when the customer has an ACTIVE CareHub membership (M061). `active`
+ * is the partial-index predicate, so this is a cheap point lookup. Soft-fail:
+ * any query error returns false — a CareHub miss degrades the customer to
+ * "registered" rather than throwing into the identity path.
+ */
+async function hasActiveCarehub(customerId: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("carehub_subscriptions")
+    .select("id")
+    .eq("customer_id", customerId)
+    .eq("active", true)
+    .maybeSingle();
+  if (error || !data) return false;
+  return true;
+}
+
+/**
  * Resolve a phone number to an Identity. Stateless — the caller (adapter)
  * invokes this ONCE per conversation and threads the result through the turn
  * (that single call is the conversation-scoped cache; nothing is memoised
@@ -95,14 +112,17 @@ export async function resolveIdentity(phone: string): Promise<Identity> {
     return { role: "medic", medicId: medic.id, fullName: medic.full_name ?? "" };
   }
 
-  // 3. Customer — a real customers row → "registered".
-  // TODO(carehub): when a carehub/subscription table lands, sub-classify an
-  // active subscriber as "carehub" here (precedence above "registered").
+  // 3. Customer — a real customers row → "registered", or "carehub" when an
+  //    active CareHub membership exists (M061). The carehub check is gated on
+  //    a customer match so non-customers never trigger the extra query.
   const customer = await matchByPhoneSuffix("customers", last10);
   if (customer) {
+    const subRole: CustomerSubRole = (await hasActiveCarehub(customer.id))
+      ? "carehub"
+      : "registered";
     return {
       role: "customer",
-      subRole: "registered",
+      subRole,
       customerId: customer.id,
       fullName: customer.full_name ?? undefined,
     };

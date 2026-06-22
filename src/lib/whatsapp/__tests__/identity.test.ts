@@ -15,6 +15,9 @@ const h = vi.hoisted(() => ({
   >,
   fromCalls: [] as string[],
   booking: { latest: null as Record<string, unknown> | null },
+  // carehub_subscriptions active-membership lookup (hasActiveCarehub). Default
+  // null → customer resolves to 'registered'; set to { id } for a 'carehub'.
+  carehub: null as { id: string } | null,
 }));
 
 vi.mock("@/lib/supabase-server", () => ({
@@ -27,6 +30,8 @@ vi.mock("@/lib/supabase-server", () => ({
         ilike: () => b,
         eq: () => b,
         limit: () => Promise.resolve(result),
+        // carehub_subscriptions reads terminate on maybeSingle.
+        maybeSingle: () => Promise.resolve({ data: h.carehub, error: null }),
       };
       return b;
     },
@@ -44,6 +49,7 @@ beforeEach(() => {
   h.rows = { doctors: [], medics: [], customers: [] };
   h.fromCalls = [];
   h.booking = { latest: null };
+  h.carehub = null;
 });
 
 describe("resolveIdentity — precedence", () => {
@@ -106,6 +112,26 @@ describe("resolveIdentity — customer sub-roles", () => {
     h.rows.customers = [{ id: "cus-2", full_name: null, phone: "+919812341234" }];
     const id = await resolveIdentity("+919812341234");
     expect(id).toEqual({ role: "customer", subRole: "registered", customerId: "cus-2", fullName: undefined });
+  });
+
+  it("Slice 5 — a customer with an ACTIVE CareHub row → subRole 'carehub'", async () => {
+    h.rows.customers = [{ id: "cus-9", full_name: "Meera", phone: "+919812300000" }];
+    h.carehub = { id: "sub-1" };
+    const id = await resolveIdentity("+919812300000");
+    expect(id).toEqual({
+      role: "customer",
+      subRole: "carehub",
+      customerId: "cus-9",
+      fullName: "Meera",
+    });
+    // carehub_subscriptions is consulted only AFTER the customer match.
+    expect(h.fromCalls).toEqual(["doctors", "medics", "customers", "carehub_subscriptions"]);
+  });
+
+  it("Slice 5 — carehub audit role reflects the sub-role", () => {
+    expect(
+      identityForAudit({ role: "customer", subRole: "carehub", customerId: "c9", fullName: "M" }),
+    ).toEqual({ role: "customer:carehub", identifiers: { customer_id: "c9" } });
   });
 
   it("no customers row but booking history → subRole 'new' (no id)", async () => {
