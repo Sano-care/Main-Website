@@ -1,4 +1,5 @@
 import { DoctorShell } from "../_components/DoctorShell";
+import { PresenceHeartbeat } from "../_components/PresenceHeartbeat";
 import { getCurrentDoctor } from "../_lib/getCurrentDoctor";
 
 // Force per-request render so the cookie is re-read every navigation.
@@ -25,6 +26,10 @@ export default async function DoctorShellLayout({
       fullName={doctor.full_name}
       doctorType={doctor.doctor_type}
     >
+      {/* C3: presence heartbeat — pings /api/consultation/presence while any
+          doctor page is open & visible, feeding the M063 presence→payroll
+          bridge. Headless; mounts once for the whole portal. */}
+      <PresenceHeartbeat />
       {children}
     </DoctorShell>
   );
