@@ -315,6 +315,72 @@ export const SURFACE_CAREHUB_BENEFITS: ToolSchema = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Medic-mode tools (Aarogya Medic Help-Mode Part 1). Advertised ONLY when
+// identity.role === 'medic'; every executor also gates on the role
+// (defense-in-depth on top of the withheld schema). Patients/ops never see these.
+// ---------------------------------------------------------------------------
+export const ESCALATE_TO_DOCTOR: ToolSchema = {
+  name: "escalate_to_doctor",
+  description:
+    "Get a doctor involved for the MEDIC on the case (non-emergency clinical " +
+    "question — unexpected finding, medication question, whether to proceed). " +
+    "Alerts ops, who connect the medic to the on-call doctor. Do NOT use for an " +
+    "active emergency (tell the medic to call 112). Do NOT give clinical advice " +
+    "yourself — this routes to a human doctor. ONLY callable in medic mode.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      reason: {
+        type: "string",
+        description:
+          "Why a doctor is needed — the medic's clinical question / situation, in one line.",
+      },
+    },
+    required: ["reason"],
+  },
+};
+
+export const FETCH_BOOKING_CONTEXT: ToolSchema = {
+  name: "fetch_booking_context",
+  description:
+    "Look up details of a booking ASSIGNED TO THIS MEDIC (service, patient name, " +
+    "address, status, scheduled time). Returns details only if the booking is " +
+    "assigned to the calling medic; refuses otherwise. ONLY callable in medic mode. " +
+    "Accepts the booking code (what the medic sees) or the booking id.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      booking_id: {
+        type: "string",
+        description: "The booking code (e.g. SAN-...) or booking id the medic is asking about.",
+      },
+    },
+    required: ["booking_id"],
+  },
+};
+
+export const LOG_MEDIC_QUERY: ToolSchema = {
+  name: "log_medic_query",
+  description:
+    "Record the medic's question to the audit log so ops can spot recurring gaps " +
+    "(especially when the answer isn't known and needs founder/ops follow-up). " +
+    "Call it in addition to answering. ONLY callable in medic mode.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      question: {
+        type: "string",
+        description: "The medic's question, verbatim or lightly summarised.",
+      },
+    },
+    required: ["question"],
+  },
+};
+
 export const AAROGYA_TOOLS: ToolSchema[] = [
   ESCALATE_TO_OPS,
   SET_OPT_OUT,
@@ -334,3 +400,12 @@ export const AAROGYA_OPS_TOOLS: ToolSchema[] = [RELAY_TO_PATIENT, CONFIRM_RELAY]
  *  withheld from every other identity's tool list (defense-in-depth on top
  *  of the executor-level gate). */
 export const AAROGYA_CAREHUB_TOOLS: ToolSchema[] = [SURFACE_CAREHUB_BENEFITS];
+
+/** Medic Help-Mode Part 1 — the tool subset advertised ONLY when identity.role
+ *  === 'medic'. Unlike ops/carehub (which append to AAROGYA_TOOLS), this REPLACES
+ *  the patient tools entirely — a medic never sees the patient/booking tools. */
+export const AAROGYA_MEDIC_TOOLS: ToolSchema[] = [
+  ESCALATE_TO_DOCTOR,
+  FETCH_BOOKING_CONTEXT,
+  LOG_MEDIC_QUERY,
+];

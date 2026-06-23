@@ -73,6 +73,9 @@ export const AuditEvent = {
   // Emitted once per sweep when the feature flag is OFF — proves a
   // flags-off run sent NOTHING.
   CAREHUB_SKIPPED_FLAG_OFF: "carehub_skipped_flag_off",
+  // Aarogya Medic Help-Mode Part 1 — medic-mode tool events.
+  MEDIC_ESCALATION_TO_DOCTOR: "medic_escalation_to_doctor",
+  MEDIC_QUERY: "medic_query",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];

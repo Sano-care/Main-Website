@@ -19,7 +19,7 @@ import {
   HISTORY_LIMIT,
   MAX_OUTPUT_TOKENS,
 } from "@/lib/agent/config";
-import { AAROGYA_CAREHUB_TOOLS, AAROGYA_OPS_TOOLS, AAROGYA_TOOLS } from "@/lib/agent/tools";
+import { AAROGYA_CAREHUB_TOOLS, AAROGYA_MEDIC_TOOLS, AAROGYA_OPS_TOOLS, AAROGYA_TOOLS } from "@/lib/agent/tools";
 import type { AgentTurnInput, AgentTurnResult } from "@/lib/agent/types";
 
 /**
@@ -46,9 +46,13 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
   const tools =
     input.identity?.role === "ops_founder"
       ? [...AAROGYA_TOOLS, ...AAROGYA_OPS_TOOLS]
-      : input.identity?.role === "customer" && input.identity.subRole === "carehub"
-        ? [...AAROGYA_TOOLS, ...AAROGYA_CAREHUB_TOOLS]
-        : AAROGYA_TOOLS;
+      : input.identity?.role === "medic"
+        ? // Medic mode REPLACES the patient tool set — a medic never sees the
+          // patient/booking tools, only the three medic tools.
+          AAROGYA_MEDIC_TOOLS
+        : input.identity?.role === "customer" && input.identity.subRole === "carehub"
+          ? [...AAROGYA_TOOLS, ...AAROGYA_CAREHUB_TOOLS]
+          : AAROGYA_TOOLS;
 
   // Build the message list: capped history (oldest → newest) + the new user turn.
   const trimmed = input.history.slice(-HISTORY_LIMIT);
