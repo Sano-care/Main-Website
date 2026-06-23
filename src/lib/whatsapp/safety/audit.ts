@@ -88,6 +88,10 @@ export const AuditEvent = {
   LOCATION_RECEIVED: "location_received", // patient shared a location pin (no longer dropped)
   DUPLICATE_REPLY_SUPPRESSED: "duplicate_reply_suppressed", // debounce backstop fired
   STALLED_AUTO_ESCALATED: "stalled_auto_escalated", // turn-cap backstop fired (once per thread)
+  // Pulse Records data layer (Slice A) — every read of a patient's own records
+  // (bookings/Rx/vitals/meds/conditions/allergies/documents) is audited,
+  // identity-aware, phone-free (counts only, never the record contents). DPDP.
+  PULSE_RECORDS_FETCHED: "pulse_records_fetched",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
