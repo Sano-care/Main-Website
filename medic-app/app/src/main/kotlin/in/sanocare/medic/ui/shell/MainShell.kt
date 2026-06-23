@@ -26,7 +26,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -38,6 +37,7 @@ import `in`.sanocare.medic.attendance.MedicAttendanceService
 import `in`.sanocare.medic.data.auth.CachedProfile
 import `in`.sanocare.medic.ui.duty.AttendanceViewModel
 import `in`.sanocare.medic.ui.duty.DutyTab
+import `in`.sanocare.medic.ui.payouts.PayoutsTab
 
 // T65 Phase 1 — MainShell. Three tabs (Duty / Payouts / Me) wrapped in a
 // Scaffold with a top bar showing the signed-in medic's name. Phase 1 only
@@ -110,20 +110,10 @@ fun MainShell(
         Box(modifier = Modifier.fillMaxSize().padding(inner)) {
             when (selected) {
                 Tab.Duty -> DutyTab(onSignOut = handleSignOut)
-                Tab.Payouts -> PlaceholderTab(stringResource(R.string.tab_payouts_placeholder))
+                Tab.Payouts -> PayoutsTab()
                 Tab.Me -> MeTab(profile = profile, onSignOut = handleSignOut)
             }
         }
-    }
-}
-
-@Composable
-private fun PlaceholderTab(body: String) {
-    Box(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(text = body, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

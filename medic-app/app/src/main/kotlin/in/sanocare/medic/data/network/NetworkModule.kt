@@ -75,4 +75,9 @@ object NetworkModule {
     @Singleton
     fun provideDutyApi(retrofit: Retrofit): DutyApi =
         retrofit.create(DutyApi::class.java)
+
+    @Provides
+    @Singleton
+    fun providePayoutsApi(retrofit: Retrofit): PayoutsApi =
+        retrofit.create(PayoutsApi::class.java)
 }
