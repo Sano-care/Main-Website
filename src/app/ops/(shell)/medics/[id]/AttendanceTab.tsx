@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { formatIST } from "@/lib/time/formatIST";
 
-// T65 Phase 2B C5b — Attendance tab (read-only).
+// T65 Phase 2B C5b — Attendance tab.
 //
 // Date-range control (last-N-days, 30 default) → GET .../attendance?days=.
-// Table: date / clock-in / clock-out / hours worked / ping count.
+// Table: date / clock-in / clock-out / hours / pings / selfie-verified.
+// Medic payroll: the selfie column is the daily-wage gate. Admins can toggle
+// verification (PATCH) — setting it posts the daily wage, clearing it reverses.
 
 type AttendanceRow = {
   id: string;
@@ -15,6 +17,7 @@ type AttendanceRow = {
   hours_worked: number | null;
   is_open: boolean;
   ping_count: number;
+  selfie_verified_at: string | null;
 };
 
 type Resp = { days: number; rows: AttendanceRow[] };
@@ -29,11 +32,19 @@ function hoursLabel(h: number | null, open: boolean): string {
   return open ? `${base} (open)` : base;
 }
 
-export function AttendanceTab({ medicId }: { medicId: string }) {
+export function AttendanceTab({
+  medicId,
+  isAdmin,
+}: {
+  medicId: string;
+  isAdmin: boolean;
+}) {
   const [days, setDays] = useState(30);
   const [data, setData] = useState<Resp | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [, startVerify] = useTransition();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,6 +68,29 @@ export function AttendanceTab({ medicId }: { medicId: string }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  const toggleVerify = (attendanceId: string, nextVerified: boolean) => {
+    setVerifyingId(attendanceId);
+    startVerify(async () => {
+      try {
+        const res = await fetch(`/api/ops/medics/${medicId}/attendance`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ attendance_id: attendanceId, verified: nextVerified }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          setErr(`Verify failed: ${body.error ?? res.statusText}`);
+        } else {
+          await load();
+        }
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Verify failed.");
+      } finally {
+        setVerifyingId(null);
+      }
+    });
+  };
 
   const rows = data?.rows ?? [];
 
@@ -97,6 +131,7 @@ export function AttendanceTab({ medicId }: { medicId: string }) {
                   <Th>Clock out</Th>
                   <Th className="text-right">Hours</Th>
                   <Th className="text-right">Pings</Th>
+                  <Th>Selfie / wage gate</Th>
                 </tr>
               </thead>
               <tbody>
@@ -116,6 +151,33 @@ export function AttendanceTab({ medicId }: { medicId: string }) {
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap font-mono text-slate-700">
                       {r.ping_count}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {r.selfie_verified_at ? (
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
+                          ✓ verified
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                          not verified
+                        </span>
+                      )}
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          disabled={verifyingId === r.id}
+                          onClick={() =>
+                            toggleVerify(r.id, !r.selfie_verified_at)
+                          }
+                          className="ml-2 text-xs font-medium text-blue-600 hover:underline disabled:opacity-50"
+                        >
+                          {verifyingId === r.id
+                            ? "…"
+                            : r.selfie_verified_at
+                              ? "Unverify"
+                              : "Mark verified"}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

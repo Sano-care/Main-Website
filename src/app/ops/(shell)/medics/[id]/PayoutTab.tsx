@@ -93,10 +93,21 @@ export type Settlement = {
   notes: string | null;
 };
 
+export type PayConfig = {
+  medic_type: "freelancer" | "salaried";
+  revenue_share_pct: number | null;
+  daily_wage_paise: number | null;
+  commission_per_visit_paise: number | null;
+  overtime_hourly_paise: number | null;
+  pay_notes: string | null;
+};
+
 interface PayoutTabProps {
   medicId: string;
   isAdmin: boolean;
   settlements: Settlement[];
+  payConfig: PayConfig;
+  summary: { earnedPaise: number; paidPaise: number; balancePaise: number };
 }
 
 function istMonthStart(): string {
@@ -132,7 +143,13 @@ function EntryTypeBadge({ type }: { type: string }) {
   );
 }
 
-export function PayoutTab({ medicId, isAdmin, settlements }: PayoutTabProps) {
+export function PayoutTab({
+  medicId,
+  isAdmin,
+  settlements,
+  payConfig,
+  summary,
+}: PayoutTabProps) {
   const [from, setFrom] = useState(istMonthStart());
   const [to, setTo] = useState(istToday());
   const [page, setPage] = useState(1);
@@ -183,6 +200,20 @@ export function PayoutTab({ medicId, isAdmin, settlements }: PayoutTabProps) {
 
   return (
     <div className="space-y-8">
+      {/* Earned / paid / balance summary (whole ledger) */}
+      <div className="grid grid-cols-3 gap-4">
+        <SummaryCard label="Earned" value={summary.earnedPaise} />
+        <SummaryCard label="Paid out" value={summary.paidPaise} />
+        <SummaryCard label="Balance" value={summary.balancePaise} emphasize />
+      </div>
+
+      {/* Pay configuration (medic_type + rates). Admin-editable. */}
+      <PayConfigCard
+        medicId={medicId}
+        isAdmin={isAdmin}
+        config={payConfig}
+      />
+
       {/* Header: date range + actions */}
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div className="flex items-end gap-3">
@@ -359,6 +390,205 @@ export function PayoutTab({ medicId, isAdmin, settlements }: PayoutTabProps) {
             onMutated();
           }}
         />
+      )}
+    </div>
+  );
+}
+
+function SummaryCard({
+  label,
+  value,
+  emphasize = false,
+}: {
+  label: string;
+  value: number;
+  emphasize?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border p-4 ${
+        emphasize ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white"
+      }`}
+    >
+      <div
+        className={`text-[10px] font-mono uppercase tracking-wider ${
+          emphasize ? "text-slate-300" : "text-slate-500"
+        }`}
+      >
+        {label}
+      </div>
+      <div className="mt-1 font-mono text-lg">{rupees(value)}</div>
+    </div>
+  );
+}
+
+// Pay configuration — medic_type + conditional rate fields + pay_notes. Mirrors
+// the doctor pay-terms card. Admins can edit; agents see read-only. NULL rates
+// are allowed (B1) — the accrual COALESCEs them to 0, so a freelancer with no %
+// or a salaried with no wage simply earns nothing until configured.
+const RUPEE_FIELDS = [
+  { key: "daily_wage_paise", label: "Daily wage (₹)" },
+  { key: "commission_per_visit_paise", label: "Per-visit commission (₹)" },
+  { key: "overtime_hourly_paise", label: "Overtime / hr (₹)" },
+] as const;
+
+function PayConfigCard({
+  medicId,
+  isAdmin,
+  config,
+}: {
+  medicId: string;
+  isAdmin: boolean;
+  config: PayConfig;
+}) {
+  const router = useRouter();
+  const [medicType, setMedicType] = useState(config.medic_type);
+  const [revSharePct, setRevSharePct] = useState(
+    config.revenue_share_pct == null ? "" : String(config.revenue_share_pct),
+  );
+  const [rupeeVals, setRupeeVals] = useState<Record<string, string>>({
+    daily_wage_paise:
+      config.daily_wage_paise == null ? "" : String(config.daily_wage_paise / 100),
+    commission_per_visit_paise:
+      config.commission_per_visit_paise == null
+        ? ""
+        : String(config.commission_per_visit_paise / 100),
+    overtime_hourly_paise:
+      config.overtime_hourly_paise == null
+        ? ""
+        : String(config.overtime_hourly_paise / 100),
+  });
+  const [payNotes, setPayNotes] = useState(config.pay_notes ?? "");
+  const [pending, startTransition] = useTransition();
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const save = () => {
+    setMsg(null);
+    const payload: Record<string, unknown> = {
+      medic_type: medicType,
+      pay_notes: payNotes.trim() || null,
+    };
+    if (medicType === "freelancer") {
+      payload.revenue_share_pct = revSharePct === "" ? null : Number(revSharePct);
+    } else {
+      for (const f of RUPEE_FIELDS) {
+        const v = rupeeVals[f.key];
+        payload[f.key] = v === "" ? null : Math.round(Number(v) * 100);
+      }
+    }
+    startTransition(async () => {
+      try {
+        const res = await fetch(`/api/ops/medics/${medicId}/pay-config`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setMsg({ ok: false, text: `${body.error ?? res.statusText}${body.detail ? ` — ${body.detail}` : ""}` });
+          return;
+        }
+        setMsg({ ok: true, text: "Saved." });
+        router.refresh();
+      } catch (e) {
+        setMsg({ ok: false, text: e instanceof Error ? e.message : "Save failed." });
+      }
+    });
+  };
+
+  const inputCls =
+    "w-full rounded-lg border border-slate-300 px-2.5 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500";
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
+          Pay configuration
+        </div>
+        {!isAdmin && (
+          <span className="text-xs text-slate-400">read-only (admin to edit)</span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <label className="block">
+          <span className="mb-1 block text-xs text-slate-500">Medic type</span>
+          <select
+            value={medicType}
+            disabled={!isAdmin || pending}
+            onChange={(e) => setMedicType(e.target.value as PayConfig["medic_type"])}
+            className={inputCls}
+          >
+            <option value="salaried">Salaried</option>
+            <option value="freelancer">Freelancer</option>
+          </select>
+        </label>
+
+        {medicType === "freelancer" ? (
+          <label className="block">
+            <span className="mb-1 block text-xs text-slate-500">
+              Revenue share (%)
+            </span>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={revSharePct}
+              disabled={!isAdmin || pending}
+              onChange={(e) => setRevSharePct(e.target.value)}
+              className={`${inputCls} font-mono`}
+            />
+          </label>
+        ) : (
+          RUPEE_FIELDS.map((f) => (
+            <label key={f.key} className="block">
+              <span className="mb-1 block text-xs text-slate-500">{f.label}</span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={rupeeVals[f.key]}
+                disabled={!isAdmin || pending}
+                onChange={(e) =>
+                  setRupeeVals((p) => ({ ...p, [f.key]: e.target.value }))
+                }
+                className={`${inputCls} font-mono`}
+              />
+            </label>
+          ))
+        )}
+
+        <label className="col-span-2 block">
+          <span className="mb-1 block text-xs text-slate-500">Pay notes</span>
+          <textarea
+            value={payNotes}
+            disabled={!isAdmin || pending}
+            onChange={(e) => setPayNotes(e.target.value)}
+            rows={2}
+            maxLength={500}
+            className={inputCls}
+          />
+        </label>
+      </div>
+
+      {msg && (
+        <p className={`mt-3 text-xs ${msg.ok ? "text-emerald-600" : "text-red-600"}`}>
+          {msg.text}
+        </p>
+      )}
+
+      {isAdmin && (
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={save}
+            disabled={pending}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            {pending ? "Saving…" : "Save pay config"}
+          </button>
+        </div>
       )}
     </div>
   );

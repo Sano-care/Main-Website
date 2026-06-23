@@ -38,6 +38,13 @@ type MedicDetail = {
   hire_date: string | null;
   active: boolean;
   created_at: string;
+  // Payroll pay config (M4-clone).
+  medic_type: "freelancer" | "salaried";
+  revenue_share_pct: number | null;
+  daily_wage_paise: number | null;
+  commission_per_visit_paise: number | null;
+  overtime_hourly_paise: number | null;
+  pay_notes: string | null;
 };
 
 type Tab = "profile" | "docs" | "payout" | "attendance" | "location";
@@ -72,7 +79,9 @@ export default async function MedicDetailPage({
   const supabase = await createOpsRSCClient();
   const { data: medicData, error } = await supabase
     .from("medics")
-    .select("id, full_name, phone, qualification, license_number, hire_date, active, created_at")
+    .select(
+      "id, full_name, phone, qualification, license_number, hire_date, active, created_at, medic_type, revenue_share_pct, daily_wage_paise, commission_per_visit_paise, overtime_hourly_paise, pay_notes",
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -150,16 +159,39 @@ export default async function MedicDetailPage({
   // router.refresh()). The ledger itself is loaded client-side via the
   // paginated GET .../ledger route.
   let settlements: Settlement[] = [];
+  // Earned / paid / balance summary across the WHOLE ledger (not the date
+  // window). balance = SUM(all); paid = -SUM(payout); earned = balance + paid.
+  let summary = { earnedPaise: 0, paidPaise: 0, balancePaise: 0 };
   if (tab === "payout") {
-    const { data: settlementRows } = await supabase
-      .from("medic_payout_settlements")
-      .select(
-        "id, amount_paise, reference_text, payout_method, settled_at, proof_doc_id, notes",
-      )
-      .eq("medic_id", id)
-      .order("settled_at", { ascending: false })
-      .limit(5);
-    settlements = ((settlementRows ?? []) as Settlement[]);
+    const [{ data: settlementRows }, { data: ledgerAll }] = await Promise.all([
+      supabase
+        .from("medic_payout_settlements")
+        .select(
+          "id, amount_paise, reference_text, payout_method, settled_at, proof_doc_id, notes",
+        )
+        .eq("medic_id", id)
+        .order("settled_at", { ascending: false })
+        .limit(5),
+      supabase
+        .from("medic_ledger_entries")
+        .select("entry_type, amount_paise")
+        .eq("medic_id", id),
+    ]);
+    settlements = (settlementRows ?? []) as Settlement[];
+    let balance = 0;
+    let paid = 0;
+    for (const r of (ledgerAll ?? []) as Array<{
+      entry_type: string;
+      amount_paise: number;
+    }>) {
+      balance += r.amount_paise;
+      if (r.entry_type === "payout") paid += -r.amount_paise; // payouts stored negative
+    }
+    summary = {
+      earnedPaise: balance + paid,
+      paidPaise: paid,
+      balancePaise: balance,
+    };
   }
 
   return (
@@ -238,9 +270,22 @@ export default async function MedicDetailPage({
         <DocsTab medicId={id} docs={docs} isAdmin={isAdmin} />
       )}
       {tab === "payout" && (
-        <PayoutTab medicId={id} isAdmin={isAdmin} settlements={settlements} />
+        <PayoutTab
+          medicId={id}
+          isAdmin={isAdmin}
+          settlements={settlements}
+          payConfig={{
+            medic_type: medic.medic_type,
+            revenue_share_pct: medic.revenue_share_pct,
+            daily_wage_paise: medic.daily_wage_paise,
+            commission_per_visit_paise: medic.commission_per_visit_paise,
+            overtime_hourly_paise: medic.overtime_hourly_paise,
+            pay_notes: medic.pay_notes,
+          }}
+          summary={summary}
+        />
       )}
-      {tab === "attendance" && <AttendanceTab medicId={id} />}
+      {tab === "attendance" && <AttendanceTab medicId={id} isAdmin={isAdmin} />}
       {tab === "location" && <LocationTab medicId={id} />}
     </div>
   );
