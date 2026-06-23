@@ -73,6 +73,9 @@ export const AuditEvent = {
   // Emitted once per sweep when the feature flag is OFF — proves a
   // flags-off run sent NOTHING.
   CAREHUB_SKIPPED_FLAG_OFF: "carehub_skipped_flag_off",
+  // Office-hours hotfix — a lead captured while Sanocare is CLOSED, flagged for
+  // 9 AM follow-up (no immediate-dispatch implication).
+  AFTER_HOURS_LEAD_CAPTURED: "after_hours_lead_captured",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];

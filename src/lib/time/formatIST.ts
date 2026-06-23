@@ -189,6 +189,24 @@ function formatIso(d: Date): string {
 }
 
 /**
+ * The IST hour-of-day (0–23) for the given instant, or null for nullish/
+ * unparseable input. Used by office-hours awareness (is Sanocare open?). Reuses
+ * the memoised "iso" formatter (en-CA, Asia/Kolkata, 24h) and normalises the
+ * "24"-at-midnight quirk to 0.
+ */
+export function istHour(
+  input: string | number | Date | null | undefined,
+): number | null {
+  const d = toDate(input);
+  if (!d) return null;
+  const parts = getFormatter("iso").formatToParts(d);
+  const raw = parts.find((p) => p.type === "hour")?.value ?? "";
+  let h = Number.parseInt(raw, 10);
+  if (h === 24) h = 0;
+  return Number.isFinite(h) ? h : null;
+}
+
+/**
  * Render a datetime value in IST.
  *
  * @param input  ISO string, epoch ms, or Date. null/undefined renders "—".

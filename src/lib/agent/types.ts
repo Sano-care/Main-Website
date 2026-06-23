@@ -62,6 +62,9 @@ export interface AgentTurnInput {
     // Slice 5 — populated for active CareHub members (M061), else null.
     carehub: { active: boolean; started_at: string; monthly_inr: number } | null;
     language: "english" | "hindi" | "hinglish" | null;
+    // Office-hours hotfix — current IST time + OPEN/CLOSED (09:00–21:00 IST).
+    now_ist?: string | null;
+    is_open?: boolean | null;
   };
   /** Slice 4a — surfaced into the OPS MODE context block (ops mode only). */
   pendingRelayDraftTargetPhone?: string | null;
