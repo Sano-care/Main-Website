@@ -29,17 +29,29 @@ import {
   createEscalation,
   dispatchTextMessage,
   findOrCreateConversation,
+  getEscalationStatus,
   loadHistory,
+  loadRecentOutbound,
+  loadUnansweredInbound,
   markEscalationAttended,
   recordInboundMessage,
-  setEscalationProviderMessageId,
+  setConversationServiceIntent,
+  setConversationState,
   setOptOut,
   updateLeadFields,
   type ConversationRow,
 } from "@/lib/whatsapp/db";
-import { sendTemplateMessage } from "@/lib/whatsapp/cloud-api";
 import { runAgentTurn } from "@/lib/agent/orchestrator";
 import { isPatientRole, runPatientPhotoConsumer } from "@/lib/whatsapp/photoConsumer";
+import { sendOpsAlert } from "@/lib/whatsapp/opsAlert";
+import {
+  locationFromRaw,
+  synthesizeLocationText,
+  coalesceInboundText,
+  isDuplicateReply,
+  shouldAutoEscalateStalled,
+  nextState,
+} from "@/lib/whatsapp/conversationQuality";
 import { HISTORY_LIMIT } from "@/lib/agent/config";
 import { isSanocareOpen } from "@/lib/agent/officeHours";
 import { formatIST } from "@/lib/time/formatIST";
@@ -76,7 +88,6 @@ import {
   type WebhookEnvelope,
 } from "@/types/whatsapp";
 
-const LEAD_ALERT_TEMPLATE = "aarogya_lead_alert";
 const AGENT_FALLBACK =
   "Sorry, I'm having a brief issue on my end. Our team will reach out " +
   "shortly, or you can call +91 97119 77782 anytime. — Aarogya";
@@ -85,6 +96,10 @@ const AGENT_FALLBACK =
 // Ops handoff (WhatsApp template to the founder's number). NOT gated by the
 // patient opt_out (it's a send to OPS, a different number). Best-effort.
 // ---------------------------------------------------------------------------
+// Thin wrapper — the hardened single source of truth lives in opsAlert.ts
+// (correct target, field fallbacks, retry + alternate number, loud OPS_ALERT_FAILED).
+// Kept as a named function so the medic executor's injected OpsHandoffFn and the
+// other in-adapter call sites keep the same signature.
 async function sendOpsHandoff(args: {
   conversationId: string;
   escalationId: string | null;
@@ -95,36 +110,7 @@ async function sendOpsHandoff(args: {
   context: string;
   patientMobile: string;
 }): Promise<void> {
-  const opsNumber = process.env.MY_PERSONAL_WHATSAPP;
-  if (!opsNumber) {
-    log.warn("MY_PERSONAL_WHATSAPP unset — ops handoff skipped");
-    return;
-  }
-  try {
-    const { providerMessageId } = await sendTemplateMessage({
-      to: opsNumber,
-      templateName: LEAD_ALERT_TEMPLATE,
-      bodyParams: [
-        args.patientName,
-        args.patientAge,
-        args.serviceDisplay,
-        args.location,
-        args.context,
-        args.patientMobile,
-      ],
-      quickReplyPayload: args.escalationId ?? undefined,
-    });
-    if (args.escalationId && providerMessageId) {
-      await setEscalationProviderMessageId(args.escalationId, providerMessageId);
-    }
-    await writeAudit({
-      conversationId: args.conversationId,
-      eventType: AuditEvent.OPS_ALERT_SENT,
-      eventData: { escalation_id: args.escalationId, wamid: providerMessageId },
-    });
-  } catch (err) {
-    log.error("ops handoff template send failed", err);
-  }
+  await sendOpsAlert(args);
 }
 
 // ---------------------------------------------------------------------------
@@ -155,6 +141,10 @@ async function executeEscalateToOps(
     patient_relationship: input.patient_relationship,
     ...(isQualified ? { qualified_at: new Date().toISOString() } : {}),
   });
+
+  // C5 — write the detected service onto the conversation (was NULL on every
+  // row), so triage state is queryable and the thread stops looking un-triaged.
+  await setConversationServiceIntent(conversation.id, input.service_intent);
 
   const escalationId = await createEscalation({
     conversationId: conversation.id,
@@ -338,7 +328,16 @@ export async function handleInboundMessage(
   inbound: NormalizedInbound,
 ): Promise<void> {
   const { conversation } = await findOrCreateConversation(inbound.phone);
-  const text = inbound.text ?? "";
+
+  // C2 — location pin: don't drop it. Synthesise a structured note so the agent
+  // turn acknowledges the pin and keeps qualifying (a shared location used to be
+  // silently dropped, killing every in-person booking at the location step).
+  const locationPin =
+    inbound.type === "location" ? locationFromRaw(inbound.raw) : null;
+  const text =
+    inbound.type === "location" && locationPin
+      ? synthesizeLocationText(locationPin)
+      : (inbound.text ?? "");
 
   const isButtonReply =
     inbound.type === "button" ||
@@ -435,8 +434,16 @@ export async function handleInboundMessage(
     // Unhandled (no media ref) — fall through to the non-text drop.
   }
 
-  // ---- Non-text (and not a handled button): log-and-skip -----------------
-  if (inbound.type !== "text") {
+  // ---- Location pin → record + flow into the agent turn (C2) --------------
+  if (inbound.type === "location" && locationPin) {
+    await audit(AuditEvent.LOCATION_RECEIVED, {
+      lat: locationPin.lat,
+      lng: locationPin.lng,
+      has_address: Boolean(locationPin.address ?? locationPin.name),
+    });
+    // falls through to the agent turn below with the synthesised `text`.
+  } else if (inbound.type !== "text") {
+    // ---- Non-text (and not a handled button / location): log-and-skip ----
     log.info("non-text message recorded; no handler", inbound.type);
     await audit(AuditEvent.UNSUPPORTED_MESSAGE_RECEIVED, { type: inbound.type });
     return;
@@ -511,6 +518,13 @@ export async function handleInboundMessage(
   const isOpen = isSanocareOpen(officeNow);
   const nowIstLabel = formatIST(officeNow, "datetime");
 
+  // C3 — coalesce a rapid burst: if more than one inbound message is unanswered
+  // since the last bot reply, run ONE turn over the combined text. A single
+  // message (the common case) uses the effective text as-is (handles location).
+  const unanswered = await loadUnansweredInbound(conversation.id);
+  const combinedText =
+    unanswered.length > 1 ? coalesceInboundText(unanswered) : text;
+
   let reply = "";
   let toolCalls: { name: string; input: Record<string, unknown> }[] = [];
   let model = "";
@@ -520,7 +534,7 @@ export async function handleInboundMessage(
     const res = await runAgentTurn({
       conversationId: conversation.id,
       channel: "whatsapp",
-      userText: text,
+      userText: combinedText,
       history,
       turnCount,
       emergencyPreCheckFired: false,
@@ -689,16 +703,61 @@ export async function handleInboundMessage(
     else if (escalateCall) reply = "Got it — I've got everything I need. Our team will reach you shortly.";
   }
   if (reply) {
-    await dispatchTextMessage({
-      conversationId: conversation.id,
-      phone: inbound.phone,
-      body: reply,
-      safetyFlags: { agent: true, model },
-    });
+    // C3 — debounce backstop: drop a near-duplicate of a very recent reply (a
+    // concurrent turn over the same burst already answered). Kills the observed
+    // "two near-identical replies" bug without a turn-lock migration.
+    const recentOut = await loadRecentOutbound(conversation.id);
+    if (isDuplicateReply(reply, recentOut)) {
+      await audit(AuditEvent.DUPLICATE_REPLY_SUPPRESSED, { model });
+    } else {
+      await dispatchTextMessage({
+        conversationId: conversation.id,
+        phone: inbound.phone,
+        body: reply,
+        safetyFlags: { agent: true, model },
+      });
+    }
   }
 
   // opt-out flips the permanent gate AFTER the reply is dispatched.
   if (optOutCall) await executeSetOptOut(conversation);
+
+  // C4 — stalled-thread backstop: a thread looping past the cap with no booking
+  // or escalation auto-escalates ONCE (rate-limited by escalation_status). Runs
+  // before the state write-back so it doesn't regress an escalated state.
+  let escalatedThisTurn = escalateCall;
+  if (!escalatedThisTurn && !optOutCall) {
+    const escStatus = await getEscalationStatus(conversation.id);
+    if (shouldAutoEscalateStalled({ turnCount, escalationStatus: escStatus, escalatedThisTurn: false })) {
+      const escId = await createEscalation({
+        conversationId: conversation.id,
+        escalationType: "stalled_conversation",
+        priority: "p3",
+        newState: "escalated",
+      });
+      const ctx = `[STALLED ${turnCount} turns, no progress] ${combinedText.slice(0, 200)}`;
+      await sendOpsAlert({
+        conversationId: conversation.id,
+        escalationId: escId,
+        patientName: tier1.customer?.full_name ?? inbound.contactName ?? "—",
+        patientAge: "—",
+        serviceDisplay: "Stalled thread — needs a human",
+        location: "—",
+        context: isOpen ? ctx : `[AFTER-HOURS — follow up at 9 AM] ${ctx}`,
+        patientMobile: inbound.phone,
+      });
+      await audit(AuditEvent.STALLED_AUTO_ESCALATED, { turn_count: turnCount });
+      escalatedThisTurn = true;
+    }
+  }
+
+  // C5 — state write-back: advance greeting → qualifying once a real exchange
+  // happens (stops threads resetting to 'greeting'). Forward-only (nextState),
+  // skipped when an escalation/opt-out already advanced the state this turn.
+  if (!escalatedThisTurn && !optOutCall) {
+    const advanced = nextState(conversation.state, "qualifying");
+    if (advanced) await setConversationState(conversation.id, advanced);
+  }
 
   await audit(AuditEvent.AGENT_RESPONSE, {
     model,
