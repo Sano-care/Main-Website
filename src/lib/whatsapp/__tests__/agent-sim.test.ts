@@ -15,6 +15,11 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// The real adapter now transitively imports the Pulse Records libs (Slice C),
+// which carry `import "server-only"` — a no-op outside a bundler. Stub it so the
+// module graph loads in the node test env.
+vi.mock("server-only", () => ({}));
+
 const rec = vi.hoisted(() => ({
   log: [] as string[],
   replies: [] as string[],

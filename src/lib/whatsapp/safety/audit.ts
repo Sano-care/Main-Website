@@ -92,6 +92,11 @@ export const AuditEvent = {
   // (bookings/Rx/vitals/meds/conditions/allergies/documents) is audited,
   // identity-aware, phone-free (counts only, never the record contents). DPDP.
   PULSE_RECORDS_FETCHED: "pulse_records_fetched",
+  // Pulse Records Aarogya tools (Slice C) — a patient saving a document to
+  // their vault, and asking Aarogya to explain a term/reading. Identity-aware,
+  // phone-free (ids + types only, never the record/file contents). DPDP.
+  PULSE_VAULT_UPLOADED: "pulse_vault_uploaded",
+  PULSE_RECORD_EXPLAINED: "pulse_record_explained",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
