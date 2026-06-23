@@ -20,12 +20,9 @@
 
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { AuditEvent, writeAudit } from "@/lib/whatsapp/safety/audit";
-import { FOUNDER_OPS_PHONE, FOUNDER_OPS_PHONE_DIGITS } from "@/lib/whatsapp/constants";
-import { sendTemplateMessage } from "@/lib/whatsapp/cloud-api";
+import { sendOpsAlert } from "@/lib/whatsapp/opsAlert";
 import { log } from "@/lib/whatsapp/log";
 import type { Identity } from "@/lib/whatsapp/identity";
-
-const LEAD_ALERT_TEMPLATE = "aarogya_lead_alert";
 
 /** Relay draft TTL — ops has 15 minutes to confirm/refine. */
 export const RELAY_DRAFT_TTL_MS = 15 * 60 * 1000;
@@ -86,38 +83,20 @@ export interface EscalationPayload {
 export async function escalateToOpsPhone(
   payload: EscalationPayload,
 ): Promise<{ providerMessageId?: string }> {
-  const target =
-    process.env.MY_PERSONAL_WHATSAPP?.replace(/[^\d]/g, "") ||
-    FOUNDER_OPS_PHONE_DIGITS;
-
-  try {
-    const result = await sendTemplateMessage({
-      to: target,
-      templateName: LEAD_ALERT_TEMPLATE,
-      bodyParams: [
-        payload.patientName,
-        payload.patientAge,
-        payload.serviceDisplay,
-        payload.location,
-        payload.context,
-        payload.patientMobile,
-      ],
-      quickReplyPayload: payload.escalationId ?? undefined,
-    });
-    await writeAudit({
-      conversationId: payload.conversationId,
-      eventType: AuditEvent.OPS_ALERT_SENT,
-      eventData: {
-        escalation_id: payload.escalationId,
-        wamid: result.providerMessageId,
-        target_phone: FOUNDER_OPS_PHONE,
-      },
-    });
-    return { providerMessageId: result.providerMessageId };
-  } catch (err) {
-    log.error("escalateToOpsPhone template send failed", err);
-    return {};
-  }
+  // Delegates to the single hardened sender (opsAlert.ts) — correct target,
+  // field fallbacks, retry + alternate number, loud OPS_ALERT_FAILED. This
+  // function is kept for its callers/tests; the send logic is no longer here.
+  const result = await sendOpsAlert({
+    conversationId: payload.conversationId,
+    escalationId: payload.escalationId ?? null,
+    patientName: payload.patientName,
+    patientAge: payload.patientAge,
+    serviceDisplay: payload.serviceDisplay,
+    location: payload.location,
+    context: payload.context,
+    patientMobile: payload.patientMobile,
+  });
+  return { providerMessageId: result.providerMessageId };
 }
 
 // ---------------------------------------------------------------------------

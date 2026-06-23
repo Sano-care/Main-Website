@@ -104,7 +104,7 @@ vi.mock("@/lib/supabase-server", () => ({
         ...query,
         insert: (row: Omit<AuditRow, "id" | "created_at">) => {
           // Detect bare insert from writeAudit (no chained .select())
-          const insertResult = query.insert(row) as ReturnType<typeof query.insert>;
+          const insertResult = (query.insert as (r: unknown) => Record<string, unknown>)(row);
           // Also return a thenable so `await supabaseAdmin.from('audit_log').insert(...)` resolves.
           return Object.assign(insertResult, {
             then: (resolve: (v: { error: null }) => unknown) => {
@@ -181,7 +181,7 @@ describe("routeInbound", () => {
 });
 
 describe("escalateToOpsPhone", () => {
-  it("sends aarogya_lead_alert with the 6 body params to FOUNDER_OPS_PHONE", async () => {
+  it("sends aarogya_lead_alert with the 6 body params to the canonical ops line", async () => {
     delete process.env.MY_PERSONAL_WHATSAPP;
     await escalateToOpsPhone({
       conversationId: "conv-1",
@@ -195,7 +195,7 @@ describe("escalateToOpsPhone", () => {
     });
     expect(h.templateSends).toHaveLength(1);
     const sent = h.templateSends[0];
-    expect(sent.to).toBe("919760059900");
+    expect(sent.to).toBe("919711977782"); // hardened default (canonical ops line), no override
     expect(sent.templateName).toBe("aarogya_lead_alert");
     expect(sent.bodyParams).toEqual([
       "Rajesh Kumar",
