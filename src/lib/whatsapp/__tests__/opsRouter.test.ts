@@ -39,7 +39,19 @@ vi.mock("@/lib/supabase-server", () => ({
       };
       let orderDesc = true;
       let limitN = 5;
-      const query: Record<string, unknown> = {
+      type AuditQueryBuilder = {
+        select: () => AuditQueryBuilder;
+        eq: (col: string, val: string) => AuditQueryBuilder;
+        in: (col: string, vals: string[]) => Promise<{ data: AuditRow[]; error: null }>;
+        order: (col: string, opts: { ascending: boolean }) => AuditQueryBuilder;
+        limit: (n: number) => Promise<{ data: AuditRow[]; error: null }>;
+        insert: (row: Omit<AuditRow, "id" | "created_at">) => {
+          select: () => {
+            single: () => Promise<{ data: { id: string; created_at: string }; error: null }>;
+          };
+        };
+      };
+      const query: AuditQueryBuilder = {
         select: () => query,
         eq: (col: string, val: string) => {
           if (col === "conversation_id") filter.conversation_id = val;
