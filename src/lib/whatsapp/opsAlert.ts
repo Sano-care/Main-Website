@@ -5,23 +5,29 @@
 // opsRouter.escalateToOpsPhone), which diverged: one silently SKIPPED when
 // MY_PERSONAL_WHATSAPP was unset, the other defaulted to the WRONG number. Both
 // now delegate here. Behaviour:
-//   - Target: MY_PERSONAL_WHATSAPP override (digits) || the canonical ops line
-//     919711977782. NEVER skips for a missing override (that was the live bug).
+//   - Target: MY_PERSONAL_WHATSAPP override (digits) || the Ops number
+//     919760059900 (= FOUNDER_OPS_PHONE_DIGITS). NEVER skips for a missing
+//     override (that was the live bug); NEVER targets 919711977782 (the WABA).
 //   - Field fallbacks: no {{1}}..{{6}} ever blank — "—"/"unknown" substituted.
-//   - Loud failure: try primary, retry primary once, then the alternate founder
-//     number; if ALL fail, write OPS_ALERT_FAILED. Never throws.
+//   - Loud failure: try the Ops number, retry once, then once more; if ALL fail,
+//     write OPS_ALERT_FAILED. Never throws.
 
 import { sendTemplateMessage } from "@/lib/whatsapp/cloud-api";
 import { AuditEvent, writeAudit } from "@/lib/whatsapp/safety/audit";
 import { setEscalationProviderMessageId } from "@/lib/whatsapp/db";
+import { FOUNDER_OPS_PHONE_DIGITS } from "@/lib/whatsapp/constants";
 import { log } from "@/lib/whatsapp/log";
 
 const LEAD_ALERT_TEMPLATE = "aarogya_lead_alert";
 
-/** Canonical ops line (founder's number that doubles as ops — CLAUDE.md). */
-export const OPS_ALERT_TARGET_DIGITS = "919711977782";
-/** Alternate founder number, tried only if the primary send fails outright. */
-export const OPS_ALERT_ALT_DIGITS = "919760059900";
+// IMPORTANT: 919711977782 is Aarogya's OWN WABA number (the inbox patients text)
+// — escalations must NEVER target it (that's the bot messaging itself). The Ops
+// number is 919760059900 (= FOUNDER_OPS_PHONE_DIGITS). ALL escalations go there.
+/** The Ops number — every escalation targets this. No env required. */
+export const OPS_ALERT_TARGET_DIGITS = FOUNDER_OPS_PHONE_DIGITS; // "919760059900"
+/** There is one valid Ops line, so the retry "alternate" is the same number
+ *  (never the WABA). Kept as a named constant for the retry sequence + tests. */
+export const OPS_ALERT_ALT_DIGITS = FOUNDER_OPS_PHONE_DIGITS; // "919760059900"
 
 export interface OpsAlertArgs {
   conversationId: string;

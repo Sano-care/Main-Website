@@ -181,7 +181,7 @@ describe("routeInbound", () => {
 });
 
 describe("escalateToOpsPhone", () => {
-  it("sends aarogya_lead_alert with the 6 body params to the canonical ops line", async () => {
+  it("sends aarogya_lead_alert with the 6 body params to the Ops number", async () => {
     delete process.env.MY_PERSONAL_WHATSAPP;
     await escalateToOpsPhone({
       conversationId: "conv-1",
@@ -195,7 +195,7 @@ describe("escalateToOpsPhone", () => {
     });
     expect(h.templateSends).toHaveLength(1);
     const sent = h.templateSends[0];
-    expect(sent.to).toBe("919711977782"); // hardened default (canonical ops line), no override
+    expect(sent.to).toBe("919760059900"); // hardened default = Ops number, no env required
     expect(sent.templateName).toBe("aarogya_lead_alert");
     expect(sent.bodyParams).toEqual([
       "Rajesh Kumar",
