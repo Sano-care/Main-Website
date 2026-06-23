@@ -83,6 +83,10 @@ export const AuditEvent = {
   // Identity-aware (via the `identity` field), phone-free in event_data.
   MEDIA_RECEIVED: "media_received",
   VISION_ANALYZED: "vision_analyzed",
+  // Pulse Records data layer (Slice A) — every read of a patient's own records
+  // (bookings/Rx/vitals/meds/conditions/allergies/documents) is audited,
+  // identity-aware, phone-free (counts only, never the record contents). DPDP.
+  PULSE_RECORDS_FETCHED: "pulse_records_fetched",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
