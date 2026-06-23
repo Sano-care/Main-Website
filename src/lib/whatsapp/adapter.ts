@@ -39,6 +39,7 @@ import {
 } from "@/lib/whatsapp/db";
 import { sendTemplateMessage } from "@/lib/whatsapp/cloud-api";
 import { runAgentTurn } from "@/lib/agent/orchestrator";
+import { isPatientRole, runPatientPhotoConsumer } from "@/lib/whatsapp/photoConsumer";
 import { HISTORY_LIMIT } from "@/lib/agent/config";
 import { SERVICE_DISPLAY, type EscalateToOpsInput } from "@/lib/agent/types";
 import { loadTier1Context, type ContextIdentity } from "@/lib/whatsapp/customerContext";
@@ -379,6 +380,41 @@ export async function handleInboundMessage(
       matched: Boolean(escId),
     });
     return;
+  }
+
+  // ---- Patient photo acknowledgment (media + vision foundation, Consumer 0)
+  // A patient sending an image/document: fetch + ONE vision call (characterise,
+  // never interpret) → a compliant ack. Storage-light; never throws. Other
+  // identities (doctor/medic/ops) fall through to the non-text drop below —
+  // selfie/vault consumers are separate PRs.
+  if (
+    (inbound.type === "image" || inbound.type === "document") &&
+    isPatientRole(identity)
+  ) {
+    await audit(AuditEvent.MEDIA_RECEIVED, { type: inbound.type });
+    let outcome: Awaited<ReturnType<typeof runPatientPhotoConsumer>>;
+    try {
+      outcome = await runPatientPhotoConsumer({ raw: inbound.raw });
+    } catch (err) {
+      log.error("patient photo consumer threw", maskPhone(inbound.phone), err);
+      outcome = { handled: true, reply: null, visionType: null, reason: "consumer_threw" };
+    }
+    if (outcome.handled) {
+      await audit(AuditEvent.VISION_ANALYZED, {
+        type: inbound.type,
+        vision_type: outcome.visionType,
+        reason: outcome.reason ?? null,
+      });
+      if (outcome.reply) {
+        await dispatchTextMessage({
+          conversationId: conversation.id,
+          phone: inbound.phone,
+          body: outcome.reply,
+        });
+      }
+      return;
+    }
+    // Unhandled (no media ref) — fall through to the non-text drop.
   }
 
   // ---- Non-text (and not a handled button): log-and-skip -----------------
