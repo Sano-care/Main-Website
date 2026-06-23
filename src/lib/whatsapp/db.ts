@@ -345,6 +345,104 @@ export async function loadHistory(
     }));
 }
 
+/**
+ * Conversation-quality hotfix — the contents of inbound messages that arrived
+ * AFTER the conversation's last outbound (i.e. not yet answered), oldest first.
+ * Used to coalesce a rapid burst of patient messages into ONE agent turn.
+ * Falls back to all inbound when there's no outbound yet (capped).
+ */
+export async function loadUnansweredInbound(
+  conversationId: string,
+  cap = 10,
+): Promise<string[]> {
+  const { data: lastOut } = await supabaseAdmin
+    .from("messages")
+    .select("created_at")
+    .eq("conversation_id", conversationId)
+    .eq("direction", "outbound")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const since = (lastOut as { created_at: string } | null)?.created_at ?? null;
+
+  let q = supabaseAdmin
+    .from("messages")
+    .select("content, created_at")
+    .eq("conversation_id", conversationId)
+    .eq("direction", "inbound")
+    .order("created_at", { ascending: true })
+    .limit(cap);
+  if (since) q = q.gt("created_at", since);
+
+  const { data, error } = await q;
+  if (error || !data) {
+    log.error("loadUnansweredInbound failed", error?.message);
+    return [];
+  }
+  return data.map((m) => m.content as string).filter(Boolean);
+}
+
+/** Recent outbound message contents (within `withinSeconds`) — for the
+ *  near-duplicate-reply debounce backstop. */
+export async function loadRecentOutbound(
+  conversationId: string,
+  withinSeconds = 20,
+  now: Date = new Date(),
+): Promise<string[]> {
+  const cutoff = new Date(now.getTime() - withinSeconds * 1000).toISOString();
+  const { data, error } = await supabaseAdmin
+    .from("messages")
+    .select("content")
+    .eq("conversation_id", conversationId)
+    .eq("direction", "outbound")
+    .gt("created_at", cutoff)
+    .order("created_at", { ascending: false })
+    .limit(5);
+  if (error || !data) {
+    log.error("loadRecentOutbound failed", error?.message);
+    return [];
+  }
+  return data.map((m) => m.content as string).filter(Boolean);
+}
+
+/** Read a conversation's current escalation_status (for the stalled backstop
+ *  rate-limit). */
+export async function getEscalationStatus(
+  conversationId: string,
+): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from("conversations")
+    .select("escalation_status")
+    .eq("id", conversationId)
+    .maybeSingle();
+  return (data as { escalation_status: string | null } | null)?.escalation_status ?? null;
+}
+
+/** Write-back: set conversations.service_intent (triage result). Best-effort. */
+export async function setConversationServiceIntent(
+  conversationId: string,
+  serviceIntent: string | null,
+): Promise<void> {
+  if (!serviceIntent) return;
+  const { error } = await supabaseAdmin
+    .from("conversations")
+    .update({ service_intent: serviceIntent, updated_at: new Date().toISOString() })
+    .eq("id", conversationId);
+  if (error) log.error("setConversationServiceIntent failed", error.message);
+}
+
+/** Write-back: advance conversations.state. Best-effort. */
+export async function setConversationState(
+  conversationId: string,
+  state: string,
+): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("conversations")
+    .update({ state, updated_at: new Date().toISOString() })
+    .eq("id", conversationId);
+  if (error) log.error("setConversationState failed", error.message);
+}
+
 /** Count inbound (user) messages — used for model-routing turn count. */
 export async function countInboundMessages(conversationId: string): Promise<number> {
   const { count, error } = await supabaseAdmin

@@ -83,6 +83,11 @@ export const AuditEvent = {
   // Identity-aware (via the `identity` field), phone-free in event_data.
   MEDIA_RECEIVED: "media_received",
   VISION_ANALYZED: "vision_analyzed",
+  // Conversation-quality + escalation hotfix.
+  OPS_ALERT_FAILED: "ops_alert_failed", // every send attempt failed — loud, not swallowed
+  LOCATION_RECEIVED: "location_received", // patient shared a location pin (no longer dropped)
+  DUPLICATE_REPLY_SUPPRESSED: "duplicate_reply_suppressed", // debounce backstop fired
+  STALLED_AUTO_ESCALATED: "stalled_auto_escalated", // turn-cap backstop fired (once per thread)
   // Pulse Records data layer (Slice A) — every read of a patient's own records
   // (bookings/Rx/vitals/meds/conditions/allergies/documents) is audited,
   // identity-aware, phone-free (counts only, never the record contents). DPDP.
