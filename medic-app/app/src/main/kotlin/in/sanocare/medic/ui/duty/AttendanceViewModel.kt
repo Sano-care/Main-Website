@@ -8,6 +8,7 @@ import `in`.sanocare.medic.data.auth.AuthResult
 import `in`.sanocare.medic.data.location.Coords
 import `in`.sanocare.medic.data.location.LocationProvider
 import `in`.sanocare.medic.data.network.AttendanceRow
+import `in`.sanocare.medic.data.network.SelfiePrompt
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -85,13 +86,14 @@ class AttendanceViewModel @Inject constructor(
             Log.d(TAG, "clockIn(): coords=${if (coords != null) "captured" else "null"}")
             when (val result = attendanceRepository.clockIn(coords?.lat, coords?.lng)) {
                 is AuthResult.Ok -> {
-                    Log.d(TAG, "clockIn() API ok, openRow=${result.value.id}")
+                    Log.d(TAG, "clockIn() API ok, openRow=${result.value.openRow.id}")
                     _state.update {
                         it.copy(
                             acting = false,
-                            openRow = result.value,
+                            openRow = result.value.openRow,
                             errorMessage = null,
                             hasLocation = coords != null,
+                            selfiePrompt = result.value.selfiePrompt,
                         )
                     }
                     val emitted = _events.tryEmit(AttendanceEvent.StartTracking)
@@ -121,6 +123,7 @@ class AttendanceViewModel @Inject constructor(
                             openRow = null,
                             lastClosedRow = result.value,
                             errorMessage = null,
+                            selfiePrompt = null,
                         )
                     }
                     val emitted = _events.tryEmit(AttendanceEvent.StopTracking)
@@ -143,6 +146,11 @@ class AttendanceViewModel @Inject constructor(
 
     fun clearError() {
         _state.update { it.copy(errorMessage = null) }
+    }
+
+    /** Dismiss the post-clock-in selfie nudge (medic sent it, or tapped close). */
+    fun dismissSelfiePrompt() {
+        _state.update { it.copy(selfiePrompt = null) }
     }
 
     /**
@@ -172,4 +180,6 @@ data class AttendanceState(
     val lastClosedRow: AttendanceRow? = null,
     val errorMessage: String? = null,
     val hasLocation: Boolean = false,
+    // Set from the clock_in response; drives the post-clock-in selfie nudge.
+    val selfiePrompt: SelfiePrompt? = null,
 )
