@@ -76,6 +76,9 @@ export const AuditEvent = {
   // Office-hours hotfix — a lead captured while Sanocare is CLOSED, flagged for
   // 9 AM follow-up (no immediate-dispatch implication).
   AFTER_HOURS_LEAD_CAPTURED: "after_hours_lead_captured",
+  // Aarogya Medic Help-Mode Part 1 — medic-mode tool events.
+  MEDIC_ESCALATION_TO_DOCTOR: "medic_escalation_to_doctor",
+  MEDIC_QUERY: "medic_query",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];

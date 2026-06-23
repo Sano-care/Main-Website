@@ -52,6 +52,11 @@ import {
   persistConversationLanguage,
 } from "@/lib/whatsapp/slice4aExecutors";
 import {
+  executeEscalateToDoctor,
+  executeFetchBookingContext,
+  executeLogMedicQuery,
+} from "@/lib/whatsapp/medicExecutors";
+import {
   executeRegisterCarehubInterest,
   executeSurfaceCarehubBenefits,
 } from "@/lib/whatsapp/slice5Executors";
@@ -608,6 +613,29 @@ export async function handleInboundMessage(
             identity,
             opsConversationId: conversation.id,
             input: call.input as unknown as { resolution: "YES" | "CANCEL" },
+          });
+          break;
+        // ---- Medic Help-Mode Part 1 (identity adapter-injected, role-gated) ----
+        case "escalate_to_doctor":
+          toolPatientMsg = await executeEscalateToDoctor({
+            identity,
+            conversationId: conversation.id,
+            medicPhone: inbound.phone,
+            input: call.input as unknown as { reason?: string },
+            sendOpsHandoff,
+          });
+          break;
+        case "fetch_booking_context":
+          toolPatientMsg = await executeFetchBookingContext({
+            identity,
+            input: call.input as unknown as { booking_id?: string },
+          });
+          break;
+        case "log_medic_query":
+          await executeLogMedicQuery({
+            identity,
+            conversationId: conversation.id,
+            input: call.input as unknown as { question?: string },
           });
           break;
         default:

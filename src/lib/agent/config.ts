@@ -16,6 +16,7 @@ import {
   CUSTOMER_REGISTERED_ADDENDUM,
   CUSTOMER_CAREHUB_ADDENDUM,
   OPS_MODE_ADDENDUM,
+  MEDIC_ADDENDUM,
   renderContextBlock,
   renderOpsContextBlock,
   type ContextBlockInput,
@@ -67,6 +68,15 @@ export function getSystemPromptForTurn(
     LANGUAGE_MIRROR_RULE,
     SHORT_MESSAGE_RULE,
   ];
+
+  // Medic mode REPLACES the patient flow for this turn: push the medic addendum
+  // and return early — no patient context block, no customer/ops composition.
+  // (Mirrors the ops_founder early-return below; medic never sees the patient
+  // booking flow.)
+  if (identity.role === "medic") {
+    sections.push(MEDIC_ADDENDUM);
+    return sections.join("\n\n");
+  }
 
   // Registered AND carehub members are both known returning customers — both
   // get the name/last-booking personalization. CareHub members get the
