@@ -40,6 +40,8 @@ import {
 import { sendTemplateMessage } from "@/lib/whatsapp/cloud-api";
 import { runAgentTurn } from "@/lib/agent/orchestrator";
 import { HISTORY_LIMIT } from "@/lib/agent/config";
+import { isSanocareOpen } from "@/lib/agent/officeHours";
+import { formatIST } from "@/lib/time/formatIST";
 import { SERVICE_DISPLAY, type EscalateToOpsInput } from "@/lib/agent/types";
 import { loadTier1Context, type ContextIdentity } from "@/lib/whatsapp/customerContext";
 import {
@@ -137,9 +139,12 @@ async function executeEscalateToOps(
   conversation: ConversationRow,
   patientPhone: string,
   input: EscalateToOpsInput,
+  afterHours = false,
 ): Promise<void> {
   const priority = priorityFor(input);
   const isQualified = input.escalation_type === "qualified_lead";
+  // Emergencies are immediate at any hour — never flag them after-hours.
+  const flagAfterHours = afterHours && input.escalation_type !== "emergency";
 
   await updateLeadFields(conversation.lead_id, {
     name: input.patient_name || null,
@@ -157,6 +162,7 @@ async function executeEscalateToOps(
     newState: isQualified ? "qualified" : "escalated",
   });
 
+  const baseContext = input.context || input.summary_for_ops || "—";
   await sendOpsHandoff({
     conversationId: conversation.id,
     escalationId,
@@ -164,9 +170,21 @@ async function executeEscalateToOps(
     patientAge: input.patient_age || "—",
     serviceDisplay: SERVICE_DISPLAY[input.service_intent] ?? "Other",
     location: input.location || "—",
-    context: input.context || input.summary_for_ops || "—",
+    // Tag so ops sees it's an after-hours capture for 9 AM follow-up, not a
+    // live dispatch.
+    context: flagAfterHours
+      ? `[AFTER-HOURS — follow up at 9 AM] ${baseContext}`
+      : baseContext,
     patientMobile: patientPhone,
   });
+
+  if (flagAfterHours) {
+    await writeAudit({
+      conversationId: conversation.id,
+      eventType: AuditEvent.AFTER_HOURS_LEAD_CAPTURED,
+      eventData: { escalation_id: escalationId, escalation_type: input.escalation_type },
+    });
+  }
 }
 
 async function executeSetOptOut(conversation: ConversationRow): Promise<void> {
@@ -451,6 +469,12 @@ export async function handleInboundMessage(
   const history = historyPlusCurrent.slice(0, -1); // drop the just-recorded current turn
   const turnCount = await countInboundMessages(conversation.id);
 
+  // Office-hours awareness — computed once per turn so the system prompt and
+  // the escalate_to_ops after-hours tag agree on the same clock.
+  const officeNow = new Date();
+  const isOpen = isSanocareOpen(officeNow);
+  const nowIstLabel = formatIST(officeNow, "datetime");
+
   let reply = "";
   let toolCalls: { name: string; input: Record<string, unknown> }[] = [];
   let model = "";
@@ -482,6 +506,8 @@ export async function handleInboundMessage(
             }
           : null,
         language: tier1.language,
+        now_ist: nowIstLabel,
+        is_open: isOpen,
       },
       pendingRelayDraftTargetPhone: pendingDraft?.targetPhone ?? null,
     });
@@ -517,7 +543,7 @@ export async function handleInboundMessage(
           break;
         case "escalate_to_ops":
           escalateCall = true;
-          await executeEscalateToOps(conversation, inbound.phone, call.input as unknown as EscalateToOpsInput);
+          await executeEscalateToOps(conversation, inbound.phone, call.input as unknown as EscalateToOpsInput, !isOpen);
           break;
         case "check_medic_status":
           toolPatientMsg = await executeCheckMedicStatus(inbound.phone);

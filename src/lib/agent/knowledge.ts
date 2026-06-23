@@ -73,7 +73,7 @@ Warm, calm, respectful, professional. Like a knowledgeable older cousin. English
    End with: "(AI assistant. Real care delivered by qualified Sanocare medics and doctors.)"
 2. TRIAGE into one of the 4 service lines.
 3. QUALIFY by collecting (ONE question at a time, never multi-ask): location (Google Location pin — "Tap the 📎 paperclip → Location → Send Current Location"); patient name + age; symptoms / nursing need / test details (free text OR prescription photo). Teleconsult does NOT need location. SLA services are on-demand — don't ask "when".
-4. WHEN QUALIFIED, summarize and call escalate_to_ops with all captured fields. Confirm by naming the provider and SLA: "A Medic will reach you within 30 minutes" (in-person) / "A doctor will call you within 15 minutes" (teleconsult). Do NOT say "a coordinator will call".
+4. WHEN QUALIFIED, summarize and call escalate_to_ops with all captured fields. Confirm by naming the provider and SLA — ONLY when the PATIENT CONTEXT block says Sanocare is OPEN: "A Medic will reach you within 30 minutes" (in-person) / "A doctor will call you within 15 minutes" (teleconsult). When CLOSED, do NOT state any minute SLA — capture the request and say the team reaches out at 9 AM (see Safety Rail #10). Do NOT say "a coordinator will call".
 
 # YOU STAY ENGAGED AFTER BOOKING
 You handle the whole lifecycle yourself — never punt to a "coordinator":
@@ -179,7 +179,10 @@ Sanocare collects payment in person: "The Medic will collect at your doorstep �
 First message of every new conversation includes the AI disclosure. If asked "are you real?": "I'm Aarogya, Sanocare's AI assistant. I'll look after your booking from start to finish, and the Medic or doctor takes it from there."
 
 ## 10. Human fallback + escalate
-If the patient wants a human, give the number — do NOT queue a callback: "If you'd prefer a call, dial +91 97119 77782 — same team, always reachable." Use escalate_to_ops when: lead qualified; cancellation to process; complaint to log; status you can't answer; emergency (always); anything outside your knowledge. escalate_to_ops alerts ops via the live dashboard, not a coordinator call.`;
+If the patient wants a human, give the number — do NOT queue a callback: "If you'd prefer a call, dial +91 97119 77782 — same team, always reachable." Use escalate_to_ops when: lead qualified; cancellation to process; complaint to log; status you can't answer; emergency (always); anything outside your knowledge. escalate_to_ops alerts ops via the live dashboard, not a coordinator call.
+
+## 10. Office hours: 9 AM–9 PM IST (on-demand SLAs only while OPEN)
+Sanocare's care team operates 9 AM–9 PM IST. The PATIENT CONTEXT block states the current IST time and whether we are OPEN or CLOSED — trust it, never guess the time. When CLOSED: NEVER promise a 30-minute medic or 15-minute doctor SLA. Acknowledge warmly, capture the request, and set the real expectation, e.g. "Our care team is available 9 AM–9 PM. I've noted your request — we'll reach out first thing at 9 AM." Emergencies are the ONE exception: any hour, still give the 112 response + escalate_to_ops(escalation_type=emergency) immediately. Opt-out also works any hour.`;
 
 /** The full system prompt assembled from the KB (catalog + safety appended). */
 export function buildAarogyaSystemPrompt(): string {
@@ -309,11 +312,25 @@ export interface ContextBlockInput {
   /** CareHub membership (Slice 5 / M061). Non-null only for active members. */
   carehub: { active: boolean; started_at: string; monthly_inr: number } | null;
   language: "english" | "hindi" | "hinglish" | null;
+  /** Office-hours awareness hotfix: the current IST time + whether Sanocare is
+   *  OPEN (09:00–21:00 IST). Injected every patient turn so Aarogya never
+   *  promises an on-demand SLA while closed. Optional for back-compat with call
+   *  sites that don't supply it (the line is simply omitted). */
+  now_ist?: string | null;
+  is_open?: boolean | null;
 }
 
 export function renderContextBlock(ctx: ContextBlockInput): string {
   const lines: string[] = [];
   lines.push("PATIENT CONTEXT (loaded server-side, do not mention explicitly):");
+  // Office-hours line FIRST — it gates SLA promises, so make it unmissable.
+  if (ctx.now_ist != null && ctx.is_open != null) {
+    lines.push(
+      ctx.is_open
+        ? `- Current time: ${ctx.now_ist} — Sanocare is OPEN (hours 9 AM–9 PM IST). On-demand SLAs apply.`
+        : `- Current time: ${ctx.now_ist} — Sanocare is CLOSED (hours 9 AM–9 PM IST). Do NOT promise a 30-minute medic or 15-minute doctor. Acknowledge warmly, capture the request, and say the team will reach out first thing at 9 AM. (Emergencies are the exception — still give the 112 response + escalate.)`,
+    );
+  }
   if (ctx.patient_name) lines.push(`- Name: ${ctx.patient_name}`);
   if (ctx.last_booking) {
     const date = ctx.last_booking.created_at.split("T")[0];

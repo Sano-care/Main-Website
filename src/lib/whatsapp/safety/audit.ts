@@ -73,6 +73,9 @@ export const AuditEvent = {
   // Emitted once per sweep when the feature flag is OFF — proves a
   // flags-off run sent NOTHING.
   CAREHUB_SKIPPED_FLAG_OFF: "carehub_skipped_flag_off",
+  // Office-hours hotfix — a lead captured while Sanocare is CLOSED, flagged for
+  // 9 AM follow-up (no immediate-dispatch implication).
+  AFTER_HOURS_LEAD_CAPTURED: "after_hours_lead_captured",
   // Aarogya Medic Help-Mode Part 1 — medic-mode tool events.
   MEDIC_ESCALATION_TO_DOCTOR: "medic_escalation_to_doctor",
   MEDIC_QUERY: "medic_query",
