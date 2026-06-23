@@ -79,6 +79,10 @@ export const AuditEvent = {
   // Aarogya Medic Help-Mode Part 1 — medic-mode tool events.
   MEDIC_ESCALATION_TO_DOCTOR: "medic_escalation_to_doctor",
   MEDIC_QUERY: "medic_query",
+  // Aarogya media + vision foundation — inbound media fetch + vision analysis.
+  // Identity-aware (via the `identity` field), phone-free in event_data.
+  MEDIA_RECEIVED: "media_received",
+  VISION_ANALYZED: "vision_analyzed",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
