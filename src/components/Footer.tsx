@@ -291,6 +291,18 @@ export function Footer({
                 Manage cookies
               </button>
             </li>
+            {/* Sanocare staff Android app (OTP-gated to medics). Plain anchor —
+                /download/medic 302-redirects to the public APK in Supabase
+                Storage, so we don't want Next to prefetch the redirect. Staff
+                label keeps patients from mistaking it for a patient app. */}
+            <li>
+              <a
+                href="/download/medic"
+                className="hover:text-primary transition-colors"
+              >
+                Download Medic App (Sanocare staff)
+              </a>
+            </li>
           </ul>
         </div>
 
