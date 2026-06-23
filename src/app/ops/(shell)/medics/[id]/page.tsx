@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { createOpsRSCClient } from "@/lib/supabase-rsc";
 import { getCurrentOpsUser } from "../../../_lib/getCurrentOpsUser";
 import { formatIST } from "@/lib/time/formatIST";
+import { summarizeLedger } from "@/lib/medicPayroll";
 import { ProfileTab } from "./ProfileTab";
 import { DocsTab, type MedicDoc } from "./DocsTab";
 import { PayoutTab, type Settlement } from "./PayoutTab";
@@ -178,20 +179,9 @@ export default async function MedicDetailPage({
         .eq("medic_id", id),
     ]);
     settlements = (settlementRows ?? []) as Settlement[];
-    let balance = 0;
-    let paid = 0;
-    for (const r of (ledgerAll ?? []) as Array<{
-      entry_type: string;
-      amount_paise: number;
-    }>) {
-      balance += r.amount_paise;
-      if (r.entry_type === "payout") paid += -r.amount_paise; // payouts stored negative
-    }
-    summary = {
-      earnedPaise: balance + paid,
-      paidPaise: paid,
-      balancePaise: balance,
-    };
+    summary = summarizeLedger(
+      (ledgerAll ?? []) as Array<{ entry_type: string; amount_paise: number }>,
+    );
   }
 
   return (

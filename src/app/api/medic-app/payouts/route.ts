@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireMedic } from "@/lib/auth/requireMedic";
+import { summarizeLedger } from "@/lib/medicPayroll";
 
 export const runtime = "nodejs";
 
@@ -61,13 +62,13 @@ export async function GET(request: NextRequest) {
 
   const all = (data ?? []) as LedgerRow[];
 
-  let balance = 0;
-  let paid = 0;
+  // Per-row running balance (forward walk); totals via the shared, tested helper.
+  let running = 0;
   const withBalance = all.map((r) => {
-    balance += r.amount_paise;
-    if (r.entry_type === "payout") paid += -r.amount_paise;
-    return { ...r, running_balance_paise: balance };
+    running += r.amount_paise;
+    return { ...r, running_balance_paise: running };
   });
+  const summary = summarizeLedger(all);
 
   // Most-recent first, capped.
   const entries = withBalance
@@ -85,9 +86,9 @@ export async function GET(request: NextRequest) {
     }));
 
   return NextResponse.json({
-    balance_paise: balance,
-    total_earned_paise: balance + paid,
-    total_paid_paise: paid,
+    balance_paise: summary.balancePaise,
+    total_earned_paise: summary.earnedPaise,
+    total_paid_paise: summary.paidPaise,
     entries,
   });
 }
