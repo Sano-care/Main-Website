@@ -19,9 +19,8 @@ import PulseSignOutButton from "./PulseSignOutButton";
  *
  * Items (brief Drawer items table, verbatim copy):
  *   1. Home
- *   2. Your records ▾ (expandable; sub-items are DIMMED with subtitle
- *      "Coming in next update" / "Coming soon" — no routing). Per founder
- *      direction: do NOT ship stub /pulse/records/* pages.
+ *   2. Your records → /pulse/records (Slice B: one consolidated surface,
+ *      scoped to the active viewing member).
  *   3. Your profile — subtitle = current viewing member's first name
  *   4. Family members → /pulse/family-members
  *   5. Account settings → /pulse/account (page lands in Step 15)
@@ -138,44 +137,16 @@ export default function PulseDrawer({ isOpen, onClose }: PulseDrawerProps) {
               onNavigate={onClose}
             />
 
-            {/* Your records — expandable accordion. Sub-items are dimmed */}
-            {/* with subtitle, NOT routes. */}
-            <li>
-              <details className="group rounded-lg">
-                <summary className="flex cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-gray-800 hover:bg-gray-50">
-                  <span className="flex items-center gap-3">
-                    <span className="text-base" aria-hidden="true">
-                      📋
-                    </span>
-                    <span className="font-medium">Your records</span>
-                  </span>
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="h-4 w-4 text-gray-500 transition-transform group-open:rotate-180"
-                    aria-hidden="true"
-                  >
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </summary>
-                <ul className="mt-1 flex flex-col gap-0.5 pl-11 pr-2">
-                  <DimmedSubItem
-                    label="Bookings"
-                    subtitle="Coming in next update"
-                  />
-                  <DimmedSubItem
-                    label="Prescriptions"
-                    subtitle="Coming in next update"
-                  />
-                  <DimmedSubItem label="Documents" subtitle="Coming soon" />
-                </ul>
-              </details>
-            </li>
+            {/* Your records — Slice B: one consolidated surface (bookings, */}
+            {/* prescriptions, vitals, medications, conditions, allergies, */}
+            {/* documents), scoped to the active viewing member. */}
+            <DrawerItem
+              icon="📋"
+              label="Your records"
+              href="/pulse/records"
+              currentPath={pathname}
+              onNavigate={onClose}
+            />
 
             <DrawerItem
               icon="👤"
@@ -274,28 +245,4 @@ function DrawerItem({
   );
 }
 
-/**
- * Dimmed sub-item under "Your records". Not a button, not a link — a
- * presentational row with subtitle. Per founder direction (Step 05 note 1):
- * dim + subtitle reads as "Coming soon" instantly without dead-end routing.
- */
-function DimmedSubItem({
-  label,
-  subtitle,
-}: {
-  label: string;
-  subtitle: string;
-}) {
-  return (
-    <li
-      aria-disabled="true"
-      className="flex cursor-default flex-col rounded-lg px-3 py-2"
-    >
-      <span className="text-sm font-medium leading-tight text-gray-400">
-        {label}
-      </span>
-      <span className="text-xs leading-tight text-gray-400">{subtitle}</span>
-    </li>
-  );
-}
 
