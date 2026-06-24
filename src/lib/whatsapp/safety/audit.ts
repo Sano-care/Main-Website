@@ -97,6 +97,11 @@ export const AuditEvent = {
   // phone-free (ids + types only, never the record/file contents). DPDP.
   PULSE_VAULT_UPLOADED: "pulse_vault_uploaded",
   PULSE_RECORD_EXPLAINED: "pulse_record_explained",
+  // Patient photo & PDF interpretation — media characterised, filed, or refused.
+  // Phone-free + clinical-content-free (only category + decision, never contents).
+  PATIENT_PHOTO_RECEIVED: "patient_photo_received",
+  PATIENT_PHOTO_FILED: "patient_photo_filed",
+  PATIENT_PHOTO_REJECTED: "patient_photo_rejected",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
