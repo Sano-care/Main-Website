@@ -102,6 +102,10 @@ export const AuditEvent = {
   PATIENT_PHOTO_RECEIVED: "patient_photo_received",
   PATIENT_PHOTO_FILED: "patient_photo_filed",
   PATIENT_PHOTO_REJECTED: "patient_photo_rejected",
+  // Aarogya auto-register — a new sender's name captured → a real customers row
+  // created (or filled) with a generated customer_code. Phone-free: logs the
+  // customer_id, source, is_new_row, and which best-effort fields were filled.
+  CUSTOMER_REGISTERED: "customer_registered",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];

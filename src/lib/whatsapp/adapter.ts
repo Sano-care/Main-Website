@@ -83,6 +83,10 @@ import {
   executeSurfaceCarehubBenefits,
 } from "@/lib/whatsapp/slice5Executors";
 import {
+  executeRegisterCustomer,
+  type RegisterCustomerInput,
+} from "@/lib/whatsapp/customerRegisterExecutor";
+import {
   executeExplainRecord,
   executeFetchPulseRecords,
   executeUploadToPulseVault,
@@ -682,6 +686,17 @@ export async function handleInboundMessage(
           break;
         case "surface_carehub_benefits":
           toolPatientMsg = await executeSurfaceCarehubBenefits(identity);
+          break;
+        case "register_customer":
+          // SILENT side-effect: does NOT set toolPatientMsg, so the model's own
+          // natural reply (e.g. "Thanks, Rakesh!") stands — no save announcement.
+          // Phone comes from inbound.phone (injected), never the model's args.
+          await executeRegisterCustomer({
+            identity,
+            phone: inbound.phone,
+            conversationId: conversation.id,
+            input: call.input as unknown as RegisterCustomerInput,
+          });
           break;
         case "relay_to_patient":
           toolPatientMsg = await executeRelayToPatient(
