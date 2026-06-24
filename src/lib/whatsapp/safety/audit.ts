@@ -102,6 +102,10 @@ export const AuditEvent = {
   PATIENT_PHOTO_RECEIVED: "patient_photo_received",
   PATIENT_PHOTO_FILED: "patient_photo_filed",
   PATIENT_PHOTO_REJECTED: "patient_photo_rejected",
+  // Non-blocking flag: a name read off a saved doc didn't match the account
+  // owner / a named member. Quiet ops-review signal (priority p4); the save still
+  // happened. DPDP: boolean only, never the third-party name.
+  PATIENT_PHOTO_NAME_MISMATCH_FLAGGED: "patient_photo_name_mismatch_flagged",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];

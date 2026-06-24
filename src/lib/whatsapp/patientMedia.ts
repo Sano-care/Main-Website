@@ -178,7 +178,10 @@ export const NON_MEDICAL_REPLY =
   "That doesn't look like a medical document — if you have a prescription, lab report, or a clear photo of your medicine, send it over and I'll keep it on file.";
 export const UNCLEAR_REPLY =
   "I couldn't quite make that out — could you resend a clearer photo, or a PDF if you have one?";
-export const ANOMALY_REPLY =
-  "This looks like it belongs to someone who isn't on your account, so I can't save it here. If it's for you or a family member on your account, let me know whose it is.";
+// NOTE: the old identity-anomaly refusal was REMOVED (P0). A patient's own
+// document is never refused for an identity reason — a name mismatch is recorded
+// + flagged (non-blocking), never blocked. See patientMediaConsumer.
 export const NON_PDF_DOC_REPLY =
   "I can only read PDFs or clear photos — please send the prescription or report as a PDF or a photo.";
+export const TOO_LARGE_REPLY =
+  "That file's a bit too large for me to save (max 10 MB) — a single clearer page, or a smaller PDF, usually works.";

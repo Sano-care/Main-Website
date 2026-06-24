@@ -11,7 +11,10 @@
 
 const GRAPH_BASE = "https://graph.facebook.com";
 
-export const MAX_MEDIA_BYTES = 5 * 1024 * 1024; // 5 MB
+// 10 MB — aligned with documentVault's MAX_BYTES (the bucket + CHECK cap). The
+// prior 5 MB cap was STRICTER than the vault, so legitimate multi-page lab PDFs
+// (>5 MB) were rejected at classify time before they could ever be saved (P1).
+export const MAX_MEDIA_BYTES = 10 * 1024 * 1024; // 10 MB
 export const ALLOWED_MEDIA_MIME = new Set([
   "image/jpeg",
   "image/png",
