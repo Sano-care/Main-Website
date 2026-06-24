@@ -70,7 +70,7 @@ function customerIdOf(identity: Identity): string | null {
 }
 
 export async function runPatientMediaTurn(
-  args: { raw: unknown; identity: Identity },
+  args: { raw: unknown; identity: Identity; prefetched?: Awaited<ReturnType<typeof fetchInboundMedia>> },
   deps: MediaConsumerDeps = {},
 ): Promise<MediaTurnResult> {
   const fetchMedia = deps.fetchMedia ?? fetchInboundMedia;
@@ -79,7 +79,9 @@ export async function runPatientMediaTurn(
   const ref = mediaRefFromRaw(args.raw);
   if (!ref) return { handled: false, reply: null, audits: [] };
 
-  const media = await fetchMedia(ref.mediaId);
+  // Reuse bytes the adapter already fetched (for the ops-media copy) — no double
+  // fetch. Falls back to fetching when not supplied (e.g. unit tests).
+  const media = args.prefetched ?? (await fetchMedia(ref.mediaId));
   if (!media.ok) {
     // Guarded refusal, NO vision call. Distinguish OVERSIZED (honest size message)
     // from WRONG-TYPE (.docx etc.) — a valid PDF no longer hits the "send a PDF"

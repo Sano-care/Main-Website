@@ -141,7 +141,39 @@ function MessageBubble({
               [{item.contentType}]
             </span>
           )}
-          {item.content}
+          {item.contentType === "image" || item.contentType === "document" ? (
+            item.opsMediaId ? (
+              item.contentType === "image" ? (
+                // Inline render via the ops-only signed-URL route (302 → short-
+                // lived signed URL on the private ops-media bucket). Plain <img>
+                // (not next/image): the source is an authed redirect, not an
+                // optimizable static asset.
+                <a href={`/api/ops/media/${item.opsMediaId}`} target="_blank" rel="noreferrer">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/ops/media/${item.opsMediaId}`}
+                    alt="inbound media"
+                    className="mt-1 max-h-64 rounded-lg ring-1 ring-slate-200"
+                  />
+                </a>
+              ) : (
+                <a
+                  href={`/api/ops/media/${item.opsMediaId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs font-medium underline"
+                >
+                  Open document ↗
+                </a>
+              )
+            ) : (
+              <span className="text-xs italic opacity-60">
+                media expired (not retained beyond 3 days)
+              </span>
+            )
+          ) : (
+            item.content
+          )}
         </div>
         <div
           className={

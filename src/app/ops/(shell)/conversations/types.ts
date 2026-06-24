@@ -48,6 +48,11 @@ export interface MessageItem {
   model: string | null;
   tokensOut: number | null;
   createdAt: string;
+  /** ops_media.id for a stored inbound image/document, viewable via
+   *  /api/ops/media/[id]. null = none stored or already purged (>3 days). */
+  opsMediaId: string | null;
+  /** 'image' | 'document' when an ops-media item exists. */
+  mediaKind: string | null;
 }
 
 export interface AuditItem {

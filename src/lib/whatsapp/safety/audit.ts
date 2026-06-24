@@ -106,6 +106,11 @@ export const AuditEvent = {
   // owner / a named member. Quiet ops-review signal (priority p4); the save still
   // happened. DPDP: boolean only, never the third-party name.
   PATIENT_PHOTO_NAME_MISMATCH_FLAGGED: "patient_photo_name_mismatch_flagged",
+  // Ops media viewing + 3-day retention — inbound chat media persisted for ops
+  // viewing, viewed via signed URL, and purged after its TTL. Counts/ids only.
+  OPS_MEDIA_STORED: "ops_media_stored",
+  OPS_MEDIA_VIEWED: "ops_media_viewed",
+  OPS_MEDIA_PURGED: "ops_media_purged",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
