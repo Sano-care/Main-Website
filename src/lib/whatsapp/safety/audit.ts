@@ -106,6 +106,12 @@ export const AuditEvent = {
   // owner / a named member. Quiet ops-review signal (priority p4); the save still
   // happened. DPDP: boolean only, never the third-party name.
   PATIENT_PHOTO_NAME_MISMATCH_FLAGGED: "patient_photo_name_mismatch_flagged",
+  // Aarogya Medic Help-Mode Part 2 — a medic's on-duty selfie. VERIFIED: today's
+  // attendance row flipped to selfie_verified_at (the daily-wage gate; the trigger
+  // posts the wage). NO_CLOCKIN: a selfie arrived with no clock-in row for today.
+  // Phone-free (medic_id via identity + attendance_id / work_date in event_data).
+  MEDIC_SELFIE_VERIFIED: "medic_selfie_verified",
+  MEDIC_SELFIE_NO_CLOCKIN: "medic_selfie_no_clockin",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
