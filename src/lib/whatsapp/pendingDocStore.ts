@@ -51,6 +51,7 @@ export async function storePendingDocSave(
         mime: pending.mimeType,
         doc_type: pending.docType,
         customer_id: pending.customerId,
+        name_match: pending.nameMatch ?? null, // non-blocking identity flag, carried to the file step
       },
     },
   });
@@ -90,7 +91,7 @@ export async function loadOpenPendingDocSave(
     }
     if (r.event_type === AuditEvent.PATIENT_PHOTO_RECEIVED && r.event_data?.awaiting_save === true) {
       const p = r.event_data.pending as
-        | { media_id?: string; mime?: string; doc_type?: string; customer_id?: string }
+        | { media_id?: string; mime?: string; doc_type?: string; customer_id?: string; name_match?: boolean | null }
         | undefined;
       if (p?.media_id && p.mime && p.doc_type && p.customer_id) {
         return {
@@ -99,6 +100,7 @@ export async function loadOpenPendingDocSave(
           category: p.doc_type,
           docType: p.doc_type,
           customerId: p.customer_id,
+          nameMatch: p.name_match ?? null,
         };
       }
     }

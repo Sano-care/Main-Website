@@ -19,8 +19,8 @@ import {
   composeSaveAsk,
   NON_MEDICAL_REPLY,
   UNCLEAR_REPLY,
-  ANOMALY_REPLY,
   NON_PDF_DOC_REPLY,
+  TOO_LARGE_REPLY,
   docTypeLabel,
   type MediaClassification,
   type OwnerInfo,
@@ -36,6 +36,10 @@ export interface PendingDoc {
   category: string;
   docType: string;
   customerId: string;
+  /** Non-blocking identity flag carried to the file step: false = a name read off
+   *  the doc didn't match the owner or a named member; true = matched; null/absent
+   *  = no name detected (nothing to compare). NEVER blocks the save. */
+  nameMatch?: boolean | null;
 }
 
 export interface AuditLine {
@@ -77,11 +81,15 @@ export async function runPatientMediaTurn(
 
   const media = await fetchMedia(ref.mediaId);
   if (!media.ok) {
-    // mime_not_allowed (.docx etc.) / too_large → guarded refusal, NO vision call.
+    // Guarded refusal, NO vision call. Distinguish OVERSIZED (honest size message)
+    // from WRONG-TYPE (.docx etc.) — a valid PDF no longer hits the "send a PDF"
+    // line (P1: the cap now matches the vault's 10 MB; over that is a real refusal).
     const reply =
-      media.reason?.startsWith("mime_not_allowed") || media.reason === "too_large"
-        ? NON_PDF_DOC_REPLY
-        : "I got your file but couldn't open it — could you resend it?";
+      media.reason === "too_large" || media.reason === "too_large_actual"
+        ? TOO_LARGE_REPLY
+        : media.reason?.startsWith("mime_not_allowed")
+          ? NON_PDF_DOC_REPLY
+          : "I got your file but couldn't open it — could you resend it?";
     return {
       handled: true,
       reply,
@@ -124,21 +132,20 @@ export async function runPatientMediaTurn(
     };
   }
 
-  // Identity / anomaly gate (D3) — load the owner + family members.
+  // Identity check is NON-BLOCKING (founder: "if a patient asks to save, Aarogya
+  // saves — no questions asked, but always flag"). We compute name_match for the
+  // audit + mismatch flag at file time; we NEVER refuse a patient's own document
+  // for an identity reason. A name read off a doc is often a doctor/lab/hospital
+  // or a spelling variant — refusing on that blocked legitimate saves (P0).
   const { owner, members } = deps.loadOwner
     ? await deps.loadOwner(customerId)
     : { owner: { fullName: null }, members: [] };
   const ownership = assessOwnership(cls.visiblePersonName, owner, members);
-  if (ownership.anomaly) {
-    return {
-      handled: true,
-      reply: ANOMALY_REPLY,
-      audits: [
-        ...audits,
-        { event: AuditEvent.PATIENT_PHOTO_REJECTED, data: { reason: "identity_anomaly" } },
-      ],
-    };
-  }
+  const nameMatch: boolean | null = ownership.anomaly
+    ? false
+    : ownership.matched === "unchecked"
+      ? null // no name on the doc → nothing to compare, no flag
+      : true;
 
   // Genuine medical doc on this account → ASK before storing (D1, no silent storage).
   return {
@@ -151,6 +158,7 @@ export async function runPatientMediaTurn(
       category: cls.category,
       docType: cls.category,
       customerId,
+      nameMatch,
     },
   };
 }
@@ -230,14 +238,29 @@ export async function confirmPendingSave(
     };
   }
 
+  // Always record name_match on the file. On a mismatch, additionally emit the
+  // quiet, non-blocking flag (the "always flag" requirement). DPDP: boolean only
+  // — never persist the third-party name read off the doc.
+  const nameMatch = args.pending.nameMatch ?? null;
+  const filedAudits: AuditLine[] = [
+    {
+      event: AuditEvent.PATIENT_PHOTO_FILED,
+      data: { doc_id: result.documentId, doc_type: args.pending.docType, member_id: memberId, name_match: nameMatch },
+    },
+  ];
+  if (nameMatch === false) {
+    filedAudits.push({
+      event: AuditEvent.PATIENT_PHOTO_NAME_MISMATCH_FLAGGED,
+      // priority p4 = low-priority, non-blocking ops-review signal (queryable in
+      // audit_log). No escalations row / WhatsApp alert — that would be noisy and
+      // need a migration; this is the lightest mechanism per the brief (R5 "/audit").
+      data: { priority: "p4", name_match: false, doc_id: result.documentId },
+    });
+  }
+
   return {
     handled: true,
     reply: result.message,
-    audits: [
-      {
-        event: AuditEvent.PATIENT_PHOTO_FILED,
-        data: { doc_id: result.documentId, doc_type: args.pending.docType, member_id: memberId },
-      },
-    ],
+    audits: filedAudits,
   };
 }
