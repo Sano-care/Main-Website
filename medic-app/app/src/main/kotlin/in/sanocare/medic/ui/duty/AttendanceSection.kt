@@ -3,6 +3,7 @@ package `in`.sanocare.medic.ui.duty
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -24,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -169,6 +171,41 @@ fun AttendanceSection(modifier: Modifier = Modifier) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
+            }
+
+            // Medic payroll — post-clock-in selfie nudge. Set from the clock_in
+            // response; the daily wage only posts once ops/Aarogya verify the
+            // selfie, so we prompt the medic to send it on WhatsApp now.
+            state.selfiePrompt?.let { prompt ->
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = prompt.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Button(onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(prompt.waUrl))
+                                runCatching { context.startActivity(intent) }
+                                    .onFailure { Log.w(TAG, "Could not open WhatsApp", it) }
+                                vm.dismissSelfiePrompt()
+                            }) {
+                                Text("Send selfie on WhatsApp")
+                            }
+                            TextButton(onClick = vm::dismissSelfiePrompt) {
+                                Text("Later")
+                            }
+                        }
+                    }
+                }
             }
         }
     }

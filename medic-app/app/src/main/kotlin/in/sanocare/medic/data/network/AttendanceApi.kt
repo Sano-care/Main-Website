@@ -47,5 +47,14 @@ data class AttendanceActionRequest(
 data class AttendanceActionResponse(
     val open: AttendanceRow? = null,
     val last: AttendanceRow? = null,
+    // Medic payroll — the clock_in response carries a nudge to send the on-duty
+    // selfie to Aarogya (the daily-wage gate). Null on clock_out.
+    @SerialName("selfie_prompt") val selfiePrompt: SelfiePrompt? = null,
     val error: String? = null,
+)
+
+@Serializable
+data class SelfiePrompt(
+    val message: String,
+    @SerialName("wa_url") val waUrl: String,
 )
