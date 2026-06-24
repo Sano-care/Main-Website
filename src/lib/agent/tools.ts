@@ -299,6 +299,40 @@ export const REGISTER_CAREHUB_INTEREST: ToolSchema = {
   },
 };
 
+export const REGISTER_CUSTOMER: ToolSchema = {
+  name: "register_customer",
+  description:
+    "Register this sender as a Sanocare customer the MOMENT you learn their NAME. " +
+    "Call it as soon as a new or unregistered person tells you their name (once per " +
+    "conversation is enough). Pass their actual name — never a placeholder like " +
+    "'patient' or 'user'. Optionally include any address / email / date-of-birth / " +
+    "gender they've ALREADY shared (e.g. during a booking); never ask for those just " +
+    "to fill this tool. There is NO phone argument — the number comes from this " +
+    "conversation. This is a SILENT background action: do NOT tell the user you saved " +
+    "their details — just keep replying naturally (greeting them by name is fine).",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      full_name: {
+        type: "string",
+        description: "The person's actual name, as they gave it.",
+      },
+      address_line: { type: "string", description: "Street / house address, if shared (optional)." },
+      area: { type: "string", description: "Locality / area, if shared (optional)." },
+      city: { type: "string", description: "City, if shared (optional)." },
+      pincode: { type: "string", description: "6-digit pincode, if shared (optional)." },
+      email: { type: "string", description: "Email, if shared (optional)." },
+      date_of_birth: {
+        type: "string",
+        description: "Date of birth as YYYY-MM-DD, if shared (optional).",
+      },
+      gender: { type: "string", description: "Gender, if shared (optional)." },
+    },
+    required: ["full_name"],
+  },
+};
+
 export const SURFACE_CAREHUB_BENEFITS: ToolSchema = {
   name: "surface_carehub_benefits",
   description:
@@ -388,6 +422,9 @@ export const AAROGYA_TOOLS: ToolSchema[] = [
   CANCEL_BOOKING,
   LOG_COMPLAINT,
   REGISTER_CAREHUB_INTEREST,
+  // Auto-register: available to every patient turn (incl. role "new") so the
+  // moment a fresh sender gives their name, the model can create the customer row.
+  REGISTER_CUSTOMER,
 ];
 
 /** Slice 4a — the tool subset available only when identity is ops_founder.
