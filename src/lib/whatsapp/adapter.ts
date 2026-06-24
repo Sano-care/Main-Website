@@ -73,6 +73,12 @@ import {
   executeRegisterCarehubInterest,
   executeSurfaceCarehubBenefits,
 } from "@/lib/whatsapp/slice5Executors";
+import {
+  executeExplainRecord,
+  executeFetchPulseRecords,
+  executeUploadToPulseVault,
+} from "@/lib/whatsapp/pulseExecutors";
+import { mediaRefFromRaw } from "@/lib/whatsapp/media";
 import { findLatestUnexpiredRelayDraft } from "@/lib/whatsapp/opsRouter";
 import { generateResponse } from "@/lib/agent/client";
 import {
@@ -337,7 +343,13 @@ export async function handleInboundMessage(
   const text =
     inbound.type === "location" && locationPin
       ? synthesizeLocationText(locationPin)
-      : (inbound.text ?? "");
+      : inbound.type === "document"
+        ? // Slice C: a registered customer's document is routed into the agent
+          // turn (see vaultDoc below) so they can save it to their Pulse vault.
+          // This synthesised hint is only consumed on that path; non-registered
+          // senders are handled by the photo consumer and never reach here.
+          "[The patient just shared a document (such as a report or prescription). If they'd like to keep it, offer to save it to their Pulse records with upload_to_pulse_vault. Never read or interpret the file's contents.]"
+        : (inbound.text ?? "");
 
   const isButtonReply =
     inbound.type === "button" ||
@@ -368,6 +380,17 @@ export async function handleInboundMessage(
   // value threaded through the handler IS the conversation-scoped cache.
   const identity = await resolveIdentity(inbound.phone);
   const auditIdentity = identityForAudit(identity);
+
+  // Slice C — vault seam. A REGISTERED customer (has a customerId) who sends a
+  // DOCUMENT is routed into the agent turn instead of the photo-ack path, so the
+  // model can save it to their Pulse vault via upload_to_pulse_vault. Images
+  // (selfies, symptom photos) and all non-registered senders keep the existing
+  // vision-ack flow untouched. NOTE: this is the only change to the
+  // marketing-session-owned media path — coordinate before merge.
+  const vaultDoc =
+    inbound.type === "document" &&
+    identity.role === "customer" &&
+    Boolean(identity.customerId);
   const audit = (
     eventType: (typeof AuditEvent)[keyof typeof AuditEvent],
     eventData?: Record<string, unknown>,
@@ -406,7 +429,8 @@ export async function handleInboundMessage(
   // selfie/vault consumers are separate PRs.
   if (
     (inbound.type === "image" || inbound.type === "document") &&
-    isPatientRole(identity)
+    isPatientRole(identity) &&
+    !vaultDoc
   ) {
     await audit(AuditEvent.MEDIA_RECEIVED, { type: inbound.type });
     let outcome: Awaited<ReturnType<typeof runPatientPhotoConsumer>>;
@@ -442,12 +466,14 @@ export async function handleInboundMessage(
       has_address: Boolean(locationPin.address ?? locationPin.name),
     });
     // falls through to the agent turn below with the synthesised `text`.
-  } else if (inbound.type !== "text") {
-    // ---- Non-text (and not a handled button / location): log-and-skip ----
+  } else if (inbound.type !== "text" && !vaultDoc) {
+    // ---- Non-text (and not a handled button / location / vault doc): skip ----
     log.info("non-text message recorded; no handler", inbound.type);
     await audit(AuditEvent.UNSUPPORTED_MESSAGE_RECEIVED, { type: inbound.type });
     return;
   }
+  // vaultDoc: a registered customer's document falls through to the agent turn
+  // with the synthesised hint in `text` + the Pulse tools available.
 
   // ---- Pre-check a: EMERGENCY (deterministic, highest priority) ----------
   if (emergency.matched) {
@@ -686,6 +712,31 @@ export async function handleInboundMessage(
             identity,
             conversationId: conversation.id,
             input: call.input as unknown as { question?: string },
+          });
+          break;
+        // ---- Pulse Records tools (Slice C, identity adapter-injected) --------
+        case "fetch_pulse_records":
+          toolPatientMsg = await executeFetchPulseRecords({
+            identity,
+            conversationId: conversation.id,
+            input: call.input as unknown as { categories?: string[]; member_id?: string },
+          });
+          break;
+        case "upload_to_pulse_vault":
+          toolPatientMsg = await executeUploadToPulseVault({
+            identity,
+            conversationId: conversation.id,
+            // The document is the current inbound message's media; the model
+            // never supplies it. Null on a text turn (executor asks for the file).
+            media: mediaRefFromRaw(inbound.raw),
+            input: call.input as unknown as { doc_type?: string; label?: string; member_id?: string },
+          });
+          break;
+        case "explain_record":
+          toolPatientMsg = await executeExplainRecord({
+            identity,
+            conversationId: conversation.id,
+            input: call.input as unknown as { record_id?: string },
           });
           break;
         default:
