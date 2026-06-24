@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase-server", () => ({ supabaseAdmin: {} }));
 
 import {
@@ -108,12 +109,17 @@ describe("detectSaveIntent", () => {
 const pending: PendingDoc = { mediaId: "img-1", mimeType: "image/jpeg", category: "lab_report", docType: "lab_report", customerId: "cust-1" };
 
 // The one canonical writer (#97 uploadToPulseVault) — mock shape for injection.
-const okUpload = () => vi.fn(async (_a: { identity: Identity; media: { mediaId: string }; docType?: string; memberId?: string | null }) => ({ ok: true as const, message: "Saved your lab report to your Sanocare records 📄.", documentId: "doc-1" }));
+type UploadArg = { identity: Identity; media: { mediaId: string }; docType?: string; memberId?: string | null };
+const okUpload = () =>
+  vi.fn(async (a: UploadArg) => {
+    void a;
+    return { ok: true as const, message: "Saved your lab report to your Sanocare records 📄.", documentId: "doc-1" };
+  });
 
 describe("confirmPendingSave (consent → canonical uploadToPulseVault)", () => {
   it("(d) YES → files via uploadToPulseVault scoped by identity, one FILED audit", async () => {
     const upload = okUpload();
-    const res = await confirmPendingSave({ pending, text: "yes save it", identity: customer }, { upload });
+    const res = await confirmPendingSave({ pending, text: "yes save it", identity: customer }, { upload: upload as never });
     expect(upload).toHaveBeenCalledTimes(1);
     expect(upload.mock.calls[0][0]).toMatchObject({ identity: customer, media: { mediaId: "img-1" }, docType: "lab_report", memberId: null });
     expect(res.reply).toMatch(/saved/i);
@@ -122,7 +128,7 @@ describe("confirmPendingSave (consent → canonical uploadToPulseVault)", () => 
 
   it("NO → does not store", async () => {
     const upload = vi.fn();
-    const res = await confirmPendingSave({ pending, text: "no don't", identity: customer }, { upload });
+    const res = await confirmPendingSave({ pending, text: "no don't", identity: customer }, { upload: upload as never });
     expect(upload).not.toHaveBeenCalled();
     expect(res.handled).toBe(true);
     expect(res.reply).toMatch(/won't save/i);
@@ -130,7 +136,7 @@ describe("confirmPendingSave (consent → canonical uploadToPulseVault)", () => 
 
   it("unclear → not handled (falls through to normal flow), nothing stored", async () => {
     const upload = vi.fn();
-    const res = await confirmPendingSave({ pending, text: "what does my cholesterol mean?", identity: customer }, { upload });
+    const res = await confirmPendingSave({ pending, text: "what does my cholesterol mean?", identity: customer }, { upload: upload as never });
     expect(res.handled).toBe(false);
     expect(upload).not.toHaveBeenCalled();
   });
@@ -139,18 +145,21 @@ describe("confirmPendingSave (consent → canonical uploadToPulseVault)", () => 
     const upload = okUpload();
     await confirmPendingSave(
       { pending, text: "yes, this is rohan's", identity: customer, members: [{ id: "m1", name: "Rohan Sharma" }] },
-      { upload },
+      { upload: upload as never },
     );
     expect(upload.mock.calls[0][0].memberId).toBe("m1");
   });
 });
 
 describe("(f) never writes medications / vital_readings from media", () => {
-  it("consumer + writer source reference no clinical-extraction tables", () => {
+  it("the patient-media modules reference no clinical-extraction tables", () => {
     const root = process.cwd();
-    const consumer = readFileSync(path.resolve(root, "src/lib/whatsapp/patientMediaConsumer.ts"), "utf8");
-    const writer = readFileSync(path.resolve(root, "src/lib/pulse/documentsWrite.ts"), "utf8");
-    for (const src of [consumer, writer]) {
+    for (const rel of [
+      "src/lib/whatsapp/patientMediaConsumer.ts",
+      "src/lib/whatsapp/patientMedia.ts",
+      "src/lib/whatsapp/pendingDocStore.ts",
+    ]) {
+      const src = readFileSync(path.resolve(root, rel), "utf8");
       expect(src).not.toMatch(/medications/);
       expect(src).not.toMatch(/vital_readings/);
     }
