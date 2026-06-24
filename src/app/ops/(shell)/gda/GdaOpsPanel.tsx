@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { GdaOnboardingForm } from "./GdaOnboardingForm";
 
 // GDA Phase 1 (M064) — ops create/schedule panel. Three forms that POST to the
 // /api/ops/gda/* endpoints (the source of truth + where validation lives) and
@@ -14,6 +15,14 @@ type Gda = {
   phone: string;
   insulin_med_cleared: boolean;
   active: boolean;
+  shift_preference: string | null;
+};
+
+const SHIFT_PREF_LABEL: Record<string, string> = {
+  day12: "12h Day",
+  night12: "12h Night",
+  full24: "24h",
+  any: "Any",
 };
 
 function Field({
@@ -75,7 +84,7 @@ export function GdaOpsPanel({ gdas }: { gdas: Gda[] }) {
           [
             ["deployment", "New deployment"],
             ["shift", "Schedule shift"],
-            ["gda", "New GDA"],
+            ["gda", "Onboard GDA"],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -110,56 +119,7 @@ export function GdaOpsPanel({ gdas }: { gdas: Gda[] }) {
         </div>
       )}
 
-      {tab === "gda" && (
-        <form
-          className="grid grid-cols-2 gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const f = new FormData(e.currentTarget);
-            submit(
-              "/api/ops/gda/staff",
-              {
-                full_name: f.get("full_name"),
-                phone: f.get("phone"),
-                qualification: f.get("qualification"),
-                insulin_med_cleared: f.get("insulin_med_cleared") === "on",
-              },
-              "GDA created.",
-            );
-          }}
-        >
-          <Field label="Full name">
-            <input name="full_name" className={inputCls} required />
-          </Field>
-          <Field label="Phone (+91…)">
-            <input
-              name="phone"
-              className={inputCls}
-              placeholder="+919999999999"
-              required
-            />
-          </Field>
-          <Field label="Qualification">
-            <select name="qualification" className={inputCls} required>
-              <option value="GNM">GNM</option>
-              <option value="B.Sc Nursing">B.Sc Nursing</option>
-            </select>
-          </Field>
-          <label className="mt-6 flex items-center gap-2 text-xs text-slate-700">
-            <input type="checkbox" name="insulin_med_cleared" />
-            Cleared for insulin / medication (D2a)
-          </label>
-          <div className="col-span-2">
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              Create GDA
-            </button>
-          </div>
-        </form>
-      )}
+      {tab === "gda" && <GdaOnboardingForm />}
 
       {tab === "deployment" && (
         <form
@@ -270,6 +230,9 @@ export function GdaOpsPanel({ gdas }: { gdas: Gda[] }) {
               {gdas.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.full_name} ({g.phone})
+                  {g.shift_preference
+                    ? ` · prefers ${SHIFT_PREF_LABEL[g.shift_preference] ?? g.shift_preference}`
+                    : ""}
                 </option>
               ))}
             </select>
