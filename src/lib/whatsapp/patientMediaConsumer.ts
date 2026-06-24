@@ -26,7 +26,7 @@ import {
   type OwnerInfo,
   type MemberInfo,
 } from "@/lib/whatsapp/patientMedia";
-import { fileDocumentToVault } from "@/lib/pulse/documentsWrite";
+import { uploadToPulseVault } from "@/lib/pulse/documentVault";
 import { AuditEvent, type AuditEventType } from "@/lib/whatsapp/safety/audit";
 import type { Identity } from "@/lib/whatsapp/identity";
 
@@ -181,19 +181,20 @@ export interface ConfirmResult {
 }
 
 export interface ConfirmDeps {
-  fetchMedia?: typeof fetchInboundMedia;
-  fileDoc?: typeof fileDocumentToVault;
+  /** The ONE canonical vault writer (#97). Injectable for tests. */
+  upload?: typeof uploadToPulseVault;
   loadMembers?: (customerId: string) => Promise<MemberInfo[]>;
 }
 
 /**
- * Resolve a pending save against the patient's reply. The caller supplies the
- * open `pending` (loaded from the audit_log pending-store) and the reply text.
- * YES → re-fetch the media by id + file to the vault (consented). NO/unclear →
- * don't store.
+ * Resolve a pending save against the patient's reply. YES → file via the single
+ * canonical writer uploadToPulseVault (#97) — which re-fetches the media by id,
+ * guards mime/size, uploads + inserts pulse_documents (source='whatsapp_aarogya')
+ * + emits PULSE_VAULT_UPLOADED. We add the consumer-flow PATIENT_PHOTO_FILED
+ * event on top. NO/unclear → don't store (no silent storage; DPDP).
  */
 export async function confirmPendingSave(
-  args: { pending: PendingDoc; text: string; members?: MemberInfo[] },
+  args: { pending: PendingDoc; text: string; identity: Identity; members?: MemberInfo[] },
   deps: ConfirmDeps = {},
 ): Promise<ConfirmResult> {
   const intent = detectSaveIntent(args.text);
@@ -209,45 +210,33 @@ export async function confirmPendingSave(
     return { handled: false, reply: null, audits: [] };
   }
 
-  const fetchMedia = deps.fetchMedia ?? fetchInboundMedia;
-  const fileDoc = deps.fileDoc ?? fileDocumentToVault;
-
-  const media = await fetchMedia(args.pending.mediaId);
-  if (!media.ok) {
-    return {
-      handled: true,
-      reply: "I tried to save it but couldn't re-open the file — could you resend it?",
-      audits: [{ event: AuditEvent.PATIENT_PHOTO_REJECTED, data: { reason: `refetch_${media.reason}` } }],
-    };
-  }
+  const upload = deps.upload ?? uploadToPulseVault;
 
   // Member attribution from the patient's OWN words only (D2); else Self.
   const members = args.members ?? (deps.loadMembers ? await deps.loadMembers(args.pending.customerId) : []);
   const memberId = memberFromText(args.text, members);
 
-  const filed = await fileDoc({
-    customerId: args.pending.customerId,
-    memberId,
+  const result = await upload({
+    identity: args.identity,
+    media: { mediaId: args.pending.mediaId, mime: args.pending.mimeType },
     docType: args.pending.docType,
-    mimeType: media.mimeType,
-    bytes: media.bytes,
-    source: "aarogya",
+    memberId,
   });
-  if (!filed.ok) {
+  if (!result.ok) {
     return {
       handled: true,
-      reply: "I couldn't save it just now — please try sending it again in a moment.",
-      audits: [{ event: AuditEvent.PATIENT_PHOTO_REJECTED, data: { reason: `file_${filed.error}` } }],
+      reply: result.message,
+      audits: [{ event: AuditEvent.PATIENT_PHOTO_REJECTED, data: { reason: `file_${result.reason}` } }],
     };
   }
 
   return {
     handled: true,
-    reply: "Saved to your Sanocare records 📄. You can see it anytime under Your Records.",
+    reply: result.message,
     audits: [
       {
         event: AuditEvent.PATIENT_PHOTO_FILED,
-        data: { doc_id: filed.docId, doc_type: args.pending.docType, member_id: memberId },
+        data: { doc_id: result.documentId, doc_type: args.pending.docType, member_id: memberId },
       },
     ],
   };

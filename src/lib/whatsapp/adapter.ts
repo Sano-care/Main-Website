@@ -42,7 +42,16 @@ import {
   type ConversationRow,
 } from "@/lib/whatsapp/db";
 import { runAgentTurn } from "@/lib/agent/orchestrator";
-import { isPatientRole, runPatientPhotoConsumer } from "@/lib/whatsapp/photoConsumer";
+import { isPatientRole } from "@/lib/whatsapp/photoConsumer";
+import {
+  runPatientMediaTurn,
+  confirmPendingSave,
+} from "@/lib/whatsapp/patientMediaConsumer";
+import {
+  loadDocOwnerAndMembers,
+  storePendingDocSave,
+  loadOpenPendingDocSave,
+} from "@/lib/whatsapp/pendingDocStore";
 import { sendOpsAlert } from "@/lib/whatsapp/opsAlert";
 import {
   locationFromRaw,
@@ -343,13 +352,7 @@ export async function handleInboundMessage(
   const text =
     inbound.type === "location" && locationPin
       ? synthesizeLocationText(locationPin)
-      : inbound.type === "document"
-        ? // Slice C: a registered customer's document is routed into the agent
-          // turn (see vaultDoc below) so they can save it to their Pulse vault.
-          // This synthesised hint is only consumed on that path; non-registered
-          // senders are handled by the photo consumer and never reach here.
-          "[The patient just shared a document (such as a report or prescription). If they'd like to keep it, offer to save it to their Pulse records with upload_to_pulse_vault. Never read or interpret the file's contents.]"
-        : (inbound.text ?? "");
+      : (inbound.text ?? "");
 
   const isButtonReply =
     inbound.type === "button" ||
@@ -381,16 +384,11 @@ export async function handleInboundMessage(
   const identity = await resolveIdentity(inbound.phone);
   const auditIdentity = identityForAudit(identity);
 
-  // Slice C — vault seam. A REGISTERED customer (has a customerId) who sends a
-  // DOCUMENT is routed into the agent turn instead of the photo-ack path, so the
-  // model can save it to their Pulse vault via upload_to_pulse_vault. Images
-  // (selfies, symptom photos) and all non-registered senders keep the existing
-  // vision-ack flow untouched. NOTE: this is the only change to the
-  // marketing-session-owned media path — coordinate before merge.
-  const vaultDoc =
-    inbound.type === "document" &&
-    identity.role === "customer" &&
-    Boolean(identity.customerId);
+  // Reconciliation (#98 ↔ #97): the deterministic patient-media consumer below
+  // OWNS inbound patient image AND document (classify → identity-gate → consent
+  // → file via the canonical uploadToPulseVault). #97's "registered document →
+  // agent turn (upload_to_pulse_vault tool)" auto-routing is removed so a doc is
+  // never double-handled; the tool itself stays for text-driven save requests.
   const audit = (
     eventType: (typeof AuditEvent)[keyof typeof AuditEvent],
     eventData?: Record<string, unknown>,
@@ -429,23 +427,27 @@ export async function handleInboundMessage(
   // selfie/vault consumers are separate PRs.
   if (
     (inbound.type === "image" || inbound.type === "document") &&
-    isPatientRole(identity) &&
-    !vaultDoc
+    isPatientRole(identity)
   ) {
     await audit(AuditEvent.MEDIA_RECEIVED, { type: inbound.type });
-    let outcome: Awaited<ReturnType<typeof runPatientPhotoConsumer>>;
+    let outcome: Awaited<ReturnType<typeof runPatientMediaTurn>>;
     try {
-      outcome = await runPatientPhotoConsumer({ raw: inbound.raw });
+      outcome = await runPatientMediaTurn(
+        { raw: inbound.raw, identity },
+        { loadOwner: (cid) => loadDocOwnerAndMembers(cid) },
+      );
     } catch (err) {
-      log.error("patient photo consumer threw", maskPhone(inbound.phone), err);
-      outcome = { handled: true, reply: null, visionType: null, reason: "consumer_threw" };
+      log.error("patient media consumer threw", maskPhone(inbound.phone), err);
+      outcome = {
+        handled: true,
+        reply: "I got your file but couldn't process it just now — tell me what you need and I'll help.",
+        audits: [],
+      };
     }
     if (outcome.handled) {
-      await audit(AuditEvent.VISION_ANALYZED, {
-        type: inbound.type,
-        vision_type: outcome.visionType,
-        reason: outcome.reason ?? null,
-      });
+      for (const a of outcome.audits) await audit(a.event, a.data);
+      // Stash the pending save (audit_log) so the patient's YES/NO next turn files it.
+      if (outcome.pending) await storePendingDocSave(conversation.id, outcome.pending);
       if (outcome.reply) {
         await dispatchTextMessage({
           conversationId: conversation.id,
@@ -466,14 +468,12 @@ export async function handleInboundMessage(
       has_address: Boolean(locationPin.address ?? locationPin.name),
     });
     // falls through to the agent turn below with the synthesised `text`.
-  } else if (inbound.type !== "text" && !vaultDoc) {
-    // ---- Non-text (and not a handled button / location / vault doc): skip ----
+  } else if (inbound.type !== "text") {
+    // ---- Non-text (and not a handled button / location / patient media): skip ----
     log.info("non-text message recorded; no handler", inbound.type);
     await audit(AuditEvent.UNSUPPORTED_MESSAGE_RECEIVED, { type: inbound.type });
     return;
   }
-  // vaultDoc: a registered customer's document falls through to the agent turn
-  // with the synthesised hint in `text` + the Pulse tools available.
 
   // ---- Pre-check a: EMERGENCY (deterministic, highest priority) ----------
   if (emergency.matched) {
@@ -518,6 +518,37 @@ export async function handleInboundMessage(
     await setOptOut({ conversationId: conversation.id, leadId: conversation.lead_id });
     await audit(AuditEvent.OPT_OUT_SET, { keyword: optOut.keyword });
     return;
+  }
+
+  // ---- Patient doc save confirmation (consented vault filing) -------------
+  // If a medical doc is awaiting the patient's YES/NO, resolve it here before
+  // the normal agent flow. YES → file to the vault; NO → discard; unclear →
+  // fall through (never store on ambiguity — DPDP).
+  if (inbound.type === "text" && isPatientRole(identity)) {
+    // Defensive: a pending-store read failure must never break the patient's
+    // message — fall through to the normal flow.
+    const pending = await loadOpenPendingDocSave(conversation.id).catch((err) => {
+      log.error("loadOpenPendingDocSave failed", maskPhone(inbound.phone), err);
+      return null;
+    });
+    if (pending) {
+      const res = await confirmPendingSave(
+        { pending, text, identity },
+        { loadMembers: async (cid) => (await loadDocOwnerAndMembers(cid)).members },
+      );
+      if (res.handled) {
+        for (const a of res.audits) await audit(a.event, a.data);
+        if (res.reply) {
+          await dispatchTextMessage({
+            conversationId: conversation.id,
+            phone: inbound.phone,
+            body: res.reply,
+          });
+        }
+        return;
+      }
+      // unclear → fall through to the normal agent flow.
+    }
   }
 
   // ---- Slice 4a: per-turn language detection + Tier-1 context load -------

@@ -107,38 +107,41 @@ describe("detectSaveIntent", () => {
 
 const pending: PendingDoc = { mediaId: "img-1", mimeType: "image/jpeg", category: "lab_report", docType: "lab_report", customerId: "cust-1" };
 
-describe("confirmPendingSave (consent)", () => {
-  it("(d) YES → files exactly one doc scoped to the sender, one FILED audit", async () => {
-    const fileDoc = vi.fn(async (_a: { customerId: string; docType: string; memberId: string | null }) => ({ ok: true as const, docId: "doc-1" }));
-    const res = await confirmPendingSave({ pending, text: "yes save it" }, { fetchMedia: okMedia("image/jpeg"), fileDoc });
-    expect(fileDoc).toHaveBeenCalledTimes(1);
-    expect(fileDoc.mock.calls[0][0]).toMatchObject({ customerId: "cust-1", docType: "lab_report", memberId: null });
-    expect(res.reply).toMatch(/saved to your sanocare records/i);
+// The one canonical writer (#97 uploadToPulseVault) — mock shape for injection.
+const okUpload = () => vi.fn(async (_a: { identity: Identity; media: { mediaId: string }; docType?: string; memberId?: string | null }) => ({ ok: true as const, message: "Saved your lab report to your Sanocare records 📄.", documentId: "doc-1" }));
+
+describe("confirmPendingSave (consent → canonical uploadToPulseVault)", () => {
+  it("(d) YES → files via uploadToPulseVault scoped by identity, one FILED audit", async () => {
+    const upload = okUpload();
+    const res = await confirmPendingSave({ pending, text: "yes save it", identity: customer }, { upload });
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(upload.mock.calls[0][0]).toMatchObject({ identity: customer, media: { mediaId: "img-1" }, docType: "lab_report", memberId: null });
+    expect(res.reply).toMatch(/saved/i);
     expect(res.audits.some((a) => a.event === "patient_photo_filed")).toBe(true);
   });
 
   it("NO → does not store", async () => {
-    const fileDoc = vi.fn();
-    const res = await confirmPendingSave({ pending, text: "no don't" }, { fetchMedia: okMedia("image/jpeg"), fileDoc });
-    expect(fileDoc).not.toHaveBeenCalled();
+    const upload = vi.fn();
+    const res = await confirmPendingSave({ pending, text: "no don't", identity: customer }, { upload });
+    expect(upload).not.toHaveBeenCalled();
     expect(res.handled).toBe(true);
     expect(res.reply).toMatch(/won't save/i);
   });
 
   it("unclear → not handled (falls through to normal flow), nothing stored", async () => {
-    const fileDoc = vi.fn();
-    const res = await confirmPendingSave({ pending, text: "what does my cholesterol mean?" }, { fetchMedia: okMedia("image/jpeg"), fileDoc });
+    const upload = vi.fn();
+    const res = await confirmPendingSave({ pending, text: "what does my cholesterol mean?", identity: customer }, { upload });
     expect(res.handled).toBe(false);
-    expect(fileDoc).not.toHaveBeenCalled();
+    expect(upload).not.toHaveBeenCalled();
   });
 
   it("(e) member attribution only from explicit naming", async () => {
-    const fileDoc = vi.fn(async (_a: { customerId: string; docType: string; memberId: string | null }) => ({ ok: true as const, docId: "d" }));
+    const upload = okUpload();
     await confirmPendingSave(
-      { pending, text: "yes, this is rohan's", members: [{ id: "m1", name: "Rohan Sharma" }] },
-      { fetchMedia: okMedia("image/jpeg"), fileDoc },
+      { pending, text: "yes, this is rohan's", identity: customer, members: [{ id: "m1", name: "Rohan Sharma" }] },
+      { upload },
     );
-    expect(fileDoc.mock.calls[0][0].memberId).toBe("m1");
+    expect(upload.mock.calls[0][0].memberId).toBe("m1");
   });
 });
 
