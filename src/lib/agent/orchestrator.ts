@@ -21,6 +21,7 @@ import {
 } from "@/lib/agent/config";
 import {
   AAROGYA_CAREHUB_TOOLS,
+  AAROGYA_LAB_TOOLS,
   AAROGYA_MEDIC_TOOLS,
   AAROGYA_OPS_TOOLS,
   AAROGYA_PULSE_TOOLS,
@@ -50,7 +51,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
   // gets the Pulse Records tools merged in. Everyone else sees only
   // AAROGYA_TOOLS. Withholding the schema is defense-in-depth on top of the
   // executor-level identity gates (which re-check customerId).
-  const tools =
+  const baseTools =
     input.identity?.role === "ops_founder"
       ? [...AAROGYA_TOOLS, ...AAROGYA_OPS_TOOLS]
       : input.identity?.role === "medic"
@@ -62,6 +63,13 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
           : input.identity?.role === "customer"
             ? [...AAROGYA_TOOLS, ...AAROGYA_PULSE_TOOLS]
             : AAROGYA_TOOLS;
+
+  // Lab catalogue lookup is for PATIENTS only (customer + new) — never advertised
+  // to medic / doctor / ops (medic gets its own set; ops/doctor would have it via
+  // AAROGYA_TOOLS, so append it here only for patient roles instead).
+  const isPatient =
+    input.identity?.role === "customer" || input.identity?.role === "new";
+  const tools = isPatient ? [...baseTools, ...AAROGYA_LAB_TOOLS] : baseTools;
 
   // Build the message list: capped history (oldest → newest) + the new user turn.
   const trimmed = input.history.slice(-HISTORY_LIMIT);
