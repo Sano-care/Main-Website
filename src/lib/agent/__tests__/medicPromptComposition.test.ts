@@ -12,7 +12,7 @@ import {
 } from "@/lib/agent/tools";
 import type { Identity } from "@/lib/whatsapp/identity";
 
-const ctx = { patient_name: null, last_booking: null };
+const ctx = { patient_name: null, last_booking: null, carehub: null, language: null };
 const medic: Identity = { role: "medic", medicId: "m1", fullName: "Asha Devi" };
 const newcomer: Identity = { role: "new" };
 
@@ -27,6 +27,8 @@ describe("getSystemPromptForTurn — medic mode", () => {
     const prompt = getSystemPromptForTurn(medic, {
       patient_name: "Ravi Patient",
       last_booking: null,
+      carehub: null,
+      language: null,
     });
     // The patient's name would only appear via renderContextBlock, which medic
     // mode skips. So a medic turn never carries patient context.

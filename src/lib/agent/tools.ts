@@ -409,3 +409,109 @@ export const AAROGYA_MEDIC_TOOLS: ToolSchema[] = [
   FETCH_BOOKING_CONTEXT,
   LOG_MEDIC_QUERY,
 ];
+
+// ---------------------------------------------------------------------------
+// Pulse Records — Aarogya tools (Slice C). Merged into the tool list only for
+// role === 'customer' (the executors re-gate on customerId). Read/explain/save
+// of the patient's OWN records — never another account's, never diagnostic.
+// ---------------------------------------------------------------------------
+
+export const FETCH_PULSE_RECORDS: ToolSchema = {
+  name: "fetch_pulse_records",
+  description:
+    "Look up THIS patient's own Sanocare records to answer questions like 'show " +
+    "me my last prescription', 'what were my recent vitals', 'my bookings', 'my " +
+    "conditions / allergies', or 'what reports do I have'. Auto-scoped to the " +
+    "caller's own account — there is NO patient-identifier argument. Optionally " +
+    "narrow to certain categories, or to one family member (get their id from " +
+    "get_family_members first). Read-only: report what's on file, never interpret " +
+    "a value medically.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      categories: {
+        type: "array",
+        items: {
+          type: "string",
+          enum: [
+            "bookings",
+            "prescriptions",
+            "vitals",
+            "medications",
+            "conditions",
+            "allergies",
+            "documents",
+          ],
+        },
+        description: "Optional subset of record types. Omit for everything.",
+      },
+      member_id: {
+        type: "string",
+        description:
+          "Optional family-member id to scope to. Omit for the account holder. " +
+          "Vitals and medications are account-level and only returned for the holder.",
+      },
+    },
+    required: [],
+  },
+};
+
+export const UPLOAD_TO_PULSE_VAULT: ToolSchema = {
+  name: "upload_to_pulse_vault",
+  description:
+    "Save the document the patient JUST sent on WhatsApp (a lab report, " +
+    "prescription, scan, or discharge summary — photo or PDF) into their private " +
+    "Pulse records vault. Call this ONLY right after they share a file and want it " +
+    "kept. Auto-scoped to the caller's own account. NEVER read or interpret the " +
+    "file's contents.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      doc_type: {
+        type: "string",
+        enum: ["lab_report", "prescription", "imaging", "discharge_summary", "other"],
+        description: "Best guess at what the file is, from what the patient said. Default 'other'.",
+      },
+      label: {
+        type: "string",
+        description: "Optional short human label, e.g. 'CBC report June'.",
+      },
+      member_id: {
+        type: "string",
+        description: "Optional family-member id if the document is about a member; omit for the account holder.",
+      },
+    },
+    required: [],
+  },
+};
+
+export const EXPLAIN_RECORD: ToolSchema = {
+  name: "explain_record",
+  description:
+    "Explain, in plain language, what a term or reading on one of the patient's " +
+    "OWN records means (e.g. 'what does eGFR mean', 'what is this SpO₂ reading'). " +
+    "Read/explain ONLY: you must NEVER diagnose, prescribe, suggest a dose, or say " +
+    "whether a value is normal/high/low/good/bad. For any 'is this okay / what " +
+    "should I do' question, the answer is a teleconsult with a Sanocare MBBS " +
+    "doctor. record_id must be an id from a prior fetch_pulse_records result.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      record_id: {
+        type: "string",
+        description: "The id of one of THIS patient's records (from fetch_pulse_records).",
+      },
+    },
+    required: ["record_id"],
+  },
+};
+
+/** Pulse Records tools (Slice C) — appended to AAROGYA_TOOLS for customers. */
+export const AAROGYA_PULSE_TOOLS: ToolSchema[] = [
+  FETCH_PULSE_RECORDS,
+  UPLOAD_TO_PULSE_VAULT,
+  EXPLAIN_RECORD,
+];

@@ -39,7 +39,19 @@ vi.mock("@/lib/supabase-server", () => ({
       };
       let orderDesc = true;
       let limitN = 5;
-      const query: Record<string, unknown> = {
+      type AuditQueryBuilder = {
+        select: () => AuditQueryBuilder;
+        eq: (col: string, val: string) => AuditQueryBuilder;
+        in: (col: string, vals: string[]) => Promise<{ data: AuditRow[]; error: null }>;
+        order: (col: string, opts: { ascending: boolean }) => AuditQueryBuilder;
+        limit: (n: number) => Promise<{ data: AuditRow[]; error: null }>;
+        insert: (row: Omit<AuditRow, "id" | "created_at">) => {
+          select: () => {
+            single: () => Promise<{ data: { id: string; created_at: string }; error: null }>;
+          };
+        };
+      };
+      const query: AuditQueryBuilder = {
         select: () => query,
         eq: (col: string, val: string) => {
           if (col === "conversation_id") filter.conversation_id = val;
@@ -104,7 +116,7 @@ vi.mock("@/lib/supabase-server", () => ({
         ...query,
         insert: (row: Omit<AuditRow, "id" | "created_at">) => {
           // Detect bare insert from writeAudit (no chained .select())
-          const insertResult = query.insert(row) as ReturnType<typeof query.insert>;
+          const insertResult = (query.insert as (r: unknown) => Record<string, unknown>)(row);
           // Also return a thenable so `await supabaseAdmin.from('audit_log').insert(...)` resolves.
           return Object.assign(insertResult, {
             then: (resolve: (v: { error: null }) => unknown) => {
@@ -181,7 +193,7 @@ describe("routeInbound", () => {
 });
 
 describe("escalateToOpsPhone", () => {
-  it("sends aarogya_lead_alert with the 6 body params to FOUNDER_OPS_PHONE", async () => {
+  it("sends aarogya_lead_alert with the 6 body params to the Ops number", async () => {
     delete process.env.MY_PERSONAL_WHATSAPP;
     await escalateToOpsPhone({
       conversationId: "conv-1",
@@ -195,7 +207,7 @@ describe("escalateToOpsPhone", () => {
     });
     expect(h.templateSends).toHaveLength(1);
     const sent = h.templateSends[0];
-    expect(sent.to).toBe("919760059900");
+    expect(sent.to).toBe("919760059900"); // hardened default = Ops number, no env required
     expect(sent.templateName).toBe("aarogya_lead_alert");
     expect(sent.bodyParams).toEqual([
       "Rajesh Kumar",

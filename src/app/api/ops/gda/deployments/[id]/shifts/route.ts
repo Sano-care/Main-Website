@@ -107,10 +107,14 @@ export async function POST(
     );
   }
 
-  // Assignee must be a GDA (not a nurse).
+  // Assignee must be a GDA (not a nurse). Pull the per-kind default rates so a
+  // shift's payout can default from the GDA's wage-by-shift-kind when no explicit
+  // override is given.
   const { data: gda, error: gdaErr } = await supabaseAdmin
     .from("medics")
-    .select("id, staff_type, active")
+    .select(
+      "id, staff_type, active, rate_day12_paise, rate_night12_paise, rate_full24_paise",
+    )
     .eq("id", gdaId)
     .maybeSingle();
   if (gdaErr) {
@@ -125,6 +129,17 @@ export async function POST(
       { error: "not_a_gda", detail: "Assignee must be staff_type='gda'." },
       { status: 400 },
     );
+  }
+
+  // Default the payout from the GDA's shift-kind rate when not explicitly set
+  // (overridable per shift via payout_rupees). day12→rate_day12, etc.
+  if (payoutPaise === null) {
+    const rateByKind: Record<string, number | null> = {
+      day12: gda.rate_day12_paise ?? null,
+      night12: gda.rate_night12_paise ?? null,
+      full24: gda.rate_full24_paise ?? null,
+    };
+    payoutPaise = rateByKind[shiftKind] ?? null;
   }
 
   const { data: created, error: insertErr } = await supabaseAdmin

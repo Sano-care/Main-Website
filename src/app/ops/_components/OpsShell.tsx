@@ -13,6 +13,7 @@ import {
   Building2,
   Stethoscope,
   HeartPulse,
+  HandHeart,
   Microscope,
   Settings,
   LogOut,
@@ -44,6 +45,7 @@ const NAV: NavItem[] = [
   // admin sees Add Medic / edit / deactivate. No NAV-level role filter
   // (page-level gate is sufficient).
   { href: "/ops/medics", label: "Medics", icon: HeartPulse },
+  { href: "/ops/gda", label: "GDA / Attendants", icon: HandHeart },
   { href: "/ops/prescriptions", label: "Prescriptions", icon: FileText },
   { href: "/ops/labs", label: "Labs", icon: Microscope },
   { href: "/ops/settings", label: "Settings", icon: Settings },

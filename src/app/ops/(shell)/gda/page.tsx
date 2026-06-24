@@ -49,7 +49,7 @@ export default async function GdaOpsPage() {
       .limit(200),
     supabaseAdmin
       .from("medics")
-      .select("id, full_name, phone, insulin_med_cleared, active")
+      .select("id, full_name, phone, insulin_med_cleared, active, shift_preference")
       .eq("staff_type", "gda")
       .order("full_name", { ascending: true }),
   ]);
@@ -61,6 +61,7 @@ export default async function GdaOpsPage() {
     phone: string;
     insulin_med_cleared: boolean;
     active: boolean;
+    shift_preference: string | null;
   }>;
 
   // Shift rollup per deployment (count + done + posted payout).

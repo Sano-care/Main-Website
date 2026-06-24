@@ -70,3 +70,58 @@ export async function generateResponse(req: ClaudeRequest): Promise<ClaudeRespon
     tokensOut: msg.usage.output_tokens,
   };
 }
+
+export interface VisionRequest {
+  model: string;
+  system: string;
+  /** The instruction that accompanies the image (the "task prompt"). */
+  userText: string;
+  image: { bytes: Uint8Array; mimeType: string };
+  maxTokens: number;
+}
+
+/**
+ * Single vision call — sends ONE image (or PDF) block + a text instruction and
+ * returns the concatenated text reply. The only SDK surface for vision; the
+ * brain (vision.ts) depends on this interface, not the SDK. Haiku 4.5 and
+ * Sonnet 4.6 both support vision. Image bytes go as a base64 source block;
+ * PDFs use a document block (Meta sends prescriptions/reports as either).
+ */
+export async function generateVisionJson(
+  req: VisionRequest,
+): Promise<{ text: string }> {
+  const base64 = Buffer.from(req.image.bytes).toString("base64");
+  const mediaBlock: Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam =
+    req.image.mimeType === "application/pdf"
+      ? {
+          type: "document",
+          source: { type: "base64", media_type: "application/pdf", data: base64 },
+        }
+      : {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: req.image.mimeType as
+              | "image/jpeg"
+              | "image/png"
+              | "image/gif"
+              | "image/webp",
+            data: base64,
+          },
+        };
+
+  const msg = await getClient().messages.create({
+    model: req.model,
+    max_tokens: req.maxTokens,
+    system: req.system,
+    messages: [
+      { role: "user", content: [mediaBlock, { type: "text", text: req.userText }] },
+    ],
+  });
+
+  let text = "";
+  for (const block of msg.content) {
+    if (block.type === "text") text += block.text;
+  }
+  return { text };
+}

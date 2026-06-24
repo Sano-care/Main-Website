@@ -15,6 +15,11 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// The real adapter now transitively imports the Pulse Records libs (Slice C),
+// which carry `import "server-only"` — a no-op outside a bundler. Stub it so the
+// module graph loads in the node test env.
+vi.mock("server-only", () => ({}));
+
 const rec = vi.hoisted(() => ({
   log: [] as string[],
   replies: [] as string[],
@@ -120,6 +125,16 @@ vi.mock("@/lib/whatsapp/db", () => ({
     rec.optOuts += 1;
     rec.optOutFlag = true;
     rec.log.push(`  opt_out SET (permanent)`);
+  }),
+  // Conversation-quality hotfix helpers — neutral defaults so existing scenarios
+  // behave unchanged (no burst to coalesce, no recent outbound to dedupe, no
+  // prior escalation, turnCount 4 < stalled cap).
+  loadUnansweredInbound: vi.fn(async () => []),
+  loadRecentOutbound: vi.fn(async () => []),
+  getEscalationStatus: vi.fn(async () => null),
+  setConversationServiceIntent: vi.fn(async () => {}),
+  setConversationState: vi.fn(async (_id: string, s: string) => {
+    rec.log.push(`  state → ${s}`);
   }),
 }));
 
@@ -317,7 +332,7 @@ describe("Aarogya inbound chain — simulated end-to-end", () => {
     expect(rec.templateSends).toHaveLength(1);
     const t = rec.templateSends[0];
     expect(t.templateName).toBe("aarogya_lead_alert");
-    expect(t.to).toBe(process.env.MY_PERSONAL_WHATSAPP ?? t.to); // ops number from env (unset in sim → undefined path logged)
+    expect(t.to).toBe("919760059900"); // hardened opsAlert: override from env, stripped to digits
     expect(t.bodyParams[0]).toBe("Mrs Sushma Sharma");
     expect(t.bodyParams[2]).toBe("Home Visit"); // doctor_visit → display
     expect(t.bodyParams[5]).toBe("+" + PATIENT); // patient mobile E.164

@@ -29,16 +29,38 @@ import {
   createEscalation,
   dispatchTextMessage,
   findOrCreateConversation,
+  getEscalationStatus,
   loadHistory,
+  loadRecentOutbound,
+  loadUnansweredInbound,
   markEscalationAttended,
   recordInboundMessage,
-  setEscalationProviderMessageId,
+  setConversationServiceIntent,
+  setConversationState,
   setOptOut,
   updateLeadFields,
   type ConversationRow,
 } from "@/lib/whatsapp/db";
-import { sendTemplateMessage } from "@/lib/whatsapp/cloud-api";
 import { runAgentTurn } from "@/lib/agent/orchestrator";
+import { isPatientRole } from "@/lib/whatsapp/photoConsumer";
+import {
+  runPatientMediaTurn,
+  confirmPendingSave,
+} from "@/lib/whatsapp/patientMediaConsumer";
+import {
+  loadDocOwnerAndMembers,
+  storePendingDocSave,
+  loadOpenPendingDocSave,
+} from "@/lib/whatsapp/pendingDocStore";
+import { sendOpsAlert } from "@/lib/whatsapp/opsAlert";
+import {
+  locationFromRaw,
+  synthesizeLocationText,
+  coalesceInboundText,
+  isDuplicateReply,
+  shouldAutoEscalateStalled,
+  nextState,
+} from "@/lib/whatsapp/conversationQuality";
 import { HISTORY_LIMIT } from "@/lib/agent/config";
 import { isSanocareOpen } from "@/lib/agent/officeHours";
 import { formatIST } from "@/lib/time/formatIST";
@@ -60,6 +82,12 @@ import {
   executeRegisterCarehubInterest,
   executeSurfaceCarehubBenefits,
 } from "@/lib/whatsapp/slice5Executors";
+import {
+  executeExplainRecord,
+  executeFetchPulseRecords,
+  executeUploadToPulseVault,
+} from "@/lib/whatsapp/pulseExecutors";
+import { mediaRefFromRaw } from "@/lib/whatsapp/media";
 import { findLatestUnexpiredRelayDraft } from "@/lib/whatsapp/opsRouter";
 import { generateResponse } from "@/lib/agent/client";
 import {
@@ -75,7 +103,6 @@ import {
   type WebhookEnvelope,
 } from "@/types/whatsapp";
 
-const LEAD_ALERT_TEMPLATE = "aarogya_lead_alert";
 const AGENT_FALLBACK =
   "Sorry, I'm having a brief issue on my end. Our team will reach out " +
   "shortly, or you can call +91 97119 77782 anytime. — Aarogya";
@@ -84,6 +111,10 @@ const AGENT_FALLBACK =
 // Ops handoff (WhatsApp template to the founder's number). NOT gated by the
 // patient opt_out (it's a send to OPS, a different number). Best-effort.
 // ---------------------------------------------------------------------------
+// Thin wrapper — the hardened single source of truth lives in opsAlert.ts
+// (correct target, field fallbacks, retry + alternate number, loud OPS_ALERT_FAILED).
+// Kept as a named function so the medic executor's injected OpsHandoffFn and the
+// other in-adapter call sites keep the same signature.
 async function sendOpsHandoff(args: {
   conversationId: string;
   escalationId: string | null;
@@ -94,36 +125,7 @@ async function sendOpsHandoff(args: {
   context: string;
   patientMobile: string;
 }): Promise<void> {
-  const opsNumber = process.env.MY_PERSONAL_WHATSAPP;
-  if (!opsNumber) {
-    log.warn("MY_PERSONAL_WHATSAPP unset — ops handoff skipped");
-    return;
-  }
-  try {
-    const { providerMessageId } = await sendTemplateMessage({
-      to: opsNumber,
-      templateName: LEAD_ALERT_TEMPLATE,
-      bodyParams: [
-        args.patientName,
-        args.patientAge,
-        args.serviceDisplay,
-        args.location,
-        args.context,
-        args.patientMobile,
-      ],
-      quickReplyPayload: args.escalationId ?? undefined,
-    });
-    if (args.escalationId && providerMessageId) {
-      await setEscalationProviderMessageId(args.escalationId, providerMessageId);
-    }
-    await writeAudit({
-      conversationId: args.conversationId,
-      eventType: AuditEvent.OPS_ALERT_SENT,
-      eventData: { escalation_id: args.escalationId, wamid: providerMessageId },
-    });
-  } catch (err) {
-    log.error("ops handoff template send failed", err);
-  }
+  await sendOpsAlert(args);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +156,10 @@ async function executeEscalateToOps(
     patient_relationship: input.patient_relationship,
     ...(isQualified ? { qualified_at: new Date().toISOString() } : {}),
   });
+
+  // C5 — write the detected service onto the conversation (was NULL on every
+  // row), so triage state is queryable and the thread stops looking un-triaged.
+  await setConversationServiceIntent(conversation.id, input.service_intent);
 
   const escalationId = await createEscalation({
     conversationId: conversation.id,
@@ -337,7 +343,16 @@ export async function handleInboundMessage(
   inbound: NormalizedInbound,
 ): Promise<void> {
   const { conversation } = await findOrCreateConversation(inbound.phone);
-  const text = inbound.text ?? "";
+
+  // C2 — location pin: don't drop it. Synthesise a structured note so the agent
+  // turn acknowledges the pin and keeps qualifying (a shared location used to be
+  // silently dropped, killing every in-person booking at the location step).
+  const locationPin =
+    inbound.type === "location" ? locationFromRaw(inbound.raw) : null;
+  const text =
+    inbound.type === "location" && locationPin
+      ? synthesizeLocationText(locationPin)
+      : (inbound.text ?? "");
 
   const isButtonReply =
     inbound.type === "button" ||
@@ -368,6 +383,12 @@ export async function handleInboundMessage(
   // value threaded through the handler IS the conversation-scoped cache.
   const identity = await resolveIdentity(inbound.phone);
   const auditIdentity = identityForAudit(identity);
+
+  // Reconciliation (#98 ↔ #97): the deterministic patient-media consumer below
+  // OWNS inbound patient image AND document (classify → identity-gate → consent
+  // → file via the canonical uploadToPulseVault). #97's "registered document →
+  // agent turn (upload_to_pulse_vault tool)" auto-routing is removed so a doc is
+  // never double-handled; the tool itself stays for text-driven save requests.
   const audit = (
     eventType: (typeof AuditEvent)[keyof typeof AuditEvent],
     eventData?: Record<string, unknown>,
@@ -399,8 +420,56 @@ export async function handleInboundMessage(
     return;
   }
 
-  // ---- Non-text (and not a handled button): log-and-skip -----------------
-  if (inbound.type !== "text") {
+  // ---- Patient photo acknowledgment (media + vision foundation, Consumer 0)
+  // A patient sending an image/document: fetch + ONE vision call (characterise,
+  // never interpret) → a compliant ack. Storage-light; never throws. Other
+  // identities (doctor/medic/ops) fall through to the non-text drop below —
+  // selfie/vault consumers are separate PRs.
+  if (
+    (inbound.type === "image" || inbound.type === "document") &&
+    isPatientRole(identity)
+  ) {
+    await audit(AuditEvent.MEDIA_RECEIVED, { type: inbound.type });
+    let outcome: Awaited<ReturnType<typeof runPatientMediaTurn>>;
+    try {
+      outcome = await runPatientMediaTurn(
+        { raw: inbound.raw, identity },
+        { loadOwner: (cid) => loadDocOwnerAndMembers(cid) },
+      );
+    } catch (err) {
+      log.error("patient media consumer threw", maskPhone(inbound.phone), err);
+      outcome = {
+        handled: true,
+        reply: "I got your file but couldn't process it just now — tell me what you need and I'll help.",
+        audits: [],
+      };
+    }
+    if (outcome.handled) {
+      for (const a of outcome.audits) await audit(a.event, a.data);
+      // Stash the pending save (audit_log) so the patient's YES/NO next turn files it.
+      if (outcome.pending) await storePendingDocSave(conversation.id, outcome.pending);
+      if (outcome.reply) {
+        await dispatchTextMessage({
+          conversationId: conversation.id,
+          phone: inbound.phone,
+          body: outcome.reply,
+        });
+      }
+      return;
+    }
+    // Unhandled (no media ref) — fall through to the non-text drop.
+  }
+
+  // ---- Location pin → record + flow into the agent turn (C2) --------------
+  if (inbound.type === "location" && locationPin) {
+    await audit(AuditEvent.LOCATION_RECEIVED, {
+      lat: locationPin.lat,
+      lng: locationPin.lng,
+      has_address: Boolean(locationPin.address ?? locationPin.name),
+    });
+    // falls through to the agent turn below with the synthesised `text`.
+  } else if (inbound.type !== "text") {
+    // ---- Non-text (and not a handled button / location / patient media): skip ----
     log.info("non-text message recorded; no handler", inbound.type);
     await audit(AuditEvent.UNSUPPORTED_MESSAGE_RECEIVED, { type: inbound.type });
     return;
@@ -451,6 +520,37 @@ export async function handleInboundMessage(
     return;
   }
 
+  // ---- Patient doc save confirmation (consented vault filing) -------------
+  // If a medical doc is awaiting the patient's YES/NO, resolve it here before
+  // the normal agent flow. YES → file to the vault; NO → discard; unclear →
+  // fall through (never store on ambiguity — DPDP).
+  if (inbound.type === "text" && isPatientRole(identity)) {
+    // Defensive: a pending-store read failure must never break the patient's
+    // message — fall through to the normal flow.
+    const pending = await loadOpenPendingDocSave(conversation.id).catch((err) => {
+      log.error("loadOpenPendingDocSave failed", maskPhone(inbound.phone), err);
+      return null;
+    });
+    if (pending) {
+      const res = await confirmPendingSave(
+        { pending, text, identity },
+        { loadMembers: async (cid) => (await loadDocOwnerAndMembers(cid)).members },
+      );
+      if (res.handled) {
+        for (const a of res.audits) await audit(a.event, a.data);
+        if (res.reply) {
+          await dispatchTextMessage({
+            conversationId: conversation.id,
+            phone: inbound.phone,
+            body: res.reply,
+          });
+        }
+        return;
+      }
+      // unclear → fall through to the normal agent flow.
+    }
+  }
+
   // ---- Slice 4a: per-turn language detection + Tier-1 context load -------
   // Patient turns: detect + persist language so ops + relay drafts can mirror.
   // Ops turns: skip the language write (we don't want ops's English overriding
@@ -475,6 +575,13 @@ export async function handleInboundMessage(
   const isOpen = isSanocareOpen(officeNow);
   const nowIstLabel = formatIST(officeNow, "datetime");
 
+  // C3 — coalesce a rapid burst: if more than one inbound message is unanswered
+  // since the last bot reply, run ONE turn over the combined text. A single
+  // message (the common case) uses the effective text as-is (handles location).
+  const unanswered = await loadUnansweredInbound(conversation.id);
+  const combinedText =
+    unanswered.length > 1 ? coalesceInboundText(unanswered) : text;
+
   let reply = "";
   let toolCalls: { name: string; input: Record<string, unknown> }[] = [];
   let model = "";
@@ -484,7 +591,7 @@ export async function handleInboundMessage(
     const res = await runAgentTurn({
       conversationId: conversation.id,
       channel: "whatsapp",
-      userText: text,
+      userText: combinedText,
       history,
       turnCount,
       emergencyPreCheckFired: false,
@@ -638,6 +745,31 @@ export async function handleInboundMessage(
             input: call.input as unknown as { question?: string },
           });
           break;
+        // ---- Pulse Records tools (Slice C, identity adapter-injected) --------
+        case "fetch_pulse_records":
+          toolPatientMsg = await executeFetchPulseRecords({
+            identity,
+            conversationId: conversation.id,
+            input: call.input as unknown as { categories?: string[]; member_id?: string },
+          });
+          break;
+        case "upload_to_pulse_vault":
+          toolPatientMsg = await executeUploadToPulseVault({
+            identity,
+            conversationId: conversation.id,
+            // The document is the current inbound message's media; the model
+            // never supplies it. Null on a text turn (executor asks for the file).
+            media: mediaRefFromRaw(inbound.raw),
+            input: call.input as unknown as { doc_type?: string; label?: string; member_id?: string },
+          });
+          break;
+        case "explain_record":
+          toolPatientMsg = await executeExplainRecord({
+            identity,
+            conversationId: conversation.id,
+            input: call.input as unknown as { record_id?: string },
+          });
+          break;
         default:
           log.warn("unknown tool call ignored", call.name);
       }
@@ -653,16 +785,61 @@ export async function handleInboundMessage(
     else if (escalateCall) reply = "Got it — I've got everything I need. Our team will reach you shortly.";
   }
   if (reply) {
-    await dispatchTextMessage({
-      conversationId: conversation.id,
-      phone: inbound.phone,
-      body: reply,
-      safetyFlags: { agent: true, model },
-    });
+    // C3 — debounce backstop: drop a near-duplicate of a very recent reply (a
+    // concurrent turn over the same burst already answered). Kills the observed
+    // "two near-identical replies" bug without a turn-lock migration.
+    const recentOut = await loadRecentOutbound(conversation.id);
+    if (isDuplicateReply(reply, recentOut)) {
+      await audit(AuditEvent.DUPLICATE_REPLY_SUPPRESSED, { model });
+    } else {
+      await dispatchTextMessage({
+        conversationId: conversation.id,
+        phone: inbound.phone,
+        body: reply,
+        safetyFlags: { agent: true, model },
+      });
+    }
   }
 
   // opt-out flips the permanent gate AFTER the reply is dispatched.
   if (optOutCall) await executeSetOptOut(conversation);
+
+  // C4 — stalled-thread backstop: a thread looping past the cap with no booking
+  // or escalation auto-escalates ONCE (rate-limited by escalation_status). Runs
+  // before the state write-back so it doesn't regress an escalated state.
+  let escalatedThisTurn = escalateCall;
+  if (!escalatedThisTurn && !optOutCall) {
+    const escStatus = await getEscalationStatus(conversation.id);
+    if (shouldAutoEscalateStalled({ turnCount, escalationStatus: escStatus, escalatedThisTurn: false })) {
+      const escId = await createEscalation({
+        conversationId: conversation.id,
+        escalationType: "stalled_conversation",
+        priority: "p3",
+        newState: "escalated",
+      });
+      const ctx = `[STALLED ${turnCount} turns, no progress] ${combinedText.slice(0, 200)}`;
+      await sendOpsAlert({
+        conversationId: conversation.id,
+        escalationId: escId,
+        patientName: tier1.customer?.full_name ?? inbound.contactName ?? "—",
+        patientAge: "—",
+        serviceDisplay: "Stalled thread — needs a human",
+        location: "—",
+        context: isOpen ? ctx : `[AFTER-HOURS — follow up at 9 AM] ${ctx}`,
+        patientMobile: inbound.phone,
+      });
+      await audit(AuditEvent.STALLED_AUTO_ESCALATED, { turn_count: turnCount });
+      escalatedThisTurn = true;
+    }
+  }
+
+  // C5 — state write-back: advance greeting → qualifying once a real exchange
+  // happens (stops threads resetting to 'greeting'). Forward-only (nextState),
+  // skipped when an escalation/opt-out already advanced the state this turn.
+  if (!escalatedThisTurn && !optOutCall) {
+    const advanced = nextState(conversation.state, "qualifying");
+    if (advanced) await setConversationState(conversation.id, advanced);
+  }
 
   await audit(AuditEvent.AGENT_RESPONSE, {
     model,

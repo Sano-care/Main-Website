@@ -79,6 +79,29 @@ export const AuditEvent = {
   // Aarogya Medic Help-Mode Part 1 — medic-mode tool events.
   MEDIC_ESCALATION_TO_DOCTOR: "medic_escalation_to_doctor",
   MEDIC_QUERY: "medic_query",
+  // Aarogya media + vision foundation — inbound media fetch + vision analysis.
+  // Identity-aware (via the `identity` field), phone-free in event_data.
+  MEDIA_RECEIVED: "media_received",
+  VISION_ANALYZED: "vision_analyzed",
+  // Conversation-quality + escalation hotfix.
+  OPS_ALERT_FAILED: "ops_alert_failed", // every send attempt failed — loud, not swallowed
+  LOCATION_RECEIVED: "location_received", // patient shared a location pin (no longer dropped)
+  DUPLICATE_REPLY_SUPPRESSED: "duplicate_reply_suppressed", // debounce backstop fired
+  STALLED_AUTO_ESCALATED: "stalled_auto_escalated", // turn-cap backstop fired (once per thread)
+  // Pulse Records data layer (Slice A) — every read of a patient's own records
+  // (bookings/Rx/vitals/meds/conditions/allergies/documents) is audited,
+  // identity-aware, phone-free (counts only, never the record contents). DPDP.
+  PULSE_RECORDS_FETCHED: "pulse_records_fetched",
+  // Pulse Records Aarogya tools (Slice C) — a patient saving a document to
+  // their vault, and asking Aarogya to explain a term/reading. Identity-aware,
+  // phone-free (ids + types only, never the record/file contents). DPDP.
+  PULSE_VAULT_UPLOADED: "pulse_vault_uploaded",
+  PULSE_RECORD_EXPLAINED: "pulse_record_explained",
+  // Patient photo & PDF interpretation — media characterised, filed, or refused.
+  // Phone-free + clinical-content-free (only category + decision, never contents).
+  PATIENT_PHOTO_RECEIVED: "patient_photo_received",
+  PATIENT_PHOTO_FILED: "patient_photo_filed",
+  PATIENT_PHOTO_REJECTED: "patient_photo_rejected",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
