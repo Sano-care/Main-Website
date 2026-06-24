@@ -65,15 +65,35 @@ describe("runPatientMediaTurn", () => {
     expect(out.pending).toBeUndefined();
   });
 
-  it("(c) identity anomaly → not stored, refusal + rejected audit", async () => {
+  it("(P0) name mismatch is NON-BLOCKING → still asks to save, pending nameMatch=false, no anomaly refusal", async () => {
     const out = await runPatientMediaTurn({ raw: rawImage, identity: customer }, {
       fetchMedia: okMedia("image/jpeg"),
       classify: vi.fn(async () => cls({ category: "lab_report", visiblePersonName: "Anjali Verma" })),
       loadOwner: async () => ({ owner, members: [] }),
     });
-    expect(out.reply).toMatch(/belongs to someone who isn't on your account/i);
-    expect(out.pending).toBeUndefined();
-    expect(out.audits.some((a) => a.event === "patient_photo_rejected" && a.data.reason === "identity_anomaly")).toBe(true);
+    expect(out.reply).toMatch(/save it to your sanocare records/i); // asks, never refuses
+    expect(out.pending).toMatchObject({ docType: "lab_report", nameMatch: false });
+    expect(out.audits.some((a) => a.event === "patient_photo_rejected")).toBe(false); // no identity block
+  });
+
+  it("(P1) oversized → its own size message (not the wrong-type one), no vision call", async () => {
+    const classify = vi.fn();
+    const out = await runPatientMediaTurn({ raw: rawPdf, identity: customer }, {
+      fetchMedia: vi.fn(async () => ({ ok: false as const, reason: "too_large" })),
+      classify,
+    });
+    expect(classify).not.toHaveBeenCalled();
+    expect(out.reply).toMatch(/too large/i);
+    expect(out.reply).not.toMatch(/only read PDFs or clear photos/i);
+  });
+
+  it("matching-name doc → pending nameMatch=true", async () => {
+    const out = await runPatientMediaTurn({ raw: rawImage, identity: customer }, {
+      fetchMedia: okMedia("image/jpeg"),
+      classify: vi.fn(async () => cls({ category: "lab_report", visiblePersonName: "Sushma" })),
+      loadOwner: async () => ({ owner, members: [] }),
+    });
+    expect(out.pending).toMatchObject({ nameMatch: true });
   });
 
   it("(a) genuine medical doc, owner match → asks to save + sets pending", async () => {
@@ -124,6 +144,32 @@ describe("confirmPendingSave (consent → canonical uploadToPulseVault)", () => 
     expect(upload.mock.calls[0][0]).toMatchObject({ identity: customer, media: { mediaId: "img-1" }, docType: "lab_report", memberId: null });
     expect(res.reply).toMatch(/saved/i);
     expect(res.audits.some((a) => a.event === "patient_photo_filed")).toBe(true);
+  });
+
+  it("(P0) YES with name mismatch → STILL files + name_match=false + non-blocking flag", async () => {
+    const upload = okUpload();
+    const res = await confirmPendingSave(
+      { pending: { ...pending, nameMatch: false }, text: "yes it's mine, save it", identity: customer },
+      { upload: upload as never },
+    );
+    expect(upload).toHaveBeenCalledTimes(1); // mismatch never blocks the save
+    const filed = res.audits.find((a) => a.event === "patient_photo_filed");
+    expect(filed?.data.name_match).toBe(false);
+    const flag = res.audits.find((a) => a.event === "patient_photo_name_mismatch_flagged");
+    expect(flag).toBeTruthy();
+    expect(flag?.data.priority).toBe("p4"); // quiet, low-pri ops-review signal
+    // DPDP: no third-party name in the flag payload.
+    expect(JSON.stringify(flag?.data)).not.toMatch(/anjali|verma/i);
+  });
+
+  it("matching name → files, name_match=true, NO mismatch flag", async () => {
+    const upload = okUpload();
+    const res = await confirmPendingSave(
+      { pending: { ...pending, nameMatch: true }, text: "yes save it", identity: customer },
+      { upload: upload as never },
+    );
+    expect(res.audits.find((a) => a.event === "patient_photo_filed")?.data.name_match).toBe(true);
+    expect(res.audits.some((a) => a.event === "patient_photo_name_mismatch_flagged")).toBe(false);
   });
 
   it("NO → does not store", async () => {
