@@ -47,6 +47,7 @@ import {
   runPatientMediaTurn,
   confirmPendingSave,
 } from "@/lib/whatsapp/patientMediaConsumer";
+import { runMedicSelfieTurn } from "@/lib/whatsapp/medicSelfieConsumer";
 import {
   loadDocOwnerAndMembers,
   storePendingDocSave,
@@ -483,6 +484,34 @@ export async function handleInboundMessage(
     // Unhandled (no media ref) — fall through to the non-text drop.
   }
 
+  // ---- Medic on-duty selfie (Medic Help-Mode Part 2) ----------------------
+  // SIBLING of the patient media branch (one media path). A medic's image is
+  // their attendance selfie: set selfie_verified_at on today's row → the
+  // post_medic_earnings_on_attendance trigger posts the daily wage. medic_id is
+  // taken from the injected identity (never model input); the consumer re-gates
+  // role==='medic'. Storage-light, never throws.
+  if (inbound.type === "image" && identity.role === "medic") {
+    await audit(AuditEvent.MEDIA_RECEIVED, { type: inbound.type });
+    let selfie: Awaited<ReturnType<typeof runMedicSelfieTurn>>;
+    try {
+      selfie = await runMedicSelfieTurn({ raw: inbound.raw, identity });
+    } catch (err) {
+      log.error("medic selfie consumer threw", maskPhone(inbound.phone), err);
+      selfie = {
+        reply:
+          "I got your selfie but couldn't process it just now — please try again, or call +91 97119 77782.",
+        audits: [],
+      };
+    }
+    for (const a of selfie.audits) await audit(a.event, a.data);
+    await dispatchTextMessage({
+      conversationId: conversation.id,
+      phone: inbound.phone,
+      body: selfie.reply,
+    });
+    return;
+  }
+
   // ---- Location pin → record + flow into the agent turn (C2) --------------
   if (inbound.type === "location" && locationPin) {
     await audit(AuditEvent.LOCATION_RECEIVED, {
@@ -492,9 +521,18 @@ export async function handleInboundMessage(
     });
     // falls through to the agent turn below with the synthesised `text`.
   } else if (inbound.type !== "text") {
-    // ---- Non-text (and not a handled button / location / patient media): skip ----
-    log.info("non-text message recorded; no handler", inbound.type);
+    // ---- Non-text with no consumer (e.g. a document from a medic, media from a
+    // role with no handler). NEVER drop silently — a zero-output turn stalls the
+    // thread (the same fragility class as the Part 1 selfie defect that left
+    // conv a6ad2df7 stuck at 'greeting'). Send a minimal fallback so there is
+    // always exactly one outbound. ----
+    log.info("non-text message with no handler — sending fallback", inbound.type);
     await audit(AuditEvent.UNSUPPORTED_MESSAGE_RECEIVED, { type: inbound.type });
+    await dispatchTextMessage({
+      conversationId: conversation.id,
+      phone: inbound.phone,
+      body: "Thanks! I can't open that here — please send your message as text and I'll help right away.",
+    });
     return;
   }
 
