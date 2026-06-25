@@ -515,3 +515,31 @@ export const AAROGYA_PULSE_TOOLS: ToolSchema[] = [
   UPLOAD_TO_PULSE_VAULT,
   EXPLAIN_RECORD,
 ];
+
+// ---------------------------------------------------------------------------
+// Lab catalogue lookup (patient roles only — customer + new). READ-ONLY.
+// ---------------------------------------------------------------------------
+export const SEARCH_LAB_TESTS: ToolSchema = {
+  name: "search_lab_tests",
+  description:
+    "Look up a lab test in Sanocare's catalogue (Pathcore) by name and return its " +
+    "price, turnaround, sample type, and what it checks. Call when the patient asks " +
+    "the price/details of a SPECIFIC test (e.g. 'how much is a thyroid profile', " +
+    "'CBC cost', 'vitamin D test'). Do NOT call to recommend which test someone " +
+    "needs for a symptom or condition — that's a doctor's decision; offer a consult " +
+    "instead. Read-only: this never books anything.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      query: {
+        type: "string",
+        description: "The test name or keyword the patient asked about (e.g. 'thyroid profile', 'CBC', 'vitamin d').",
+      },
+    },
+    required: ["query"],
+  },
+};
+
+/** Patient-only lab tools (customer + new). Withheld from medic/doctor/ops. */
+export const AAROGYA_LAB_TOOLS: ToolSchema[] = [SEARCH_LAB_TESTS];

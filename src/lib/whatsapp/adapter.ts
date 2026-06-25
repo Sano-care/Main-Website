@@ -82,6 +82,7 @@ import {
   executeRegisterCarehubInterest,
   executeSurfaceCarehubBenefits,
 } from "@/lib/whatsapp/slice5Executors";
+import { executeSearchLabTests } from "@/lib/whatsapp/labExecutors";
 import {
   executeExplainRecord,
   executeFetchPulseRecords,
@@ -704,6 +705,12 @@ export async function handleInboundMessage(
           break;
         case "surface_carehub_benefits":
           toolPatientMsg = await executeSurfaceCarehubBenefits(identity);
+          break;
+        case "search_lab_tests":
+          toolPatientMsg = await executeSearchLabTests({
+            identity,
+            input: call.input as unknown as { query?: string },
+          });
           break;
         case "relay_to_patient":
           toolPatientMsg = await executeRelayToPatient(
