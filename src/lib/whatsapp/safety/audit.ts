@@ -112,6 +112,11 @@ export const AuditEvent = {
   // Phone-free (medic_id via identity + attendance_id / work_date in event_data).
   MEDIC_SELFIE_VERIFIED: "medic_selfie_verified",
   MEDIC_SELFIE_NO_CLOCKIN: "medic_selfie_no_clockin",
+  // Ops media viewing + 3-day retention — inbound chat media persisted for ops
+  // viewing, viewed via signed URL, and purged after its TTL. Counts/ids only.
+  OPS_MEDIA_STORED: "ops_media_stored",
+  OPS_MEDIA_VIEWED: "ops_media_viewed",
+  OPS_MEDIA_PURGED: "ops_media_purged",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];

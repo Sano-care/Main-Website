@@ -83,12 +83,14 @@ import {
   executeRegisterCarehubInterest,
   executeSurfaceCarehubBenefits,
 } from "@/lib/whatsapp/slice5Executors";
+import { executeSearchLabTests } from "@/lib/whatsapp/labExecutors";
 import {
   executeExplainRecord,
   executeFetchPulseRecords,
   executeUploadToPulseVault,
 } from "@/lib/whatsapp/pulseExecutors";
-import { mediaRefFromRaw } from "@/lib/whatsapp/media";
+import { mediaRefFromRaw, fetchInboundMedia } from "@/lib/whatsapp/media";
+import { persistInboundOpsMedia } from "@/lib/whatsapp/opsMediaStore";
 import { findLatestUnexpiredRelayDraft } from "@/lib/whatsapp/opsRouter";
 import { generateResponse } from "@/lib/agent/client";
 import {
@@ -365,7 +367,7 @@ export async function handleInboundMessage(
   const optOut =
     inbound.type === "text" ? detectOptOut(text) : { matched: false as const };
 
-  const { inserted } = await recordInboundMessage({
+  const { inserted, messageId } = await recordInboundMessage({
     conversationId: conversation.id,
     inbound,
     safetyFlags: {
@@ -431,10 +433,31 @@ export async function handleInboundMessage(
     isPatientRole(identity)
   ) {
     await audit(AuditEvent.MEDIA_RECEIVED, { type: inbound.type });
+    // Fetch the media bytes ONCE, here: persist the ops-viewing copy to ops-media
+    // (3-day TTL, so ops/founder can verify a selfie/report in /ops/conversations),
+    // then hand the SAME bytes to the consumer — no double fetch.
+    const mediaRef = mediaRefFromRaw(inbound.raw);
+    const prefetched = mediaRef ? await fetchInboundMedia(mediaRef.mediaId) : null;
+    if (mediaRef && prefetched?.ok) {
+      try {
+        await persistInboundOpsMedia({
+          messageId,
+          conversationId: conversation.id,
+          senderRole: "customer",
+          mediaKind: inbound.type === "document" ? "document" : "image",
+          mediaId: mediaRef.mediaId,
+          bytes: prefetched.bytes,
+          mimeType: prefetched.mimeType,
+        });
+      } catch (err) {
+        // Ops-media persistence is best-effort — never block the patient flow.
+        log.error("persistInboundOpsMedia failed", maskPhone(inbound.phone), err);
+      }
+    }
     let outcome: Awaited<ReturnType<typeof runPatientMediaTurn>>;
     try {
       outcome = await runPatientMediaTurn(
-        { raw: inbound.raw, identity },
+        { raw: inbound.raw, identity, prefetched: prefetched ?? undefined },
         { loadOwner: (cid) => loadDocOwnerAndMembers(cid) },
       );
     } catch (err) {
@@ -720,6 +743,12 @@ export async function handleInboundMessage(
           break;
         case "surface_carehub_benefits":
           toolPatientMsg = await executeSurfaceCarehubBenefits(identity);
+          break;
+        case "search_lab_tests":
+          toolPatientMsg = await executeSearchLabTests({
+            identity,
+            input: call.input as unknown as { query?: string },
+          });
           break;
         case "relay_to_patient":
           toolPatientMsg = await executeRelayToPatient(
