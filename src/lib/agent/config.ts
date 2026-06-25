@@ -14,6 +14,7 @@ import {
   LANGUAGE_MIRROR_RULE,
   SHORT_MESSAGE_RULE,
   CUSTOMER_REGISTERED_ADDENDUM,
+  NEW_SENDER_ADDENDUM,
   CUSTOMER_CAREHUB_ADDENDUM,
   OPS_MODE_ADDENDUM,
   MEDIC_ADDENDUM,
@@ -89,6 +90,16 @@ export function getSystemPromptForTurn(
   }
   if (identity.role === "customer" && identity.subRole === "carehub") {
     sections.push(CUSTOMER_CAREHUB_ADDENDUM);
+  }
+
+  // New / unregistered sender — guide natural name capture + the SILENT
+  // register_customer call. Covers a fully-unknown number ("new") and a
+  // booking-history-only customer with no customers row yet ("customer:new").
+  if (
+    identity.role === "new" ||
+    (identity.role === "customer" && identity.subRole === "new")
+  ) {
+    sections.push(NEW_SENDER_ADDENDUM);
   }
 
   if (identity.role === "ops_founder") {
