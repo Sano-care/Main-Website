@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 import {
   HIDDEN_AUDIT_TYPES,
   isWithinActiveWindow,
+  parseLocation,
   relativeTime,
   type AuditItem,
   type ConversationMeta,
@@ -129,7 +130,7 @@ export async function getThread(conversationId: string): Promise<ThreadItem[]> {
     supabaseAdmin
       .from("messages")
       .select(
-        "id, direction, content, content_type, claude_model_used, claude_tokens_out, created_at",
+        "id, direction, content, content_type, claude_model_used, claude_tokens_out, created_at, raw_payload",
       )
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true }),
@@ -154,6 +155,11 @@ export async function getThread(conversationId: string): Promise<ThreadItem[]> {
 
   const messageItems: MessageItem[] = (msgs ?? []).map((m) => {
     const om = mediaByMessage.get(m.id as string);
+    // Surface validated coords for location messages only; parseLocation
+    // returns null (→ all four fields null) for any other type or bad payload,
+    // so the bubble falls back to the plain "[location]" text.
+    const loc =
+      m.content_type === "location" ? parseLocation(m.raw_payload) : null;
     return {
       kind: "message",
       id: m.id as string,
@@ -165,6 +171,10 @@ export async function getThread(conversationId: string): Promise<ThreadItem[]> {
       createdAt: m.created_at as string,
       opsMediaId: om?.id ?? null,
       mediaKind: om?.kind ?? null,
+      latitude: loc?.latitude ?? null,
+      longitude: loc?.longitude ?? null,
+      locationName: loc?.name ?? null,
+      locationAddress: loc?.address ?? null,
     };
   });
 

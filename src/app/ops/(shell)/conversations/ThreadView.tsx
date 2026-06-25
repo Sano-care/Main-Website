@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Phone } from "lucide-react";
 
 import {
+  mapsSearchUrl,
   redactPhone,
   telHref,
   type ConversationMeta,
@@ -171,6 +172,18 @@ function MessageBubble({
                 media expired (not retained beyond 3 days)
               </span>
             )
+          ) : item.contentType === "location" &&
+            Number.isFinite(item.latitude) &&
+            Number.isFinite(item.longitude) ? (
+            // Coords validated server-side (parseLocation) AND re-checked here
+            // before building the URL — a missing/non-numeric pin falls through
+            // to the plain "[location]" text below, never a broken link.
+            <LocationContent
+              lat={item.latitude as number}
+              lng={item.longitude as number}
+              name={item.locationName}
+              address={item.locationAddress}
+            />
           ) : (
             item.content
           )}
@@ -187,6 +200,39 @@ function MessageBubble({
         </div>
       </div>
     </div>
+  );
+}
+
+// Patient-shared location: optional name/address, the coord pair as text, and a
+// "View on map" deep link (new tab). Lets ops see where the patient is so an
+// in-person visit can be booked.
+function LocationContent({
+  lat,
+  lng,
+  name,
+  address,
+}: {
+  lat: number;
+  lng: number;
+  name: string | null;
+  address: string | null;
+}) {
+  return (
+    <span className="block">
+      {name && <span className="block font-medium">{name}</span>}
+      {address && <span className="block text-xs opacity-80">{address}</span>}
+      <a
+        href={mapsSearchUrl(lat, lng)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-0.5 inline-block text-xs font-medium text-[#2B81FF] underline"
+      >
+        📍 View on map
+      </a>
+      <span className="mt-0.5 block font-mono text-[11px] opacity-70">
+        {lat}, {lng}
+      </span>
+    </span>
   );
 }
 
