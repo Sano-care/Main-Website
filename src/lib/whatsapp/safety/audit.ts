@@ -111,6 +111,11 @@ export const AuditEvent = {
   OPS_MEDIA_STORED: "ops_media_stored",
   OPS_MEDIA_VIEWED: "ops_media_viewed",
   OPS_MEDIA_PURGED: "ops_media_purged",
+  // Medication reminder cron — a dose reminder sent, or a due dose skipped
+  // (flag off / quiet hours / no phone / already sent). Phone-free; ids +
+  // reason only, never the medicine/dose contents beyond the template payload.
+  MEDICATION_REMINDER_SENT: "medication_reminder_sent",
+  MEDICATION_REMINDER_SKIPPED: "medication_reminder_skipped",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
