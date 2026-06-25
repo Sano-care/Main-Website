@@ -7,7 +7,7 @@ const single: Record<string, { data: unknown; error: unknown }> = {};
 
 function builder(table: string) {
   const b: Record<string, unknown> = {};
-  for (const m of ["select", "order", "limit", "in", "eq"]) b[m] = () => b;
+  for (const m of ["select", "order", "limit", "in", "eq", "is"]) b[m] = () => b;
   b.maybeSingle = () =>
     Promise.resolve(single[table] ?? { data: null, error: null });
   b.then = (resolve: (v: unknown) => void) =>

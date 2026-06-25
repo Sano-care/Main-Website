@@ -125,7 +125,7 @@ export async function listConversations(): Promise<ConversationRow[]> {
 
 /** Full time-sorted thread (messages + non-duplicate audit events). */
 export async function getThread(conversationId: string): Promise<ThreadItem[]> {
-  const [{ data: msgs }, { data: audits }] = await Promise.all([
+  const [{ data: msgs }, { data: audits }, { data: media }] = await Promise.all([
     supabaseAdmin
       .from("messages")
       .select(
@@ -138,18 +138,35 @@ export async function getThread(conversationId: string): Promise<ThreadItem[]> {
       .select("id, event_type, event_data, created_at")
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true }),
+    // Still-stored ops-media for this thread (purged rows excluded → render falls
+    // back to the "expired" placeholder).
+    supabaseAdmin
+      .from("ops_media")
+      .select("id, message_id, media_kind")
+      .eq("conversation_id", conversationId)
+      .is("deleted_at", null),
   ]);
 
-  const messageItems: MessageItem[] = (msgs ?? []).map((m) => ({
-    kind: "message",
-    id: m.id as string,
-    direction: m.direction as "inbound" | "outbound",
-    content: m.content as string,
-    contentType: m.content_type as string,
-    model: (m.claude_model_used as string | null) ?? null,
-    tokensOut: (m.claude_tokens_out as number | null) ?? null,
-    createdAt: m.created_at as string,
-  }));
+  const mediaByMessage = new Map<string, { id: string; kind: string }>();
+  for (const r of (media ?? []) as Array<{ id: string; message_id: string | null; media_kind: string }>) {
+    if (r.message_id) mediaByMessage.set(r.message_id, { id: r.id, kind: r.media_kind });
+  }
+
+  const messageItems: MessageItem[] = (msgs ?? []).map((m) => {
+    const om = mediaByMessage.get(m.id as string);
+    return {
+      kind: "message",
+      id: m.id as string,
+      direction: m.direction as "inbound" | "outbound",
+      content: m.content as string,
+      contentType: m.content_type as string,
+      model: (m.claude_model_used as string | null) ?? null,
+      tokensOut: (m.claude_tokens_out as number | null) ?? null,
+      createdAt: m.created_at as string,
+      opsMediaId: om?.id ?? null,
+      mediaKind: om?.kind ?? null,
+    };
+  });
 
   const auditItems: AuditItem[] = (audits ?? [])
     .filter((a) => !HIDDEN_AUDIT_TYPES.has(a.event_type as string))

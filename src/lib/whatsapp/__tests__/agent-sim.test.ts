@@ -21,9 +21,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("server-only", () => ({}));
 
 // Pin business hours so the suite is DETERMINISTIC. Without this, isSanocareOpen
-// reads the real wall clock and the office-hours (#86) after-hours tag is added to
-// escalate_to_ops context outside 9 AM–9 PM IST, flaking S14's "raw context, no
-// bracket-tag" guard. (Pre-existing; the same one-line stabilization is in #103.)
+// reads the real wall clock and the office-hours (#86) after-hours tag is added
+// to escalate_to_ops context when the suite runs outside 9 AM–9 PM IST, flaking
+// S14's "raw context, no bracket-tag" guard. Closed-hours behaviour is covered by
+// the dedicated office-hours tests; here we assert the OPEN path.
 vi.mock("@/lib/agent/officeHours", () => ({
   isSanocareOpen: () => true,
   OPEN_HOUR_IST: 9,

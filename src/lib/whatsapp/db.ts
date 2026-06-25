@@ -84,22 +84,26 @@ export async function recordInboundMessage(args: {
   conversationId: string;
   inbound: NormalizedInbound;
   safetyFlags?: Record<string, unknown>;
-}): Promise<{ inserted: boolean }> {
+}): Promise<{ inserted: boolean; messageId: string | null }> {
   const { conversationId, inbound, safetyFlags } = args;
-  const { error } = await supabaseAdmin.from("messages").insert({
-    conversation_id: conversationId,
-    direction: "inbound",
-    content: inbound.text ?? `[${inbound.type}]`,
-    content_type: inbound.type === "text" ? "text" : inbound.type,
-    provider_message_id: inbound.providerMessageId,
-    raw_payload: inbound.raw,
-    safety_flags: safetyFlags ?? {},
-  });
+  const { data, error } = await supabaseAdmin
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      direction: "inbound",
+      content: inbound.text ?? `[${inbound.type}]`,
+      content_type: inbound.type === "text" ? "text" : inbound.type,
+      provider_message_id: inbound.providerMessageId,
+      raw_payload: inbound.raw,
+      safety_flags: safetyFlags ?? {},
+    })
+    .select("id")
+    .single();
 
   if (error) {
     if (error.code === PG_UNIQUE_VIOLATION) {
       log.info("duplicate inbound ignored (idempotent)", inbound.providerMessageId);
-      return { inserted: false };
+      return { inserted: false, messageId: null };
     }
     log.error("inbound insert failed", error.message);
     throw new Error("inbound_insert_failed");
@@ -114,7 +118,7 @@ export async function recordInboundMessage(args: {
     })
     .eq("id", conversationId);
 
-  return { inserted: true };
+  return { inserted: true, messageId: (data as { id: string }).id };
 }
 
 export type DispatchResult =
