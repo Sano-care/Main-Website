@@ -15,8 +15,10 @@
 //   send). The dose's 15-min window has passed by the next sweep, so there is no
 //   re-send / nag either way — exactly one reminder per dose (D4).
 //
-// Safety: flag-gated (WHATSAPP_MEDICATION_REMINDER_ENABLED, default OFF — ships
-// inert until the template is APPROVED at Meta + a live smoke test); reads
+// Safety: opt-out hard gate (the same conversations.opt_out signal CareHub
+// uses — a patient who replied STOP gets no proactive send, even a utility
+// reminder); flag-gated (WHATSAPP_MEDICATION_REMINDER_ENABLED, default OFF —
+// ships inert until the template is APPROVED at Meta + a live smoke test); reads
 // `medications` only (no meds-write); best-effort (one dose failing never aborts
 // the sweep); never throws.
 //
@@ -27,6 +29,7 @@
 
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { sendTemplateMessage } from "@/lib/whatsapp/cloud-api";
+import { findOrCreateConversation } from "@/lib/whatsapp/db";
 import { AuditEvent, writeAudit } from "@/lib/whatsapp/safety/audit";
 import { firstNameOrFallback } from "@/lib/whatsapp/carehubOutbound";
 import { normaliseScheduledTimes } from "@/app/api/pulse/_lib/medications";
@@ -75,6 +78,8 @@ export function withinQuietHours(hhmm: string): boolean {
 export interface MedReminderDeps {
   supabase?: SupabaseLike;
   sendTemplate?: typeof sendTemplateMessage;
+  /** Resolves the patient's conversation (carries the opt_out gate). */
+  resolveConversation?: typeof findOrCreateConversation;
   writeAuditFn?: typeof writeAudit;
   /** Flag override for tests; defaults to the env flag. */
   enabled?: boolean;
@@ -89,6 +94,7 @@ export interface MedReminderResult {
   sent: number;
   skippedQuietHours: number;
   skippedNoPhone: number;
+  skippedOptedOut: number;
   skippedAlreadySent: number;
   failed: number;
 }
@@ -98,6 +104,7 @@ export async function runMedicationReminderSweep(
 ): Promise<MedReminderResult> {
   const supabase = deps.supabase ?? supabaseAdmin;
   const sendTemplate = deps.sendTemplate ?? sendTemplateMessage;
+  const resolveConversation = deps.resolveConversation ?? findOrCreateConversation;
   const audit = deps.writeAuditFn ?? writeAudit;
   const enabled = deps.enabled ?? isMedicationReminderEnabled();
   const now = deps.now ?? new Date();
@@ -109,6 +116,7 @@ export async function runMedicationReminderSweep(
     sent: 0,
     skippedQuietHours: 0,
     skippedNoPhone: 0,
+    skippedOptedOut: 0,
     skippedAlreadySent: 0,
     failed: 0,
   };
@@ -141,9 +149,10 @@ export async function runMedicationReminderSweep(
   const rows = (meds ?? []) as MedicationRow[];
   result.consideredMeds = rows.length;
 
-  // Cache customer lookups within the run (a med may have several due doses,
-  // and one customer may have several meds).
+  // Cache customer + opt-out lookups within the run (a med may have several due
+  // doses, and one customer may have several meds).
   const customerCache = new Map<string, CustomerRow | null>();
+  const optOutCache = new Map<string, boolean>(); // keyed by phone
 
   for (const med of rows) {
     const times = normaliseScheduledTimes(med.scheduled_times);
@@ -182,6 +191,26 @@ export async function runMedicationReminderSweep(
           });
           continue;
         }
+        const phone = customer.phone;
+
+        // OPT-OUT gate — the same signal CareHub uses (conversations.opt_out via
+        // findOrCreateConversation). A patient who replied STOP gets no
+        // proactive send, even a utility reminder (WABA quality + DPDP). Checked
+        // BEFORE the claim so an opted-out dose never consumes a dedupe slot.
+        let optedOut = optOutCache.get(phone);
+        if (optedOut === undefined) {
+          const { conversation } = await resolveConversation(phone);
+          optedOut = conversation.opt_out;
+          optOutCache.set(phone, optedOut);
+        }
+        if (optedOut) {
+          result.skippedOptedOut++;
+          await audit({
+            eventType: AuditEvent.MEDICATION_REMINDER_SKIPPED,
+            eventData: { reason: "opted_out", medication_id: med.id },
+          });
+          continue;
+        }
 
         // CLAIM the dose slot. UNIQUE(medication_id, scheduled_for) → a second
         // run in the same window loses the insert (23505) and skips.
@@ -208,7 +237,7 @@ export async function runMedicationReminderSweep(
 
         try {
           const send = await sendTemplate({
-            to: customer.phone,
+            to: phone,
             templateName: MEDICATION_REMINDER_TEMPLATE,
             bodyParams: [firstNameOrFallback(customer.full_name), med.name, med.dose],
           });

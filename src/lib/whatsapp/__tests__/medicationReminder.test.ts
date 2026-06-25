@@ -12,6 +12,14 @@ vi.mock("@/lib/whatsapp/carehubOutbound", () => ({
 vi.mock("@/lib/whatsapp/log", () => ({
   log: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }));
+// Default: not opted out — send-path tests exercise the happy path. The
+// opted-out case injects its own resolveConversation.
+vi.mock("@/lib/whatsapp/db", () => ({
+  findOrCreateConversation: vi.fn(async () => ({
+    conversation: { id: "cv1", whatsapp_phone: "x", lead_id: null, opt_out: false, state: "active" },
+    isNew: false,
+  })),
+}));
 
 import {
   runMedicationReminderSweep,
@@ -213,6 +221,35 @@ describe("runMedicationReminderSweep", () => {
     expect(send).not.toHaveBeenCalled();
     expect(calls.inserts).toHaveLength(0);
     expect(reasonsOf(audit)).toContain("no_phone");
+  });
+
+  it("opted-out patient with a due dose → no send, no claim, audits opted_out", async () => {
+    const { client, calls } = fakeSupabase({ meds: [med()], customer });
+    const send = vi.fn();
+    const audit = vi.fn(async () => {});
+    const resolveConversation = vi.fn(async () => ({
+      conversation: {
+        id: "cv1",
+        whatsapp_phone: customer.phone,
+        lead_id: null,
+        opt_out: true,
+        state: "active",
+      },
+      isNew: false,
+    }));
+    const res = await runMedicationReminderSweep({
+      supabase: client,
+      sendTemplate: send as never,
+      resolveConversation: resolveConversation as never,
+      writeAuditFn: audit as never,
+      enabled: true,
+      now: DUE_NOW,
+    });
+    expect(res.skippedOptedOut).toBe(1);
+    expect(res.sent).toBe(0);
+    expect(send).not.toHaveBeenCalled();
+    expect(calls.inserts).toHaveLength(0); // never consumed a dedupe slot
+    expect(reasonsOf(audit)).toContain("opted_out");
   });
 
   it("send failure → releases the claim (delete) + audits send_failed, sweep continues", async () => {
