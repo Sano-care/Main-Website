@@ -299,6 +299,40 @@ export const REGISTER_CAREHUB_INTEREST: ToolSchema = {
   },
 };
 
+export const REGISTER_CUSTOMER: ToolSchema = {
+  name: "register_customer",
+  description:
+    "Register this sender as a Sanocare customer the MOMENT you learn their NAME. " +
+    "Call it as soon as a new or unregistered person tells you their name (once per " +
+    "conversation is enough). Pass their actual name — never a placeholder like " +
+    "'patient' or 'user'. Optionally include any address / email / date-of-birth / " +
+    "gender they've ALREADY shared (e.g. during a booking); never ask for those just " +
+    "to fill this tool. There is NO phone argument — the number comes from this " +
+    "conversation. This is a SILENT background action: do NOT tell the user you saved " +
+    "their details — just keep replying naturally (greeting them by name is fine).",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      full_name: {
+        type: "string",
+        description: "The person's actual name, as they gave it.",
+      },
+      address_line: { type: "string", description: "Street / house address, if shared (optional)." },
+      area: { type: "string", description: "Locality / area, if shared (optional)." },
+      city: { type: "string", description: "City, if shared (optional)." },
+      pincode: { type: "string", description: "6-digit pincode, if shared (optional)." },
+      email: { type: "string", description: "Email, if shared (optional)." },
+      date_of_birth: {
+        type: "string",
+        description: "Date of birth as YYYY-MM-DD, if shared (optional).",
+      },
+      gender: { type: "string", description: "Gender, if shared (optional)." },
+    },
+    required: ["full_name"],
+  },
+};
+
 export const SURFACE_CAREHUB_BENEFITS: ToolSchema = {
   name: "surface_carehub_benefits",
   description:
@@ -388,6 +422,9 @@ export const AAROGYA_TOOLS: ToolSchema[] = [
   CANCEL_BOOKING,
   LOG_COMPLAINT,
   REGISTER_CAREHUB_INTEREST,
+  // Auto-register: available to every patient turn (incl. role "new") so the
+  // moment a fresh sender gives their name, the model can create the customer row.
+  REGISTER_CUSTOMER,
 ];
 
 /** Slice 4a — the tool subset available only when identity is ops_founder.
@@ -515,3 +552,31 @@ export const AAROGYA_PULSE_TOOLS: ToolSchema[] = [
   UPLOAD_TO_PULSE_VAULT,
   EXPLAIN_RECORD,
 ];
+
+// ---------------------------------------------------------------------------
+// Lab catalogue lookup (patient roles only — customer + new). READ-ONLY.
+// ---------------------------------------------------------------------------
+export const SEARCH_LAB_TESTS: ToolSchema = {
+  name: "search_lab_tests",
+  description:
+    "Look up a lab test in Sanocare's catalogue (Pathcore) by name and return its " +
+    "price, turnaround, sample type, and what it checks. Call when the patient asks " +
+    "the price/details of a SPECIFIC test (e.g. 'how much is a thyroid profile', " +
+    "'CBC cost', 'vitamin D test'). Do NOT call to recommend which test someone " +
+    "needs for a symptom or condition — that's a doctor's decision; offer a consult " +
+    "instead. Read-only: this never books anything.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      query: {
+        type: "string",
+        description: "The test name or keyword the patient asked about (e.g. 'thyroid profile', 'CBC', 'vitamin d').",
+      },
+    },
+    required: ["query"],
+  },
+};
+
+/** Patient-only lab tools (customer + new). Withheld from medic/doctor/ops. */
+export const AAROGYA_LAB_TOOLS: ToolSchema[] = [SEARCH_LAB_TESTS];

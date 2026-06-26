@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { runLabTestSearch } from "@/lib/lab/search";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,37 +53,18 @@ export async function GET(req: NextRequest) {
     auth: { persistSession: false },
   });
 
-  // Same 4-strategy ranking as the doctor-side route:
-  //   prefix-name > prefix-code > substring-name > category
-  // SQL `OR` clauses are slow on text; we use the trigram + prefix
-  // pattern that the lab_tests indexes already support.
-  const ilikeQ = q.replace(/[%_]/g, "\\$&");
-  const { data, error } = await supabase
-    .from("lab_tests")
-    .select("code, name, price_paise, sample, tat, category")
-    .or(
-      [
-        `name.ilike.${ilikeQ}%`,
-        `code.ilike.${ilikeQ}%`,
-        `name.ilike.%${ilikeQ}%`,
-        `category.ilike.%${ilikeQ}%`,
-      ].join(","),
-    )
-    .order("name", { ascending: true })
-    .limit(limit);
+  // Single shared query (src/lib/lab/search.ts) — same ranking the Aarogya
+  // search_lab_tests tool uses, so chat results match the website. No parallel
+  // search implementation.
+  const data = await runLabTestSearch(q, { limit, supabase });
 
-  if (error) {
-    console.error("[lab/search] supabase query failed:", error);
-    return NextResponse.json({ error: "Search failed" }, { status: 500 });
-  }
-
-  const results = (data ?? []).map((row) => ({
-    code: row.code as string,
-    name: row.name as string,
+  const results = data.map((row) => ({
+    code: row.code,
+    name: row.name,
     priceInr: Math.round((row.price_paise as number) / 100),
-    sample: (row.sample as string | null) ?? undefined,
-    tat: (row.tat as string | null) ?? undefined,
-    category: (row.category as string | null) ?? undefined,
+    sample: row.sample ?? undefined,
+    tat: row.tat ?? undefined,
+    category: row.category ?? undefined,
   }));
 
   return NextResponse.json({ results });
