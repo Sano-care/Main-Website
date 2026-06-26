@@ -29,6 +29,15 @@ import {
   getServiceLabel,
 } from "@/lib/aarogya/labels";
 import { sendTemplateMessage } from "@/lib/whatsapp/cloud-api";
+import { isPhoneOptedOut } from "@/lib/whatsapp/db";
+import { AuditEvent, writeAudit } from "@/lib/whatsapp/safety/audit";
+
+/** New booking → Aarogya engagement opener flag (default OFF — ships inert
+ *  until `aarogya_booking_confirmed` is APPROVED at Meta + smoke-tested). When
+ *  ON, sendBookingConfirmed sends the reply-invite opener instead of the
+ *  one-way confirmation, so the patient's reply opens a coordination thread. */
+export const BOOKING_ENGAGEMENT_FLAG = "WHATSAPP_BOOKING_ENGAGEMENT_ENABLED";
+export const BOOKING_ENGAGEMENT_TEMPLATE = "aarogya_booking_confirmed";
 
 interface DispatchInput {
   logTag: string;
@@ -79,6 +88,15 @@ export interface BookingConfirmedInput {
 export async function sendBookingConfirmed(
   input: BookingConfirmedInput,
 ): Promise<{ delivered: boolean }> {
+  // Engagement opener (new) — when ENABLED, send the confirm+invite template so
+  // the patient's reply opens an Aarogya coordination thread. Replaces (not
+  // duplicates) the one-way confirmation; falls back to it when the flag is
+  // OFF, so confirmations never stop. Every existing caller (razorpay/verify +
+  // lab create-booking-prepaid, covering all services + both lab modes) goes
+  // through this one function, so the opener is universal once flipped on.
+  if (process.env[BOOKING_ENGAGEMENT_FLAG] === "true") {
+    return sendBookingEngagementOpener(input);
+  }
   if (process.env.WHATSAPP_BOOKING_CONFIRMED_ENABLED !== "true") {
     console.log(
       "[sanocare_booking_confirmed] disabled via WHATSAPP_BOOKING_CONFIRMED_ENABLED!=true",
@@ -96,6 +114,47 @@ export async function sendBookingConfirmed(
       getBookingNextStep(input.serviceSlug),
     ],
   });
+}
+
+/**
+ * Confirm + coordinate opener — `aarogya_booking_confirmed` (2 vars: name,
+ * service). Respects `conversations.opt_out` (a patient who replied STOP gets
+ * no proactive send, even this utility); audits SENT / SKIPPED phone-free.
+ * Best-effort like the rest of meta.ts — never throws on the booking path.
+ */
+async function sendBookingEngagementOpener(
+  input: BookingConfirmedInput,
+): Promise<{ delivered: boolean }> {
+  if (await isPhoneOptedOut(input.patientPhone)) {
+    await writeAudit({
+      eventType: AuditEvent.BOOKING_ENGAGEMENT_SKIPPED,
+      eventData: {
+        reason: "opted_out",
+        service: input.serviceSlug,
+        booking: input.bookingCode?.trim() || null,
+      },
+    });
+    return { delivered: false };
+  }
+
+  const res = await dispatchTemplate({
+    logTag: BOOKING_ENGAGEMENT_TEMPLATE,
+    templateName: BOOKING_ENGAGEMENT_TEMPLATE,
+    patientPhone: input.patientPhone,
+    bodyParams: [firstName(input.patientName), getServiceLabel(input.serviceSlug)],
+  });
+
+  await writeAudit({
+    eventType: res.delivered
+      ? AuditEvent.BOOKING_ENGAGEMENT_SENT
+      : AuditEvent.BOOKING_ENGAGEMENT_SKIPPED,
+    eventData: {
+      service: input.serviceSlug,
+      booking: input.bookingCode?.trim() || null,
+      ...(res.delivered ? {} : { reason: "send_failed" }),
+    },
+  });
+  return res;
 }
 
 // ──────────────────────────────────────────────────────────────────────

@@ -77,6 +77,34 @@ export async function findOrCreateConversation(
 }
 
 /**
+ * Read-only opt-out check by phone — the same `conversations.opt_out` signal
+ * the inbound flow and CareHub/medication reminders gate on. Matches the last
+ * 10 digits so it works regardless of stored format ("+91…" vs "91…"). Used by
+ * proactive senders (e.g. the booking engagement opener) to suppress a send to
+ * a patient who replied STOP. Deliberately does NOT create a conversation/lead
+ * (unlike findOrCreateConversation) — a payment webhook shouldn't fabricate a
+ * WhatsApp thread for a patient who never messaged. Fails OPEN (returns false)
+ * on a read error: a transient DB blip shouldn't silently swallow a utility
+ * confirmation the patient just paid for.
+ */
+export async function isPhoneOptedOut(phone: string): Promise<boolean> {
+  const last10 = phone.replace(/\D/g, "").slice(-10);
+  if (last10.length !== 10) return false;
+  const { data, error } = await supabaseAdmin
+    .from("conversations")
+    .select("opt_out")
+    .ilike("whatsapp_phone", `%${last10}`)
+    .eq("opt_out", true)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    log.error("isPhoneOptedOut read failed", maskPhone(phone), error.message);
+    return false;
+  }
+  return Boolean(data);
+}
+
+/**
  * Insert an inbound message row. Idempotent: a duplicate wamid (Meta retry)
  * is a no-op. Returns whether a row was newly inserted.
  */

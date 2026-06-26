@@ -18,6 +18,7 @@ import {
   CUSTOMER_CAREHUB_ADDENDUM,
   OPS_MODE_ADDENDUM,
   MEDIC_ADDENDUM,
+  POST_BOOKING_COORDINATION_RULE,
   renderContextBlock,
   renderOpsContextBlock,
   type ContextBlockInput,
@@ -110,6 +111,14 @@ export function getSystemPromptForTurn(
     // Skip the patient context block in ops mode — there's no patient
     // on this turn.
     return sections.join("\n\n");
+  }
+
+  // Post-booking coordination nudge — any patient (registered or booking-
+  // history "new") who has a last_booking gets the "coordinate, don't just
+  // confirm" guidance, so the reply after the booking-confirmation opener turns
+  // into active coordination. Ops/medic already returned above.
+  if (identity.role === "customer" && context.last_booking) {
+    sections.push(POST_BOOKING_COORDINATION_RULE);
   }
 
   sections.push(renderContextBlock(context));

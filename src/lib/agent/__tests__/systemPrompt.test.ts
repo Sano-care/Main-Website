@@ -8,8 +8,15 @@ import {
   CUSTOMER_REGISTERED_ADDENDUM,
   LANGUAGE_MIRROR_RULE,
   OPS_MODE_ADDENDUM,
+  POST_BOOKING_COORDINATION_RULE,
   SHORT_MESSAGE_RULE,
 } from "@/lib/agent/knowledge";
+
+const recentBooking = {
+  service_category: "home-visit",
+  status: "PENDING",
+  created_at: "2026-06-25T10:00:00Z",
+};
 
 const baseContext = {
   patient_name: null,
@@ -39,6 +46,32 @@ describe("getSystemPromptForTurn — composition", () => {
   it("new visitor → CUSTOMER_REGISTERED_ADDENDUM is NOT appended", () => {
     const prompt = getSystemPromptForTurn({ role: "new" }, baseContext);
     expect(prompt).not.toContain(CUSTOMER_REGISTERED_ADDENDUM);
+  });
+
+  it("customer with a recent last_booking → POST_BOOKING_COORDINATION_RULE appended (references booking, never invents)", () => {
+    const prompt = getSystemPromptForTurn(
+      { role: "customer", subRole: "registered", customerId: "cus-1" },
+      { ...baseContext, last_booking: recentBooking },
+    );
+    expect(prompt).toContain(POST_BOOKING_COORDINATION_RULE);
+    expect(prompt).toMatch(/get_booking_history/);
+    expect(prompt).toMatch(/NEVER invent/i);
+  });
+
+  it("customer with NO last_booking → coordination rule absent", () => {
+    const prompt = getSystemPromptForTurn(
+      { role: "customer", subRole: "registered", customerId: "cus-1" },
+      baseContext,
+    );
+    expect(prompt).not.toContain(POST_BOOKING_COORDINATION_RULE);
+  });
+
+  it("booking-history 'new' customer (no customers row) with last_booking → rule still applies", () => {
+    const prompt = getSystemPromptForTurn(
+      { role: "customer", subRole: "new" },
+      { ...baseContext, last_booking: recentBooking },
+    );
+    expect(prompt).toContain(POST_BOOKING_COORDINATION_RULE);
   });
 
   it("ops_founder → OPS_MODE_ADDENDUM + OPS MODE context block, NO PATIENT CONTEXT", () => {
