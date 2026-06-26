@@ -15,6 +15,7 @@ import {
   SHORT_MESSAGE_RULE,
   CUSTOMER_REGISTERED_ADDENDUM,
   MEDICATION_REMINDER_RULE,
+  MEDICINE_RESOLVER_RULE,
   NEW_SENDER_ADDENDUM,
   CUSTOMER_CAREHUB_ADDENDUM,
   OPS_MODE_ADDENDUM,
@@ -93,6 +94,9 @@ export function getSystemPromptForTurn(
     // reminders (and never to fall back to Google Assistant), with the
     // store-only clinical boundary.
     sections.push(MEDICATION_REMINDER_RULE);
+    // …and resolve a garbled/vague medicine name (catalogue → web → strip photo)
+    // before logging it.
+    sections.push(MEDICINE_RESOLVER_RULE);
   }
   if (identity.role === "customer" && identity.subRole === "carehub") {
     sections.push(CUSTOMER_CAREHUB_ADDENDUM);

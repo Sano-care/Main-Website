@@ -135,6 +135,14 @@ export const AuditEvent = {
   // reminder by WhatsApp, writing the `medications` row the #107 cron reads.
   // Phone-free: customer_id, medication_id, times_per_day, created-vs-updated.
   MEDICATION_LOGGED: "medication_logged",
+  // Medicine resolver + strip-photo vision — a garbled name resolved against the
+  // catalogue, web-verified, read off a strip, or a new medicine added to the
+  // catalogue (pending ops review). Phone-free: query/brand + match metadata,
+  // never clinical interpretation.
+  MEDICINE_RESOLVED: "medicine_resolved",
+  MEDICINE_WEB_VERIFIED: "medicine_web_verified",
+  MEDICINE_PHOTO_READ: "medicine_photo_read",
+  MEDICINE_CATALOG_ADDED: "medicine_catalog_added",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
