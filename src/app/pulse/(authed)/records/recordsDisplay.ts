@@ -199,3 +199,33 @@ export function formatRecordDate(iso: string | null): string {
   if (Number.isNaN(d.getTime())) return "—";
   return IST_DATE_FMT.format(d);
 }
+
+// Compact statement-row date/time (the "bank statement" detail screens). IST.
+const IST_DAYMONTH_FMT = new Intl.DateTimeFormat("en-IN", {
+  timeZone: "Asia/Kolkata",
+  day: "numeric",
+  month: "short",
+});
+const IST_TIME_FMT = new Intl.DateTimeFormat("en-IN", {
+  timeZone: "Asia/Kolkata",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+/** "24 Jun" in IST. Invalid/null → "—". */
+export function formatStatementDay(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return IST_DAYMONTH_FMT.format(d);
+}
+
+/** "09:10" (24h, IST), or "" when the timestamp has no meaningful time
+ *  (a bare YYYY-MM-DD date) or is invalid/null. */
+export function formatStatementTime(iso: string | null): string {
+  if (!iso || /^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return IST_TIME_FMT.format(d);
+}
