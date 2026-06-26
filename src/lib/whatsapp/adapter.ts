@@ -94,6 +94,11 @@ import {
   executeLogMedication,
   executeUploadToPulseVault,
 } from "@/lib/whatsapp/pulseExecutors";
+import {
+  executeResolveMedicine,
+  executeLookupMedicineWeb,
+  executeReadMedicineStrip,
+} from "@/lib/whatsapp/medicineExecutors";
 import { mediaRefFromRaw, fetchInboundMedia } from "@/lib/whatsapp/media";
 import { persistInboundOpsMedia } from "@/lib/whatsapp/opsMediaStore";
 import { findLatestUnexpiredRelayDraft } from "@/lib/whatsapp/opsRouter";
@@ -863,6 +868,29 @@ export async function handleInboundMessage(
               dose?: string;
               reason?: string;
             },
+          });
+          break;
+        case "resolve_medicine":
+          toolPatientMsg = await executeResolveMedicine({
+            identity,
+            conversationId: conversation.id,
+            input: call.input as unknown as { query?: string },
+          });
+          break;
+        case "lookup_medicine_web":
+          toolPatientMsg = await executeLookupMedicineWeb({
+            identity,
+            conversationId: conversation.id,
+            input: call.input as unknown as { query?: string },
+          });
+          break;
+        case "read_medicine_strip":
+          toolPatientMsg = await executeReadMedicineStrip({
+            identity,
+            conversationId: conversation.id,
+            // The strip is the current inbound message's image; the model never
+            // supplies it (mirrors upload_to_pulse_vault).
+            media: mediaRefFromRaw(inbound.raw),
           });
           break;
         default:

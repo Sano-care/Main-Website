@@ -590,12 +590,75 @@ export const LOG_MEDICATION: ToolSchema = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Medicine resolver — turn a garbled/partial medicine name into a canonical
+// brand before it's logged. Resolution order: catalogue → web → strip photo.
+// STORE/IDENTIFY ONLY: never advises on the drug, dose, or interactions.
+// ---------------------------------------------------------------------------
+export const RESOLVE_MEDICINE: ToolSchema = {
+  name: "resolve_medicine",
+  description:
+    "Resolve a medicine name the patient typed — including misspellings " +
+    "('shellcal', 'becosule', 'pan d') — against Sanocare's catalogue BEFORE " +
+    "logging it with log_medication. Call this first whenever the patient names " +
+    "a medicine to set a reminder for. Returns ranked candidates (brand, " +
+    "strength, composition). If it returns a confident single match, confirm it " +
+    "with the patient; if several, show the top options to pick; if none, ask " +
+    "for a clear photo of the medicine strip (call read_medicine_strip) or use " +
+    "lookup_medicine_web. NEVER log a vague/garbled name verbatim. Read-only.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      query: {
+        type: "string",
+        description: "The medicine name as the patient said it (e.g. 'shellcal', 'pan d').",
+      },
+    },
+    required: ["query"],
+  },
+};
+
+export const LOOKUP_MEDICINE_WEB: ToolSchema = {
+  name: "lookup_medicine_web",
+  description:
+    "Fallback ONLY when resolve_medicine finds no confident catalogue match — " +
+    "look up a medicine's correct brand + composition online. Returns a PROPOSED " +
+    "candidate you must confirm with the patient ('I found X (Calcium + Vit D3) " +
+    "— does your strip say that?'); never assert it as fact and never log from " +
+    "web alone without the patient confirming OR a strip photo. May be disabled, " +
+    "in which case ask for a strip photo instead.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      query: { type: "string", description: "The medicine name to look up online." },
+    },
+    required: ["query"],
+  },
+};
+
+export const READ_MEDICINE_STRIP: ToolSchema = {
+  name: "read_medicine_strip",
+  description:
+    "Read the printed text off a photo of a medicine strip/box the patient has " +
+    "just sent. Call when the patient sends (or says they're sending) a photo of " +
+    "their medicine, or when you've asked for one to resolve a name. Extracts the " +
+    "brand + composition as printed and matches it to the catalogue. STORE ONLY: " +
+    "it transcribes the strip, it does NOT diagnose or advise. No arguments — the " +
+    "image is taken from the current message.",
+  input_schema: { type: "object", additionalProperties: false, properties: {}, required: [] },
+};
+
 /** Pulse Records tools (Slice C) — appended to AAROGYA_TOOLS for customers. */
 export const AAROGYA_PULSE_TOOLS: ToolSchema[] = [
   FETCH_PULSE_RECORDS,
   UPLOAD_TO_PULSE_VAULT,
   EXPLAIN_RECORD,
   LOG_MEDICATION,
+  RESOLVE_MEDICINE,
+  LOOKUP_MEDICINE_WEB,
+  READ_MEDICINE_STRIP,
 ];
 
 // ---------------------------------------------------------------------------
