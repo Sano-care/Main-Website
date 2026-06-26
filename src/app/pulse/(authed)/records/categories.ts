@@ -43,8 +43,7 @@ export type RecordTileKey =
 export type DetailAction =
   | { type: "none" }
   | { type: "link"; href: string; label: string } // existing add flow elsewhere
-  | { type: "modal"; label: string } // open the upload modal in place
-  | { type: "soon"; label: string }; // present but disabled this slice (R2 wires it)
+  | { type: "modal"; label: string }; // open an add/upload modal in place
 
 export interface CategoryConfig {
   key: RecordTileKey;
@@ -128,7 +127,7 @@ export const CATEGORY_CONFIG: Record<RecordTileKey, CategoryConfig> = {
     icon: Stethoscope,
     tier: "yours",
     tileAction: "+ Add",
-    detailAction: { type: "soon", label: "Add a condition" },
+    detailAction: { type: "modal", label: "Add a condition" },
     detailSubtitle: "Ongoing conditions you want Sanocare to know about.",
   },
   allergies: {
@@ -137,7 +136,7 @@ export const CATEGORY_CONFIG: Record<RecordTileKey, CategoryConfig> = {
     icon: TriangleAlert,
     tier: "yours",
     tileAction: "+ Add",
-    detailAction: { type: "soon", label: "Add an allergy" },
+    detailAction: { type: "modal", label: "Add an allergy" },
     detailSubtitle: "Allergies your care team should always see.",
   },
   documents: {
@@ -198,15 +197,16 @@ export const TIER_ICON: Record<RecordTier, { wrapBg: string; stroke: string }> =
 };
 
 // ---------------------------------------------------------------------------
-// Hybrid source tag — "You" (self-entered) vs "Home visit" (clinician/Sanocare).
+// Hybrid source tag — "You" (self-entered) vs "Sanocare" (clinician-entered).
 //
 // vital_readings.source ∈ manual | device | rx_import   (DB CHECK)
 // medications.source    ∈ manual | rx_import            (DB CHECK, nullable)
 //   manual    → the patient logged it in Pulse                → "You"
-//   device    → a GDA captured it on a Sanocare home visit    → "Home visit"
-//   rx_import → from a Sanocare prescription (clinician origin)→ "Home visit"
-// The two-bucket split preserves the trust signal the mockup is after
-// (clinician-entered vs self-entered). null → no tag (never invent one).
+//   device    → a GDA captured it on a Sanocare home visit    → "Sanocare"
+//   rx_import → from a Sanocare prescription (teleconsult too) → "Sanocare"
+// "Sanocare" (relabelled from "Home visit" in R2a) is more accurate than "Home
+// visit" since rx_import also comes from teleconsults; the two-bucket split
+// preserves the trust signal (clinician-entered vs self-entered). null → no tag.
 // ---------------------------------------------------------------------------
 
 export interface SourceTag {
@@ -217,7 +217,7 @@ export interface SourceTag {
 export function sourceTag(source: string | null | undefined): SourceTag | null {
   if (!source) return null;
   if (source === "manual") return { label: "You", kind: "you" };
-  return { label: "Home visit", kind: "sanocare" };
+  return { label: "Sanocare", kind: "sanocare" };
 }
 
 // ---------------------------------------------------------------------------
