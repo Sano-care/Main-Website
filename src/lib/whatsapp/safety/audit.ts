@@ -126,6 +126,11 @@ export const AuditEvent = {
   // created (or filled) with a generated customer_code. Phone-free: logs the
   // customer_id, source, is_new_row, and which best-effort fields were filled.
   CUSTOMER_REGISTERED: "customer_registered",
+  // Booking → Aarogya engagement opener — the confirm+invite template sent on
+  // payment success (so the patient's reply opens a coordination thread), or
+  // skipped (opt-out / send failure). Phone-free: service slug + booking code.
+  BOOKING_ENGAGEMENT_SENT: "booking_engagement_sent",
+  BOOKING_ENGAGEMENT_SKIPPED: "booking_engagement_skipped",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
