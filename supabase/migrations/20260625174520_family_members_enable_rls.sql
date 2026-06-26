@@ -1,0 +1,16 @@
+-- Pulse A1 Part 3 — close the family_members PostgREST leak.
+--
+-- family_members has been RLS-OFF since M042 (T64), with ownership enforced
+-- only at the app layer (/api/pulse/family-members: requirePulseCustomer +
+-- explicit customer_id). But anon/authenticated still carry full table grants,
+-- so the anon key could read/write EVERY customer's members directly via
+-- /rest/v1/family_members, bypassing the safe route entirely (DPDP exposure).
+--
+-- Enable RLS with NO policies → deny-all for anon + authenticated. The app is
+-- unaffected: every server read and the API route use the service_role client
+-- (supabaseAdmin), which bypasses RLS. No app code path uses the anon/browser
+-- client for this table (verified: all client CRUD goes through /api/pulse/*).
+--
+-- Verified (rolled back, zero residue): as anon, SELECT → 0 rows (was 2),
+-- INSERT → denied (insufficient_privilege); as service_role, SELECT → all rows.
+ALTER TABLE public.family_members ENABLE ROW LEVEL SECURITY;

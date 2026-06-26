@@ -26,6 +26,7 @@ import {
   ALL_GENDERS,
   ALL_RELATIONS,
 } from "@/lib/family-members/types";
+import { buildFamilyMemberPayload } from "@/lib/family-members/payload";
 import { RELATION_LABELS } from "@/lib/family-members/relations";
 import { pulseFetch } from "../../../_lib/pulseClient";
 import { useScrollLock } from "@/hooks/useScrollLock";
@@ -96,17 +97,18 @@ export function AddMemberForm({ open, editing, onClose, onSaved }: Props) {
     setSaving(true);
     setError(null);
 
-    // Critical: when relation is NOT 'other', we MUST send relation_other as
-    // null (or omit). The validator + DB CHECK both reject a non-null
-    // relation_other on a non-'other' relation.
-    const payload: Record<string, unknown> = {
-      name: name.trim(),
+    // Enum contract (relation as exact enum, relation_other null unless
+    // 'other', gender enum-or-null) lives in buildFamilyMemberPayload so it's
+    // unit-tested. The validator + DB CHECK reject a non-null relation_other
+    // on a non-'other' relation, so the null discipline is load-bearing.
+    const payload = buildFamilyMemberPayload({
+      name,
       relation,
-      relation_other: relation === "other" ? relationOther.trim() : null,
-      dob: dob || null,
-      gender: gender || null,
-      notes: notes.trim() || null,
-    };
+      relationOther,
+      dob,
+      gender,
+      notes,
+    });
 
     const url = editing
       ? `/api/pulse/family-members/${editing.id}`
