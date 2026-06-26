@@ -91,6 +91,7 @@ import {
 import {
   executeExplainRecord,
   executeFetchPulseRecords,
+  executeLogMedication,
   executeUploadToPulseVault,
 } from "@/lib/whatsapp/pulseExecutors";
 import { mediaRefFromRaw, fetchInboundMedia } from "@/lib/whatsapp/media";
@@ -850,6 +851,18 @@ export async function handleInboundMessage(
             identity,
             conversationId: conversation.id,
             input: call.input as unknown as { record_id?: string },
+          });
+          break;
+        case "log_medication":
+          toolPatientMsg = await executeLogMedication({
+            identity,
+            conversationId: conversation.id,
+            input: call.input as unknown as {
+              name?: string;
+              scheduled_times?: string[];
+              dose?: string;
+              reason?: string;
+            },
           });
           break;
         default:

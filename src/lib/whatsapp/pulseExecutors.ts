@@ -24,6 +24,14 @@ import {
   type AuditIdentity,
 } from "@/lib/whatsapp/safety/audit";
 import { identityForAudit, type Identity } from "@/lib/whatsapp/identity";
+import { normaliseScheduledTimes } from "@/app/api/pulse/_lib/medications";
+import { istTodayYMD } from "@/app/api/pulse/_lib/ist";
+import {
+  createMedication,
+  findActiveMedicationByName,
+  updateMedicationSchedule,
+  frequencyLabelForCount,
+} from "@/app/api/pulse/_lib/createMedication";
 
 const NOT_A_CUSTOMER =
   "I can only pull up records once you have a Sanocare account — book a visit and I'll start keeping your records here for you.";
@@ -182,4 +190,123 @@ export async function executeExplainRecord(args: {
   });
 
   return result.message;
+}
+
+// ---------------------------------------------------------------------------
+// log_medication — set a medication reminder by chat
+// ---------------------------------------------------------------------------
+
+const MED_NOT_A_CUSTOMER =
+  "Once you've got a Sanocare account I can set medicine reminders for you — book a visit and I'll start looking after them here.";
+
+/** Flag OFF → don't promise a reminder #107 won't send yet. Point to Pulse —
+ *  never to an external app. */
+function medPulsePointer(name: string): string {
+  return `You can add ${name} in the Sanocare Pulse app and we'll keep track of it for you.`;
+}
+
+/** "20:40" → "8:40 PM" (IST clock, no tz math — it's already a wall-clock time). */
+function to12h(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const period = h < 12 ? "AM" : "PM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
+
+/** Join times for the confirmation: "8:40 PM", "8:40 PM and 11:00 PM", … */
+function joinTimes(times: string[]): string {
+  const human = times.map(to12h);
+  if (human.length <= 1) return human[0] ?? "";
+  if (human.length === 2) return `${human[0]} and ${human[1]}`;
+  return `${human.slice(0, -1).join(", ")}, and ${human[human.length - 1]}`;
+}
+
+export async function executeLogMedication(args: {
+  identity: Identity;
+  conversationId: string;
+  input: { name?: string; scheduled_times?: string[]; dose?: string; reason?: string };
+  deps?: {
+    enabled?: boolean;
+    now?: Date;
+    createFn?: typeof createMedication;
+    findActiveFn?: typeof findActiveMedicationByName;
+    updateFn?: typeof updateMedicationSchedule;
+    writeAuditFn?: typeof writeAudit;
+  };
+}): Promise<string> {
+  const customerId = customerIdOf(args.identity);
+  if (!customerId) return MED_NOT_A_CUSTOMER;
+
+  const name = (args.input.name ?? "").trim();
+  const times = normaliseScheduledTimes(args.input.scheduled_times);
+  if (!name) return "Which medicine should I set the reminder for?";
+  if (times.length === 0) {
+    return `What time should I remind you to take ${name}? (e.g. 8:40 PM)`;
+  }
+
+  // Honest gating — only promise a reminder when the #107 cron is live to send
+  // it; otherwise point to Pulse (never an external app).
+  const enabled =
+    args.deps?.enabled ?? process.env.WHATSAPP_MEDICATION_REMINDER_ENABLED === "true";
+  if (!enabled) return medPulsePointer(name);
+
+  const dose = (args.input.dose ?? "").trim() || "as directed"; // D1
+  const reason = (args.input.reason ?? "").trim() || null;
+  const timesPerDay = times.length;
+  const frequencyLabel = frequencyLabelForCount(timesPerDay);
+  const todayYmd = istTodayYMD(args.deps?.now);
+
+  const writeAuditFn = args.deps?.writeAuditFn ?? writeAudit;
+  const createFn = args.deps?.createFn ?? createMedication;
+  const findActiveFn = args.deps?.findActiveFn ?? findActiveMedicationByName;
+  const updateFn = args.deps?.updateFn ?? updateMedicationSchedule;
+  const auditIdentity: AuditIdentity = identityForAudit(args.identity);
+
+  // Dedup on (customer, name) — update the existing reminder rather than
+  // stacking a duplicate medication row.
+  const existing = await findActiveFn(customerId, name, todayYmd);
+  if (existing) {
+    const { ok } = await updateFn(existing.id, {
+      scheduledTimes: times,
+      timesPerDay,
+      frequencyLabel,
+      dose,
+    });
+    if (!ok) return "I couldn't update that just now — could you try again in a moment?";
+    await writeAuditFn({
+      conversationId: args.conversationId,
+      eventType: AuditEvent.MEDICATION_LOGGED,
+      identity: auditIdentity,
+      eventData: { medication_id: existing.id, times_per_day: timesPerDay, updated: true },
+    });
+    return `Updated — I'll remind you to take ${name} at ${joinTimes(times)} every day.`;
+  }
+
+  const result = await createFn({
+    customerId,
+    name,
+    dose,
+    frequencyLabel,
+    timesPerDay,
+    scheduledTimes: times,
+    startDate: todayYmd,
+    endDate: null,
+    reason,
+    source: "aarogya_whatsapp",
+  });
+  if (result.error || !result.medication) {
+    return "I couldn't save that just now — could you try again in a moment?";
+  }
+
+  await writeAuditFn({
+    conversationId: args.conversationId,
+    eventType: AuditEvent.MEDICATION_LOGGED,
+    identity: auditIdentity,
+    eventData: {
+      medication_id: (result.medication.id as string) ?? null,
+      times_per_day: timesPerDay,
+      updated: false,
+    },
+  });
+  return `Done — I'll remind you to take ${name} at ${joinTimes(times)} every day.`;
 }
