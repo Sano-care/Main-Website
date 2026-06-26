@@ -20,6 +20,7 @@ import { useRecords } from "./useRecords";
 import UploadDocumentModal from "./UploadDocumentModal";
 import {
   CATEGORY_CONFIG,
+  TIER_ICON,
   sourceTag,
   type RecordTileKey,
   type SourceTag,
@@ -67,6 +68,8 @@ export default function RecordsDetail({ category }: { category: RecordTileKey })
 
   const subjectLabel = viewing.kind === "self" ? "your" : `${viewingName}'s`;
   const uploadDefaultMemberId = viewing.kind === "member" ? viewing.member.id : null;
+  const tint = TIER_ICON[cfg.tier];
+  const Icon = cfg.icon;
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 pb-10 pt-3">
@@ -78,9 +81,17 @@ export default function RecordsDetail({ category }: { category: RecordTileKey })
         Back to records
       </Link>
 
-      <header className="mt-2">
-        <h1 className="text-2xl font-bold tracking-tight text-text-main">{cfg.label}</h1>
-        <p className="mt-0.5 text-sm text-text-secondary">{cfg.detailSubtitle}</p>
+      <header className="mt-2 flex items-center gap-3">
+        <span
+          className={"flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl " + tint.wrapBg}
+          aria-hidden="true"
+        >
+          <Icon className={"h-6 w-6 [stroke-width:1.8] " + tint.stroke} aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight text-text-main">{cfg.label}</h1>
+          <p className="mt-0.5 text-sm text-text-secondary">{cfg.detailSubtitle}</p>
+        </div>
       </header>
 
       <DetailActionControl cfg={cfg} onUpload={() => setUploadOpen(true)} />
