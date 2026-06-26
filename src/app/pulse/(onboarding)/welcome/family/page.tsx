@@ -33,10 +33,6 @@ export default function PulseWelcomeStep2Page() {
   const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
 
-  function handleSkip() {
-    router.push("/pulse");
-  }
-
   function handleAdded() {
     // Form's onSaved fires after a successful POST /api/pulse/family-members.
     // Close the form + route to home; the AddMemberForm's own internal
@@ -89,14 +85,19 @@ export default function PulseWelcomeStep2Page() {
           + Add a family member
         </button>
 
-        {/* Secondary CTA — skip to home */}
-        <button
-          type="button"
-          onClick={handleSkip}
+        {/* Secondary CTA — skip to home. A real <Link> (anchor with href),
+            NOT an onClick-only <button>: the anchor navigates from the
+            server-rendered HTML, so the skip works even before this client
+            component hydrates (the prior button was dead until hydration —
+            the live "nothing happens on click" bug). Natively keyboard-
+            focusable + Enter-activatable; the closed AddMemberForm renders
+            nothing, so nothing overlays it. */}
+        <Link
+          href="/pulse"
           className="mt-3 inline-flex w-full items-center justify-center rounded-2xl px-6 py-3.5 text-sm font-medium text-text-secondary hover:bg-slate-50"
         >
           I&apos;ll do this later
-        </button>
+        </Link>
       </main>
 
       {/* T64 AddMemberForm — verbatim reuse. Modal sits on top of the */}

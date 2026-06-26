@@ -15,10 +15,12 @@ export const dynamic = "force-dynamic";
 // GET  /api/pulse/family-members     — list this customer's members.
 // POST /api/pulse/family-members     — create a new member (capped 8 by DB trigger).
 //
-// Per T64_BRIEF_PATCH.md divergence 1: no RLS on the table; ownership is
-// enforced HERE via `requirePulseCustomer(req)` + an explicit
-// `customer_id = customer.id` clause / payload on every query. Mirrors the
-// medications / vitals routes.
+// Ownership is enforced HERE via `requirePulseCustomer(req)` + an explicit
+// `customer_id = customer.id` clause / payload on every query (mirrors the
+// medications / vitals routes). As of Pulse A1 the table also has RLS enabled
+// (deny-all) as defense-in-depth — that closes the direct-PostgREST anon leak;
+// this route is unaffected because supabaseAdmin uses the service-role key,
+// which bypasses RLS.
 
 const FM_SELECT =
   "id, customer_id, name, relation, relation_other, dob, gender, notes, created_at, updated_at";
