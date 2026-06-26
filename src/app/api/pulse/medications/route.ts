@@ -3,17 +3,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { requirePulseCustomer } from "@/app/pulse/_lib/requireCustomer";
 import { istTodayYMD } from "../_lib/ist";
-import {
-  SCHEDULE_DEFAULTS,
-  expandIntakeLog,
-  normaliseScheduledTimes,
-} from "../_lib/medications";
+import { SCHEDULE_DEFAULTS, normaliseScheduledTimes } from "../_lib/medications";
+import { MED_SELECT, createMedication } from "../_lib/createMedication";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const MED_SELECT =
-  "id, name, dose, frequency_label, times_per_day, scheduled_times, start_date, end_date, reason, source, source_rx_id, imported_needs_review, refill_warning_threshold_days, supply_qty, supply_updated_at, created_at";
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -122,53 +116,30 @@ export async function POST(req: NextRequest) {
       ? body.reason.trim().slice(0, 300)
       : null;
 
-  const { data: med, error: insertErr } = await supabaseAdmin
-    .from("medications")
-    .insert({
-      customer_id: customer.id,
-      name,
-      dose,
-      frequency_label: frequencyLabel,
-      times_per_day: timesPerDay,
-      scheduled_times: scheduledTimes,
-      start_date: startDate,
-      end_date: endDate,
-      reason,
-      source: "manual",
-    })
-    .select(MED_SELECT)
-    .single();
+  // Single meds writer — shared with Aarogya's chat-set reminder so the row
+  // shape + intake-log seeding never diverge between the two front doors.
+  const result = await createMedication({
+    customerId: customer.id,
+    name,
+    dose,
+    frequencyLabel,
+    timesPerDay,
+    scheduledTimes,
+    startDate,
+    endDate,
+    reason,
+    source: "manual",
+  });
 
-  if (insertErr || !med) {
-    console.error("[pulse/medications] POST insert failed:", insertErr);
+  if (result.error || !result.medication) {
     return NextResponse.json(
       { error: "Could not add the medication." },
       { status: 500 },
     );
   }
 
-  // Seed the intake log. Best-effort: a log failure shouldn't lose the med,
-  // but we surface the count so the client knows whether to refetch.
-  const rows = expandIntakeLog({
-    medicationId: med.id as string,
-    scheduledTimes,
-    startDate,
-    endDate,
-  });
-  let intakeCount = 0;
-  if (rows.length > 0) {
-    const { error: logErr } = await supabaseAdmin
-      .from("medication_intake_log")
-      .insert(rows);
-    if (logErr) {
-      console.error("[pulse/medications] intake-log seed failed:", logErr);
-    } else {
-      intakeCount = rows.length;
-    }
-  }
-
   return NextResponse.json(
-    { medication: med, intake_count: intakeCount },
+    { medication: result.medication, intake_count: result.intakeCount },
     { status: 201 },
   );
 }

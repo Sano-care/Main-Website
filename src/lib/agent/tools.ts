@@ -546,11 +546,56 @@ export const EXPLAIN_RECORD: ToolSchema = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// log_medication — set a medication reminder by chat (writes `medications`,
+// which the #107 cron reads). Account-scoped (customers only). STORE ONLY: this
+// never advises on the drug, dose, or interactions.
+// ---------------------------------------------------------------------------
+export const LOG_MEDICATION: ToolSchema = {
+  name: "log_medication",
+  description:
+    "Set a medication reminder for THIS patient when they ask to be reminded to " +
+    "take a medicine (e.g. 'remind me to take Shelcal at 8:40pm and 11pm daily'). " +
+    "Writes the medicine + times so Sanocare reminds them at each dose time. Call " +
+    "ONCE PER MEDICINE — if the patient names two medicines, make two calls. " +
+    "Convert spoken times to 24h 'HH:MM' IST (8:40pm → '20:40', 11pm → '23:00'). " +
+    "Do NOT call to give advice about a drug, its dose, or interactions — you only " +
+    "store what the patient tells you; route anything clinical to a teleconsult.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      name: {
+        type: "string",
+        description: "The medicine name exactly as the patient said it (e.g. 'Shelcal', 'Faa').",
+      },
+      scheduled_times: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "Dose times in 24h 'HH:MM' IST, one per daily dose (e.g. ['20:40','23:00']). " +
+          "Convert any am/pm the patient gives into this format.",
+      },
+      dose: {
+        type: "string",
+        description:
+          "Dose if the patient stated one (e.g. '1 tablet', '5 ml'). Omit if not mentioned — do not ask just to fill this.",
+      },
+      reason: {
+        type: "string",
+        description: "Why they take it, only if the patient volunteers it. Omit otherwise.",
+      },
+    },
+    required: ["name", "scheduled_times"],
+  },
+};
+
 /** Pulse Records tools (Slice C) — appended to AAROGYA_TOOLS for customers. */
 export const AAROGYA_PULSE_TOOLS: ToolSchema[] = [
   FETCH_PULSE_RECORDS,
   UPLOAD_TO_PULSE_VAULT,
   EXPLAIN_RECORD,
+  LOG_MEDICATION,
 ];
 
 // ---------------------------------------------------------------------------

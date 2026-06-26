@@ -14,6 +14,7 @@ import {
   LANGUAGE_MIRROR_RULE,
   SHORT_MESSAGE_RULE,
   CUSTOMER_REGISTERED_ADDENDUM,
+  MEDICATION_REMINDER_RULE,
   NEW_SENDER_ADDENDUM,
   CUSTOMER_CAREHUB_ADDENDUM,
   OPS_MODE_ADDENDUM,
@@ -88,6 +89,10 @@ export function getSystemPromptForTurn(
     (identity.subRole === "registered" || identity.subRole === "carehub")
   ) {
     sections.push(CUSTOMER_REGISTERED_ADDENDUM);
+    // Account-scoped customers carry log_medication — tell Aarogya it can set
+    // reminders (and never to fall back to Google Assistant), with the
+    // store-only clinical boundary.
+    sections.push(MEDICATION_REMINDER_RULE);
   }
   if (identity.role === "customer" && identity.subRole === "carehub") {
     sections.push(CUSTOMER_CAREHUB_ADDENDUM);

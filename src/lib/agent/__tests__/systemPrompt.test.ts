@@ -7,6 +7,7 @@ import {
   CUSTOMER_CAREHUB_ADDENDUM,
   CUSTOMER_REGISTERED_ADDENDUM,
   LANGUAGE_MIRROR_RULE,
+  MEDICATION_REMINDER_RULE,
   OPS_MODE_ADDENDUM,
   POST_BOOKING_COORDINATION_RULE,
   SHORT_MESSAGE_RULE,
@@ -72,6 +73,34 @@ describe("getSystemPromptForTurn — composition", () => {
       { ...baseContext, last_booking: recentBooking },
     );
     expect(prompt).toContain(POST_BOOKING_COORDINATION_RULE);
+  });
+
+  it("registered customer → MEDICATION_REMINDER_RULE appended (can set reminders, store-only, never Google Assistant)", () => {
+    const prompt = getSystemPromptForTurn(
+      { role: "customer", subRole: "registered", customerId: "cus-1" },
+      baseContext,
+    );
+    expect(prompt).toContain(MEDICATION_REMINDER_RULE);
+    expect(prompt).toMatch(/log_medication/);
+    expect(prompt).toMatch(/never.*google assistant/i);
+    expect(prompt).toMatch(/teleconsult/i);
+  });
+
+  it("carehub customer → MEDICATION_REMINDER_RULE appended", () => {
+    const prompt = getSystemPromptForTurn(
+      { role: "customer", subRole: "carehub", customerId: "cus-2" },
+      baseContext,
+    );
+    expect(prompt).toContain(MEDICATION_REMINDER_RULE);
+  });
+
+  it("new / unregistered sender → MEDICATION_REMINDER_RULE NOT appended (no account, no tool)", () => {
+    expect(getSystemPromptForTurn({ role: "new" }, baseContext)).not.toContain(
+      MEDICATION_REMINDER_RULE,
+    );
+    expect(
+      getSystemPromptForTurn({ role: "customer", subRole: "new" }, baseContext),
+    ).not.toContain(MEDICATION_REMINDER_RULE);
   });
 
   it("ops_founder → OPS_MODE_ADDENDUM + OPS MODE context block, NO PATIENT CONTEXT", () => {
