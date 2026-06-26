@@ -98,10 +98,17 @@ export async function GET(req: NextRequest) {
   const selectCols =
     "id, sku, brand_name, strength, form, composition";
 
+  // SAFETY (medicine-resolver slice): only APPROVED rows reach a prescribing
+  // doctor. Aarogya can auto-add web-verified / strip-read medicines as
+  // review_status='pending' — those must never surface in the Rx composer until
+  // ops approves them.
+  const APPROVED = "approved";
+
   // Strategy 1 — brand prefix
   const prefixP = supabaseAdmin
     .from("medicine_catalog")
     .select(selectCols)
+    .eq("review_status", APPROVED)
     .ilike("brand_name", prefix)
     .order("brand_name", { ascending: true })
     .limit(limit);
@@ -112,6 +119,7 @@ export async function GET(req: NextRequest) {
   const brandSubstrP = supabaseAdmin
     .from("medicine_catalog")
     .select(selectCols)
+    .eq("review_status", APPROVED)
     .ilike("brand_name", substr)
     .order("brand_name", { ascending: true })
     .limit(limit);
@@ -120,6 +128,7 @@ export async function GET(req: NextRequest) {
   const compSubstrP = supabaseAdmin
     .from("medicine_catalog")
     .select(selectCols)
+    .eq("review_status", APPROVED)
     .ilike("composition", substr)
     .order("brand_name", { ascending: true })
     .limit(limit);
