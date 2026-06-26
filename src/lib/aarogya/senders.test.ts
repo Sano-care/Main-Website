@@ -1,5 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// meta.ts now reaches the DB (opt-out) + audit on the engagement path. Mock both
+// so the module loads without a live Supabase client; the existing confirmation
+// tests never enable the engagement flag, so they don't touch these.
+vi.mock("@/lib/whatsapp/db", () => ({ isPhoneOptedOut: vi.fn(async () => false) }));
+vi.mock("@/lib/whatsapp/safety/audit", () => ({
+  writeAudit: vi.fn(async () => true),
+  AuditEvent: {
+    BOOKING_ENGAGEMENT_SENT: "booking_engagement_sent",
+    BOOKING_ENGAGEMENT_SKIPPED: "booking_engagement_skipped",
+  },
+}));
+
 import {
   firstName,
   getBookingLabel,
@@ -14,6 +26,8 @@ import {
   sendLabCollectionScheduled,
   sendVisitComplete,
 } from "./meta";
+import { isPhoneOptedOut } from "@/lib/whatsapp/db";
+import { writeAudit } from "@/lib/whatsapp/safety/audit";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -282,5 +296,133 @@ describe("Aarogya patient senders (Meta Cloud API direct)", () => {
     });
     expect(res.delivered).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// ── Booking → Aarogya engagement opener ─────────────────────────────
+
+describe("sendBookingConfirmed — engagement opener (WHATSAPP_BOOKING_ENGAGEMENT_ENABLED)", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    process.env.WHATSAPP_PHONE_NUMBER_ID = "test-phone-id";
+    process.env.WHATSAPP_ACCESS_TOKEN = "test-token";
+    process.env.WHATSAPP_BOOKING_ENGAGEMENT_ENABLED = "true";
+    // Both flags on — proves the engagement opener WINS over the old confirmation.
+    process.env.WHATSAPP_BOOKING_CONFIRMED_ENABLED = "true";
+    fetchMock = okFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(isPhoneOptedOut).mockResolvedValue(false);
+    vi.mocked(writeAudit).mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.WHATSAPP_BOOKING_ENGAGEMENT_ENABLED;
+    delete process.env.WHATSAPP_BOOKING_CONFIRMED_ENABLED;
+  });
+
+  it("flag ON → sends aarogya_booking_confirmed [name, service] + audits SENT", async () => {
+    const res = await sendBookingConfirmed({
+      patientName: "Asha Sharma",
+      serviceSlug: "home-visit",
+      bookingCode: "SAN-B-1",
+      patientPhone: "+919999988888",
+    });
+
+    expect(res.delivered).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = lastFetchBody(fetchMock);
+    expect(body.template.name).toBe("aarogya_booking_confirmed");
+    expect(body.to).toBe("919999988888");
+    const texts = body.template.components[0].parameters.map(
+      (p: { text: string }) => p.text,
+    );
+    expect(texts).toEqual(["Asha", "Home Visit"]); // plain service label, 2 vars
+    expect(vi.mocked(writeAudit)).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "booking_engagement_sent" }),
+    );
+  });
+
+  it("lab booking → plain 'Lab Tests' label (no Booking suffix), bare phone normalized", async () => {
+    await sendBookingConfirmed({
+      patientName: "Ravi",
+      serviceSlug: "lab-tests",
+      bookingCode: "SAN-B-2",
+      patientPhone: "9999988888",
+    });
+    const body = lastFetchBody(fetchMock);
+    expect(body.to).toBe("919999988888");
+    const texts = body.template.components[0].parameters.map(
+      (p: { text: string }) => p.text,
+    );
+    expect(texts).toEqual(["Ravi", "Lab Tests"]);
+  });
+
+  it("opted-out patient → no send, audits SKIPPED(opted_out)", async () => {
+    vi.mocked(isPhoneOptedOut).mockResolvedValue(true);
+    const res = await sendBookingConfirmed({
+      patientName: "Asha",
+      serviceSlug: "home-visit",
+      bookingCode: "SAN-B-3",
+      patientPhone: "+919999988888",
+    });
+    expect(res.delivered).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(vi.mocked(writeAudit)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "booking_engagement_skipped",
+        eventData: expect.objectContaining({ reason: "opted_out" }),
+      }),
+    );
+  });
+
+  it("send failure → delivered false + audits SKIPPED(send_failed)", async () => {
+    fetchMock.mockRejectedValueOnce(new Error("network down"));
+    const res = await sendBookingConfirmed({
+      patientName: "Asha",
+      serviceSlug: "home-visit",
+      bookingCode: "SAN-B-4",
+      patientPhone: "+919999988888",
+    });
+    expect(res.delivered).toBe(false);
+    expect(vi.mocked(writeAudit)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "booking_engagement_skipped",
+        eventData: expect.objectContaining({ reason: "send_failed" }),
+      }),
+    );
+  });
+});
+
+describe("sendBookingConfirmed — flag OFF falls back to the existing confirmation", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    process.env.WHATSAPP_PHONE_NUMBER_ID = "test-phone-id";
+    process.env.WHATSAPP_ACCESS_TOKEN = "test-token";
+    process.env.WHATSAPP_BOOKING_CONFIRMED_ENABLED = "true";
+    // WHATSAPP_BOOKING_ENGAGEMENT_ENABLED deliberately unset → fallback path.
+    fetchMock = okFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(writeAudit).mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.WHATSAPP_BOOKING_CONFIRMED_ENABLED;
+  });
+
+  it("engagement flag OFF → still sends the 4-var sanocare_booking_confirmed (confirmations never stop)", async () => {
+    await sendBookingConfirmed({
+      patientName: "Asha Sharma",
+      serviceSlug: "home-visit",
+      bookingCode: "SAN-B-5",
+      patientPhone: "+919999988888",
+    });
+    const body = lastFetchBody(fetchMock);
+    expect(body.template.name).toBe("sanocare_booking_confirmed");
+    expect(body.template.components[0].parameters).toHaveLength(4);
+    expect(vi.mocked(writeAudit)).not.toHaveBeenCalled(); // engagement-only audit
   });
 });
