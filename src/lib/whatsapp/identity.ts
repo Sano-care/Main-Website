@@ -64,6 +64,20 @@ async function matchByPhoneSuffix(
 }
 
 /**
+ * Resolve a phone to its `customers.id`, or null. Suffix-matched (last 10
+ * digits) exactly like resolveIdentity's customer lookup, so it finds the row
+ * whatever the stored format ("+91…" vs "91…"). Used where a non-customer-role
+ * identity that is ALSO a customer (e.g. ops_founder = the founder's own phone)
+ * needs to act on its own records.
+ */
+export async function resolveCustomerIdByPhone(phone: string): Promise<string | null> {
+  const last10 = normalizePhoneLast10(phone);
+  if (last10.length !== 10) return null;
+  const hit = await matchByPhoneSuffix("customers", last10);
+  return hit?.id ?? null;
+}
+
+/**
  * True when the customer has an ACTIVE CareHub membership (M061). `active`
  * is the partial-index predicate, so this is a cheap point lookup. Soft-fail:
  * any query error returns false — a CareHub miss degrades the customer to

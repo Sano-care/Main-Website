@@ -26,6 +26,7 @@ import {
   AAROGYA_OPS_TOOLS,
   AAROGYA_PULSE_TOOLS,
   AAROGYA_TOOLS,
+  LOG_MEDICATION,
 } from "@/lib/agent/tools";
 import type { AgentTurnInput, AgentTurnResult } from "@/lib/agent/types";
 
@@ -53,7 +54,9 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
   // executor-level identity gates (which re-check customerId).
   const baseTools =
     input.identity?.role === "ops_founder"
-      ? [...AAROGYA_TOOLS, ...AAROGYA_OPS_TOOLS]
+      ? // The founder is also a customer — give them log_medication so they can
+        // set their own reminders (executor resolves their customer_id by phone).
+        [...AAROGYA_TOOLS, ...AAROGYA_OPS_TOOLS, LOG_MEDICATION]
       : input.identity?.role === "medic"
         ? // Medic mode REPLACES the patient tool set — a medic never sees the
           // patient/booking tools, only the three medic tools.
