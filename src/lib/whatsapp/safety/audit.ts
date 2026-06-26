@@ -131,6 +131,10 @@ export const AuditEvent = {
   // skipped (opt-out / send failure). Phone-free: service slug + booking code.
   BOOKING_ENGAGEMENT_SENT: "booking_engagement_sent",
   BOOKING_ENGAGEMENT_SKIPPED: "booking_engagement_skipped",
+  // Aarogya chat-set medication reminder — a patient set/updated a medicine
+  // reminder by WhatsApp, writing the `medications` row the #107 cron reads.
+  // Phone-free: customer_id, medication_id, times_per_day, created-vs-updated.
+  MEDICATION_LOGGED: "medication_logged",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
