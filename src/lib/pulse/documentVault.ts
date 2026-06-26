@@ -11,38 +11,50 @@ import { identityForAudit, type Identity } from "@/lib/whatsapp/identity";
 import { log } from "@/lib/whatsapp/log";
 
 // ---------------------------------------------------------------------------
-// Pulse Records — Aarogya document vault (Slice C).
+// Pulse Records — document vault (the ONE pulse_documents writer).
 //
-// uploadToPulseVault takes a document a patient JUST sent on WhatsApp (a lab
-// report, prescription, scan, discharge summary) and files it into their
-// private Pulse vault:
-//   1. Identity gate — the customer is resolved from the adapter-injected
-//      identity, NEVER from tool/model input. A non-customer is refused.
-//   2. Pull the bytes from Meta (fetchInboundMedia), re-validating mime + size
-//      against the pulse_documents whitelist (defence in depth).
-//   3. Upload to the private India-region `pulse-documents` bucket.
-//   4. Insert the pulse_documents metadata row (source='whatsapp_aarogya').
-//   5. Upload-rollback: if the metadata insert fails, the just-uploaded object
-//      is removed so we never orphan storage — mirrors the medic-documents
-//      upload route exactly.
-//   6. Audit (DPDP): one PULSE_VAULT_UPLOADED row, identity-aware, phone-free
-//      (ids/types/size only — never the file contents).
+// `vaultDocumentBytes` is the shared core: given RAW BYTES + a resolved
+// customer, it validates (mime + size) → uploads to the private India-region
+// `pulse-documents` bucket → inserts the metadata row → rolls the orphaned
+// object back if the insert fails → returns the document id. It takes NO
+// identity and writes NO audit, so it serves both entry points:
+//   - Web (Pulse session): POST /api/pulse/documents passes the multipart
+//     bytes + customer.id + source='pulse_upload', then writes its own audit.
+//   - WhatsApp (Aarogya):  `uploadToPulseVault` (below) gates on the
+//     adapter-injected Identity, fetches the bytes from Meta, calls the core
+//     with source='whatsapp_aarogya', then writes its own audit + returns the
+//     patient-facing confirmation. Behaviour is unchanged by the extraction.
 //
-// The bytes never touch the model; Aarogya only ever sees the confirmation
-// string this returns.
+// The bytes never touch the model and are never logged (DPDP).
 // ---------------------------------------------------------------------------
 
 const BUCKET = "pulse-documents";
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB — matches the bucket + CHECK cap.
 
-// Intersection of what Meta lets us fetch (jpeg/png/pdf) and the
-// pulse_documents mime whitelist (jpeg/png/webp/pdf).
-const VAULT_MIME = new Set(["image/jpeg", "image/png", "application/pdf"]);
+// The pulse_documents mime whitelist (DB CHECK). webp is valid on the table;
+// it only never arrives over WhatsApp because Meta can't hand us webp (see the
+// narrower VAULT_MIME set the wrapper pre-checks).
+const VAULT_MIME = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+]);
 const MIME_EXT: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
+  "image/webp": "webp",
   "application/pdf": "pdf",
 };
+
+// What Meta lets Aarogya fetch (jpeg/png/pdf) — the WhatsApp wrapper pre-checks
+// against this so it can give the patient a WhatsApp-shaped message; the core's
+// fuller VAULT_MIME set is the authoritative gate (and the only one webp hits).
+const WHATSAPP_FETCHABLE_MIME = new Set([
+  "image/jpeg",
+  "image/png",
+  "application/pdf",
+]);
 
 const DOC_TYPES = [
   "lab_report",
@@ -53,8 +65,120 @@ const DOC_TYPES = [
 ] as const;
 type DocType = (typeof DOC_TYPES)[number];
 
+/** Mirrors the pulse_documents.source CHECK. */
+export type VaultSource = "whatsapp_aarogya" | "pulse_upload";
+
 const NOT_A_CUSTOMER =
   "I can only save records once you have a Sanocare account — book a visit and I'll start keeping your reports here for you.";
+
+function normalizeDocType(input: string | undefined): DocType {
+  return (DOC_TYPES as readonly string[]).includes(input ?? "")
+    ? (input as DocType)
+    : "other";
+}
+
+// ===========================================================================
+// Shared core — RAW BYTES → pulse_documents (no identity, no audit, no message)
+// ===========================================================================
+
+export interface VaultDocumentBytesArgs {
+  /** Resolved server-side (session customer, or Aarogya identity) — never trusted from input. */
+  customerId: string;
+  bytes: Uint8Array;
+  mimeType: string;
+  docType?: string;
+  label?: string | null;
+  memberId?: string | null;
+  source: VaultSource;
+}
+
+export interface VaultCoreDeps {
+  supabase?: typeof supabaseAdmin;
+  /** Injectable id generator (tests pass a deterministic one). */
+  randomId?: () => string;
+}
+
+export interface VaultCoreResult {
+  ok: boolean;
+  documentId?: string;
+  /** Normalised doc_type actually stored (callers reuse it for audit/UI). */
+  docType: DocType;
+  sizeBytes: number;
+  /** Machine reason on failure: mime_not_allowed | too_large | upload_failed | insert_failed. */
+  reason?: string;
+}
+
+/**
+ * Validate → upload → insert → (rollback on insert failure). The single place
+ * that writes a pulse_documents row + its storage object. Returns a machine
+ * result; the caller owns the audit + any user-facing message.
+ */
+export async function vaultDocumentBytes(
+  args: VaultDocumentBytesArgs,
+  deps: VaultCoreDeps = {},
+): Promise<VaultCoreResult> {
+  const supabase = deps.supabase ?? supabaseAdmin;
+  const randomId = deps.randomId ?? (() => globalThis.crypto.randomUUID());
+
+  const docType = normalizeDocType(args.docType);
+  const sizeBytes = args.bytes.byteLength;
+
+  if (!VAULT_MIME.has(args.mimeType)) {
+    return { ok: false, reason: `mime_not_allowed:${args.mimeType}`, docType, sizeBytes };
+  }
+  if (sizeBytes <= 0) {
+    return { ok: false, reason: "empty", docType, sizeBytes };
+  }
+  if (sizeBytes > MAX_BYTES) {
+    return { ok: false, reason: "too_large", docType, sizeBytes };
+  }
+
+  const ext = MIME_EXT[args.mimeType] ?? "bin";
+  const path = `${args.customerId}/${docType}/${randomId()}.${ext}`;
+
+  // Upload bytes. upsert:false so a path collision never overwrites.
+  const { error: upErr } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, args.bytes, { contentType: args.mimeType, upsert: false });
+  if (upErr) {
+    log.error("[pulse/vault] storage upload failed", upErr.message);
+    return { ok: false, reason: "upload_failed", docType, sizeBytes };
+  }
+
+  // Insert metadata. customer_id ALWAYS server-resolved (passed in).
+  const { data, error: insErr } = await supabase
+    .from("pulse_documents")
+    .insert({
+      customer_id: args.customerId,
+      member_id: args.memberId ?? null,
+      doc_type: docType,
+      file_path: path,
+      file_size_bytes: sizeBytes,
+      mime_type: args.mimeType,
+      label: args.label ?? null,
+      source: args.source,
+    })
+    .select("id")
+    .single();
+
+  if (insErr || !data) {
+    // Roll back the orphaned object — mirrors the medic-documents route.
+    try {
+      await supabase.storage.from(BUCKET).remove([path]);
+    } catch (rbErr) {
+      log.error("[pulse/vault] rollback remove failed", rbErr);
+    }
+    log.error("[pulse/vault] metadata insert failed; rolled back", insErr?.message);
+    return { ok: false, reason: "insert_failed", docType, sizeBytes };
+  }
+
+  return { ok: true, documentId: data.id, docType, sizeBytes };
+}
+
+// ===========================================================================
+// WhatsApp wrapper — Aarogya: identity gate + fetch Meta media → core + audit
+// (Public signature unchanged from #97; behaviour must not change.)
+// ===========================================================================
 
 /** The inbound-media reference the adapter extracts via mediaRefFromRaw(). */
 export interface VaultMediaRef {
@@ -100,12 +224,6 @@ function customerIdOf(identity: Identity): string | null {
   return identity.customerId;
 }
 
-function normalizeDocType(input: string | undefined): DocType {
-  return (DOC_TYPES as readonly string[]).includes(input ?? "")
-    ? (input as DocType)
-    : "other";
-}
-
 export async function uploadToPulseVault(
   args: UploadToPulseVaultArgs,
   deps: UploadToPulseVaultDeps = {},
@@ -124,9 +242,7 @@ export async function uploadToPulseVault(
   }
 
   const fetchMedia = deps.fetchMedia ?? fetchInboundMedia;
-  const supabase = deps.supabase ?? supabaseAdmin;
   const writeAuditFn = deps.writeAuditFn ?? writeAudit;
-  const randomId = deps.randomId ?? (() => globalThis.crypto.randomUUID());
 
   const fetched = await fetchMedia(args.media.mediaId);
   if (!fetched.ok) {
@@ -137,7 +253,7 @@ export async function uploadToPulseVault(
     };
   }
   const mime = fetched.mimeType;
-  if (!VAULT_MIME.has(mime)) {
+  if (!WHATSAPP_FETCHABLE_MIME.has(mime)) {
     return {
       ok: false,
       message: "I can save photos (JPG or PNG) or PDFs. That file type isn't one I can keep.",
@@ -152,51 +268,26 @@ export async function uploadToPulseVault(
     };
   }
 
-  const docType = normalizeDocType(args.docType);
-  const ext = MIME_EXT[mime] ?? "bin";
-  const path = `${customerId}/${docType}/${randomId()}.${ext}`;
-
-  // Upload bytes. upsert:false so a path collision never overwrites.
-  const { error: upErr } = await supabase.storage
-    .from(BUCKET)
-    .upload(path, fetched.bytes, { contentType: mime, upsert: false });
-  if (upErr) {
-    log.error("[pulse/vault] storage upload failed", upErr.message);
-    return {
-      ok: false,
-      message: "I hit a snag saving that — let's try again in a moment.",
-      reason: "upload_failed",
-    };
-  }
-
-  // Insert metadata. customer_id ALWAYS from the resolved identity.
-  const { data, error: insErr } = await supabase
-    .from("pulse_documents")
-    .insert({
-      customer_id: customerId,
-      member_id: args.memberId ?? null,
-      doc_type: docType,
-      file_path: path,
-      file_size_bytes: fetched.bytes.byteLength,
-      mime_type: mime,
-      label: args.label ?? null,
+  // Delegate the upload + insert + rollback to the shared core.
+  const core = await vaultDocumentBytes(
+    {
+      customerId,
+      bytes: fetched.bytes,
+      mimeType: mime,
+      docType: args.docType,
+      label: args.label,
+      memberId: args.memberId,
       source: "whatsapp_aarogya",
-    })
-    .select("id")
-    .single();
+    },
+    { supabase: deps.supabase, randomId: deps.randomId },
+  );
 
-  if (insErr || !data) {
-    // Roll back the orphaned object — mirrors the medic-documents route.
-    try {
-      await supabase.storage.from(BUCKET).remove([path]);
-    } catch (rbErr) {
-      log.error("[pulse/vault] rollback remove failed", rbErr);
-    }
-    log.error("[pulse/vault] metadata insert failed; rolled back", insErr?.message);
+  if (!core.ok || !core.documentId) {
+    // upload_failed / insert_failed (validation already short-circuited above).
     return {
       ok: false,
       message: "I hit a snag saving that — let's try again in a moment.",
-      reason: "insert_failed",
+      reason: core.reason ?? "save_failed",
     };
   }
 
@@ -206,19 +297,19 @@ export async function uploadToPulseVault(
     eventType: AuditEvent.PULSE_VAULT_UPLOADED,
     identity: auditIdentity,
     eventData: {
-      document_id: data.id,
-      doc_type: docType,
+      document_id: core.documentId,
+      doc_type: core.docType,
       mime,
-      size_bytes: fetched.bytes.byteLength,
+      size_bytes: core.sizeBytes,
       member_scoped: Boolean(args.memberId),
       source: "whatsapp_aarogya",
     },
   });
 
-  const what = args.label?.trim() || DOC_TYPE_LABEL[docType];
+  const what = args.label?.trim() || DOC_TYPE_LABEL[core.docType];
   return {
     ok: true,
-    documentId: data.id,
+    documentId: core.documentId,
     message: `Saved to your records — ${what}. You'll find it anytime under "Your records" in Pulse. (I keep it safe; I don't read what's inside.)`,
   };
 }

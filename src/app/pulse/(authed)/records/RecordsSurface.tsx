@@ -9,6 +9,7 @@ import {
   useViewingFirstName,
 } from "@/app/pulse/_lib/MemberViewingContext";
 import { pulseFetch } from "@/app/pulse/_lib/pulseClient";
+import type { FamilyMember } from "@/lib/family-members/types";
 import type {
   PulseRecords,
   BookingRecord,
@@ -19,6 +20,7 @@ import type {
   AllergyRecord,
   DocumentRecord,
 } from "@/lib/pulse/recordsFetch";
+import AddDocumentForm from "./AddDocumentForm";
 import {
   memberParamFor,
   serviceLabel,
@@ -56,9 +58,11 @@ type LoadState =
   | { status: "ready"; records: PulseRecords; loadedFor: string };
 
 export default function RecordsSurface() {
-  const { viewing, membersLoading } = useViewingMember();
+  const { viewing, members, membersLoading } = useViewingMember();
   const viewingName = useViewingFirstName();
   const memberParam = memberParamFor(viewing);
+  // Upload defaults to whoever you're currently viewing (self or a member).
+  const uploadDefaultMemberId = viewing.kind === "member" ? viewing.member.id : null;
 
   const [state, setState] = useState<LoadState>({ status: "loading" });
   // Bumped by the retry button to force a re-fetch through the same effect.
@@ -120,7 +124,16 @@ export default function RecordsSurface() {
               Updating…
             </p>
           ) : null}
-          <RecordsBody records={state.records} viewingIsMember={viewing.kind === "member"} />
+          <RecordsBody
+            records={state.records}
+            viewingIsMember={viewing.kind === "member"}
+            members={members}
+            uploadDefaultMemberId={uploadDefaultMemberId}
+            onUploaded={() => {
+              setState({ status: "loading" });
+              setReloadKey((k) => k + 1);
+            }}
+          />
         </>
       )}
     </div>
@@ -130,9 +143,15 @@ export default function RecordsSurface() {
 function RecordsBody({
   records,
   viewingIsMember,
+  members,
+  uploadDefaultMemberId,
+  onUploaded,
 }: {
   records: PulseRecords;
   viewingIsMember: boolean;
+  members: FamilyMember[];
+  uploadDefaultMemberId: string | null;
+  onUploaded: () => void;
 }) {
   const omitted = new Set(records.accountLevelOmitted);
 
@@ -226,6 +245,11 @@ function RecordsBody({
             ))}
           </Rows>
         )}
+        <AddDocumentForm
+          members={members}
+          defaultMemberId={uploadDefaultMemberId}
+          onUploaded={onUploaded}
+        />
       </RecordSection>
 
       {viewingIsMember ? (

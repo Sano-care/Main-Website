@@ -11,7 +11,9 @@ vi.mock("@/lib/whatsapp/log", () => ({
 
 import {
   uploadToPulseVault,
+  vaultDocumentBytes,
   type UploadToPulseVaultDeps,
+  type VaultCoreDeps,
 } from "./documentVault";
 import type { Identity } from "@/lib/whatsapp/identity";
 import type { InboundMedia } from "@/lib/whatsapp/media";
@@ -198,5 +200,99 @@ describe("uploadToPulseVault — validation + rollback", () => {
     expect(h.uploadCalls).toHaveLength(1);
     expect(h.removeCalls).toEqual([["cust-1/other/fixed-uuid.pdf"]]);
     expect(h.auditCalls).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Shared core — the web (pulse_upload) entry point exercises this directly.
+// ---------------------------------------------------------------------------
+
+function coreDeps(over: Partial<VaultCoreDeps> = {}): VaultCoreDeps {
+  return {
+    supabase: makeSupabase() as unknown as VaultCoreDeps["supabase"],
+    randomId: () => "fixed-uuid",
+    ...over,
+  };
+}
+
+const BYTES = new Uint8Array([1, 2, 3, 4]);
+
+describe("vaultDocumentBytes — web upload (source='pulse_upload')", () => {
+  it("uploads to the private bucket + inserts a customer-scoped row tagged pulse_upload", async () => {
+    const res = await vaultDocumentBytes(
+      {
+        customerId: "cust-1",
+        bytes: BYTES,
+        mimeType: "application/pdf",
+        docType: "lab_report",
+        label: "CBC June",
+        memberId: null,
+        source: "pulse_upload",
+      },
+      coreDeps(),
+    );
+
+    expect(res.ok).toBe(true);
+    expect(res.documentId).toBe("doc-1");
+    expect(res.docType).toBe("lab_report");
+    expect(res.sizeBytes).toBe(4);
+
+    expect(h.uploadCalls).toEqual([
+      { bucket: "pulse-documents", path: "cust-1/lab_report/fixed-uuid.pdf", size: 4, contentType: "application/pdf" },
+    ]);
+    expect(h.insertedRows[0]).toMatchObject({
+      customer_id: "cust-1",
+      member_id: null,
+      doc_type: "lab_report",
+      file_path: "cust-1/lab_report/fixed-uuid.pdf",
+      mime_type: "application/pdf",
+      source: "pulse_upload",
+      label: "CBC June",
+    });
+    // The core itself never audits — the caller owns that.
+    expect(h.auditCalls).toHaveLength(0);
+  });
+
+  it("accepts webp (allowed on web; .webp extension)", async () => {
+    const res = await vaultDocumentBytes(
+      { customerId: "cust-1", bytes: BYTES, mimeType: "image/webp", source: "pulse_upload" },
+      coreDeps(),
+    );
+    expect(res.ok).toBe(true);
+    expect(h.uploadCalls[0].path).toBe("cust-1/other/fixed-uuid.webp");
+    expect(h.insertedRows[0].mime_type).toBe("image/webp");
+  });
+
+  it("rejects a disallowed mime before upload", async () => {
+    const res = await vaultDocumentBytes(
+      { customerId: "cust-1", bytes: BYTES, mimeType: "image/gif", source: "pulse_upload" },
+      coreDeps(),
+    );
+    expect(res.ok).toBe(false);
+    expect(res.reason).toContain("mime_not_allowed");
+    expect(h.uploadCalls).toHaveLength(0);
+    expect(h.insertedRows).toHaveLength(0);
+  });
+
+  it("rejects oversize before upload", async () => {
+    const big = new Uint8Array(10 * 1024 * 1024 + 1);
+    const res = await vaultDocumentBytes(
+      { customerId: "cust-1", bytes: big, mimeType: "application/pdf", source: "pulse_upload" },
+      coreDeps(),
+    );
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe("too_large");
+    expect(h.uploadCalls).toHaveLength(0);
+  });
+
+  it("rolls back the orphaned object on insert failure", async () => {
+    const res = await vaultDocumentBytes(
+      { customerId: "cust-1", bytes: BYTES, mimeType: "application/pdf", source: "pulse_upload" },
+      coreDeps({ supabase: makeSupabase({ insertError: { message: "boom" } }) as unknown as VaultCoreDeps["supabase"] }),
+    );
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe("insert_failed");
+    expect(h.uploadCalls).toHaveLength(1);
+    expect(h.removeCalls).toEqual([["cust-1/other/fixed-uuid.pdf"]]);
   });
 });
