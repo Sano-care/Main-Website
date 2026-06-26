@@ -1,10 +1,27 @@
 // R1 Records redesign — the ownership model IS the visual system. Pure config +
-// derivations (no JSX, no client/server runtime) so the bands, tiles, detail
+// derivations (no JSX, no server-only runtime) so the bands, tiles, detail
 // actions, summaries, and the hybrid source tag are all unit-testable and shared
 // by the landing grid + the per-category detail screens.
 //
+// R1.1 — icons are monoline lucide-react components (same library + ~1.8 stroke
+// as the homepage service sections), single-sourced here per category and tinted
+// to the tier accent via TIER_ICON.
+//
 // Type-only import of the Slice A read contract — never pulls the server-only
 // recordsFetch runtime into the client bundle (same discipline as recordsDisplay).
+
+import {
+  CalendarDays,
+  ClipboardList,
+  FlaskConical,
+  Receipt,
+  HeartPulse,
+  Pill,
+  Stethoscope,
+  TriangleAlert,
+  FileText,
+  type LucideIcon,
+} from "lucide-react";
 
 import type { PulseRecords } from "@/lib/pulse/recordsFetch";
 
@@ -32,7 +49,8 @@ export type DetailAction =
 export interface CategoryConfig {
   key: RecordTileKey;
   label: string;
-  icon: string; // emoji per the founder's mockup
+  /** Monoline lucide icon (R1.1) — decorative; the text label carries meaning. */
+  icon: LucideIcon;
   tier: RecordTier;
   /** Visual affordance shown on the tile foot (Open ›, + Log, + Add, + Upload). */
   tileAction: string;
@@ -49,7 +67,7 @@ export const CATEGORY_CONFIG: Record<RecordTileKey, CategoryConfig> = {
   bookings: {
     key: "bookings",
     label: "Bookings",
-    icon: "📅",
+    icon: CalendarDays,
     tier: "sanocare",
     tileAction: "Open ›",
     detailAction: { type: "none" },
@@ -58,7 +76,7 @@ export const CATEGORY_CONFIG: Record<RecordTileKey, CategoryConfig> = {
   prescriptions: {
     key: "prescriptions",
     label: "Prescriptions",
-    icon: "℞",
+    icon: ClipboardList,
     tier: "sanocare",
     tileAction: "Open ›",
     detailAction: { type: "none" },
@@ -67,7 +85,7 @@ export const CATEGORY_CONFIG: Record<RecordTileKey, CategoryConfig> = {
   reports: {
     key: "reports",
     label: "Reports",
-    icon: "🧪",
+    icon: FlaskConical,
     tier: "sanocare",
     tileAction: "Open ›",
     detailAction: { type: "none" },
@@ -77,7 +95,7 @@ export const CATEGORY_CONFIG: Record<RecordTileKey, CategoryConfig> = {
   invoices: {
     key: "invoices",
     label: "Invoices",
-    icon: "🧾",
+    icon: Receipt,
     tier: "sanocare",
     tileAction: "Open ›",
     detailAction: { type: "none" },
@@ -88,7 +106,7 @@ export const CATEGORY_CONFIG: Record<RecordTileKey, CategoryConfig> = {
   vitals: {
     key: "vitals",
     label: "Vitals",
-    icon: "❤️",
+    icon: HeartPulse,
     tier: "hybrid",
     tileAction: "+ Log",
     detailAction: { type: "link", href: "/pulse/vitals?add=bp", label: "Log a reading" },
@@ -97,7 +115,7 @@ export const CATEGORY_CONFIG: Record<RecordTileKey, CategoryConfig> = {
   medications: {
     key: "medications",
     label: "Medications",
-    icon: "💊",
+    icon: Pill,
     tier: "hybrid",
     tileAction: "+ Add",
     detailAction: { type: "link", href: "/pulse/medications", label: "Add a medication" },
@@ -107,7 +125,7 @@ export const CATEGORY_CONFIG: Record<RecordTileKey, CategoryConfig> = {
   conditions: {
     key: "conditions",
     label: "Conditions",
-    icon: "🩺",
+    icon: Stethoscope,
     tier: "yours",
     tileAction: "+ Add",
     detailAction: { type: "soon", label: "Add a condition" },
@@ -116,7 +134,7 @@ export const CATEGORY_CONFIG: Record<RecordTileKey, CategoryConfig> = {
   allergies: {
     key: "allergies",
     label: "Allergies",
-    icon: "⚠️",
+    icon: TriangleAlert,
     tier: "yours",
     tileAction: "+ Add",
     detailAction: { type: "soon", label: "Add an allergy" },
@@ -125,7 +143,7 @@ export const CATEGORY_CONFIG: Record<RecordTileKey, CategoryConfig> = {
   documents: {
     key: "documents",
     label: "Documents",
-    icon: "📄",
+    icon: FileText,
     tier: "yours",
     tileAction: "+ Upload",
     detailAction: { type: "modal", label: "Upload a document" },
@@ -166,6 +184,18 @@ export const BANDS: TierBand[] = [
 export function isRecordTileKey(slug: string): slug is RecordTileKey {
   return Object.prototype.hasOwnProperty.call(CATEGORY_CONFIG, slug);
 }
+
+/**
+ * R1.1 — monoline tile-icon treatment per tier: a soft-tint wrapper + the icon
+ * stroke in the tier accent (blue / slate / coral). Single-sourced so the
+ * landing tiles and the detail-screen headers read identically. Stroke colours
+ * are the tier accents the bands already use (BANDS pinClass).
+ */
+export const TIER_ICON: Record<RecordTier, { wrapBg: string; stroke: string }> = {
+  sanocare: { wrapBg: "bg-[#EAF2FF]", stroke: "text-[#2B81FF]" },
+  hybrid: { wrapBg: "bg-slate-100", stroke: "text-[#64748B]" },
+  yours: { wrapBg: "bg-[#FEF1EC]", stroke: "text-[#F4845A]" },
+};
 
 // ---------------------------------------------------------------------------
 // Hybrid source tag — "You" (self-entered) vs "Home visit" (clinician/Sanocare).

@@ -10,6 +10,7 @@ import { useRecords } from "./useRecords";
 import {
   BANDS,
   CATEGORY_CONFIG,
+  TIER_ICON,
   tileSummary,
   type RecordTier,
   type RecordTileKey,
@@ -20,27 +21,27 @@ import {
 // "bank-statement" screen. Presentation only — reads the same /api/pulse/records
 // payload the old flat surface loaded, scoped by the active viewing member.
 
+// The soft icon-wrapper bg + accent stroke per tier live in categories.TIER_ICON
+// (single-sourced, shared with the detail headers). This map holds the rest of
+// the tile's per-tier treatment.
 const TIER_UI: Record<
   RecordTier,
-  { border: string; iconBg: string; chip: string; chipText: string; action: string }
+  { border: string; chip: string; chipText: string; action: string }
 > = {
   sanocare: {
     border: "border-t-[3px] border-t-[#2B81FF]",
-    iconBg: "bg-[#EAF2FF]",
     chip: "bg-[#EAF2FF] text-[#2B81FF]",
     chipText: "Auto",
     action: "text-slate-500",
   },
   hybrid: {
     border: "border-t-[3px] border-t-slate-400",
-    iconBg: "bg-slate-100",
     chip: "bg-slate-100 text-slate-600",
     chipText: "You + Sanocare",
     action: "text-[#2B81FF]",
   },
   yours: {
     border: "border-t-[3px] border-t-[#F4845A]",
-    iconBg: "bg-[#FEF1EC]",
     chip: "bg-[#FEF1EC] text-[#C2410C]",
     chipText: "You",
     action: "text-[#F4845A]",
@@ -100,7 +101,9 @@ export default function RecordsLanding() {
 function Tile({ tileKey, records }: { tileKey: RecordTileKey; records: PulseRecords }) {
   const cfg = CATEGORY_CONFIG[tileKey];
   const ui = TIER_UI[cfg.tier];
+  const tint = TIER_ICON[cfg.tier];
   const summary = tileSummary(tileKey, records);
+  const Icon = cfg.icon;
 
   return (
     <Link
@@ -111,12 +114,10 @@ function Tile({ tileKey, records }: { tileKey: RecordTileKey; records: PulseReco
       }
     >
       <span
-        className={
-          "mb-2 flex h-9 w-9 items-center justify-center rounded-xl text-lg " + ui.iconBg
-        }
-        aria-hidden
+        className={"mb-2 flex h-9 w-9 items-center justify-center rounded-xl " + tint.wrapBg}
+        aria-hidden="true"
       >
-        {cfg.icon}
+        <Icon className={"h-5 w-5 [stroke-width:1.8] " + tint.stroke} aria-hidden="true" />
       </span>
       <span className="text-sm font-bold text-text-main">{cfg.label}</span>
       <span className="mt-0.5 text-[11px] text-text-secondary">

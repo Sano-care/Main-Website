@@ -4,13 +4,16 @@ import type { PulseRecords } from "@/lib/pulse/recordsFetch";
 import {
   BANDS,
   CATEGORY_CONFIG,
+  TIER_ICON,
   isRecordTileKey,
   sourceTag,
   tileSummary,
+  type RecordTier,
   type RecordTileKey,
 } from "./categories";
 
 const ALL_KEYS = Object.keys(CATEGORY_CONFIG) as RecordTileKey[];
+const ALL_TIERS: RecordTier[] = ["sanocare", "hybrid", "yours"];
 
 function emptyRecords(over: Partial<PulseRecords> = {}): PulseRecords {
   return {
@@ -62,6 +65,28 @@ describe("BANDS — the visual contract", () => {
   it("marks Reports + Invoices as stubs (empty this slice)", () => {
     expect(CATEGORY_CONFIG.reports.stub).toBe(true);
     expect(CATEGORY_CONFIG.invoices.stub).toBe(true);
+  });
+});
+
+describe("R1.1 — monoline icons", () => {
+  it("every category has a lucide component icon (no emoji strings)", () => {
+    for (const key of ALL_KEYS) {
+      const icon = CATEGORY_CONFIG[key].icon;
+      // lucide-react icons are forwardRef components → objects/functions, never strings.
+      expect(typeof icon).not.toBe("string");
+      expect(icon).toBeTruthy();
+    }
+  });
+
+  it("TIER_ICON tints every tier (soft wrapper bg + accent stroke)", () => {
+    for (const tier of ALL_TIERS) {
+      expect(TIER_ICON[tier].wrapBg).toMatch(/^bg-/);
+      expect(TIER_ICON[tier].stroke).toMatch(/^text-/);
+    }
+    // The brief's tier accents must be the stroke colours.
+    expect(TIER_ICON.sanocare.stroke).toBe("text-[#2B81FF]");
+    expect(TIER_ICON.hybrid.stroke).toBe("text-[#64748B]");
+    expect(TIER_ICON.yours.stroke).toBe("text-[#F4845A]");
   });
 });
 
