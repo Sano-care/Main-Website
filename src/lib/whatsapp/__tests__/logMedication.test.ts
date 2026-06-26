@@ -128,6 +128,44 @@ describe("executeLogMedication", () => {
   });
 });
 
+// The live bug: from FOUNDER_OPS_PHONE, "remind me to take Telma 40 at 10am"
+// returned an external-app suggestion because ops_founder never got
+// log_medication. The founder IS a customer, so resolve their id by phone.
+describe("executeLogMedication — ops_founder (the founder is also a customer)", () => {
+  const opsFounder: Identity = { role: "ops_founder", phone: "+919760059900" };
+
+  it("flag ON → resolves the founder's customer_id by phone, logs the med, never an external app", async () => {
+    const resolveCustomerIdFn = vi.fn(async () => "cus-founder");
+    const deps = baseDeps({ resolveCustomerIdFn });
+    const out = await call({ name: "Telma 40", scheduled_times: ["10:00"] }, opsFounder, deps);
+
+    expect(resolveCustomerIdFn).toHaveBeenCalledWith("+919760059900");
+    expect(firstArg(deps.createFn as AnyMock)).toMatchObject({
+      customerId: "cus-founder",
+      name: "Telma 40",
+      scheduledTimes: ["10:00"],
+    });
+    expect(out).toContain("Telma 40");
+    expect(out).toContain("10:00 AM");
+    expect(out).not.toMatch(/google|calendar|assistant|alarm/i);
+  });
+
+  it("flag OFF → captures + points to Pulse, no write, never an external app", async () => {
+    const deps = baseDeps({ enabled: false, resolveCustomerIdFn: vi.fn(async () => "cus-founder") });
+    const out = await call({ name: "Telma 40", scheduled_times: ["10:00"] }, opsFounder, deps);
+    expect((deps.createFn as AnyMock)).not.toHaveBeenCalled();
+    expect(out).toMatch(/Pulse/);
+    expect(out).not.toMatch(/google|calendar|assistant|alarm/i);
+  });
+
+  it("founder somehow has no customer row → graceful refusal, no write", async () => {
+    const deps = baseDeps({ resolveCustomerIdFn: vi.fn(async () => null) });
+    const out = await call({ name: "Telma 40", scheduled_times: ["10:00"] }, opsFounder, deps);
+    expect((deps.createFn as AnyMock)).not.toHaveBeenCalled();
+    expect(out).toMatch(/Sanocare account/i);
+  });
+});
+
 describe("frequencyLabelForCount", () => {
   it("maps dose counts to human labels", () => {
     expect(frequencyLabelForCount(1)).toBe("Daily");

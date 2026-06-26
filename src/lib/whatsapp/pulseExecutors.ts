@@ -23,7 +23,11 @@ import {
   writeAudit,
   type AuditIdentity,
 } from "@/lib/whatsapp/safety/audit";
-import { identityForAudit, type Identity } from "@/lib/whatsapp/identity";
+import {
+  identityForAudit,
+  resolveCustomerIdByPhone,
+  type Identity,
+} from "@/lib/whatsapp/identity";
 import { normaliseScheduledTimes } from "@/app/api/pulse/_lib/medications";
 import { istTodayYMD } from "@/app/api/pulse/_lib/ist";
 import {
@@ -232,9 +236,17 @@ export async function executeLogMedication(args: {
     findActiveFn?: typeof findActiveMedicationByName;
     updateFn?: typeof updateMedicationSchedule;
     writeAuditFn?: typeof writeAudit;
+    resolveCustomerIdFn?: typeof resolveCustomerIdByPhone;
   };
 }): Promise<string> {
-  const customerId = customerIdOf(args.identity);
+  let customerId = customerIdOf(args.identity);
+  // ops_founder is the founder's OWN phone, which is also a customer row — so
+  // the founder can set their own reminders. Resolve their customer_id by phone
+  // (identity-scoped: only ever the inbound phone's own record).
+  if (!customerId && args.identity.role === "ops_founder") {
+    const resolveCustomerIdFn = args.deps?.resolveCustomerIdFn ?? resolveCustomerIdByPhone;
+    customerId = await resolveCustomerIdFn(args.identity.phone);
+  }
   if (!customerId) return MED_NOT_A_CUSTOMER;
 
   const name = (args.input.name ?? "").trim();

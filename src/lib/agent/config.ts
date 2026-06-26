@@ -114,6 +114,9 @@ export function getSystemPromptForTurn(
 
   if (identity.role === "ops_founder") {
     sections.push(OPS_MODE_ADDENDUM);
+    // The founder is also a customer and carries log_medication — tell Aarogya
+    // it CAN set their reminders (and never to fall back to an external app).
+    sections.push(MEDICATION_REMINDER_RULE);
     sections.push(renderOpsContextBlock({
       pendingDraftTargetPhone: opsExtras?.pendingDraftTargetPhone ?? null,
     }));

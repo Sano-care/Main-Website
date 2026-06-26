@@ -4,6 +4,7 @@ import { describe, it, expect } from "vitest";
 
 import { getSystemPromptForTurn } from "@/lib/agent/config";
 import {
+  buildAarogyaSystemPrompt,
   CUSTOMER_CAREHUB_ADDENDUM,
   CUSTOMER_REGISTERED_ADDENDUM,
   LANGUAGE_MIRROR_RULE,
@@ -114,6 +115,32 @@ describe("getSystemPromptForTurn — composition", () => {
     // block isn't emitted, not the substring "PATIENT CONTEXT" (which the
     // language mirror rule references by name).
     expect(prompt).not.toContain("do not mention explicitly");
+  });
+
+  it("ops_founder → MEDICATION_REMINDER_RULE now attached (the founder can set reminders)", () => {
+    const prompt = getSystemPromptForTurn(
+      { role: "ops_founder", phone: "+919760059900" },
+      baseContext,
+    );
+    expect(prompt).toContain(MEDICATION_REMINDER_RULE);
+  });
+
+  it("the external-app ban is in the BASE prompt → present on every role's turn", () => {
+    // Base prompt itself.
+    const base = buildAarogyaSystemPrompt();
+    expect(base).toMatch(/never suggest google calendar/i);
+    expect(base).toMatch(/Sanocare Pulse/);
+    // And therefore on every composed turn — patient, ops, medic, new.
+    for (const identity of [
+      { role: "new" } as const,
+      { role: "customer", subRole: "registered", customerId: "c" } as const,
+      { role: "ops_founder", phone: "+919760059900" } as const,
+      { role: "medic", medicId: "m", fullName: "M" } as const,
+    ]) {
+      expect(getSystemPromptForTurn(identity, baseContext)).toMatch(
+        /never suggest google calendar/i,
+      );
+    }
   });
 
   it("ops_founder with pending draft → context block surfaces the target phone", () => {
