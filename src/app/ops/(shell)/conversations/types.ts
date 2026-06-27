@@ -53,6 +53,15 @@ export interface MessageItem {
   opsMediaId: string | null;
   /** 'image' | 'document' when an ops-media item exists. */
   mediaKind: string | null;
+  // For content_type === "location" the loader parses raw_payload.location
+  // server-side (parseLocation) and surfaces the coords here. Null for every
+  // other message type — and for a location whose coords are missing or
+  // non-numeric, so the bubble falls back to the plain "[location]" text.
+  // Coords are floats.
+  latitude: number | null;
+  longitude: number | null;
+  locationName: string | null;
+  locationAddress: string | null;
 }
 
 export interface AuditItem {
@@ -149,4 +158,57 @@ export function redactPhone(phone: string): string {
 export function telHref(phone: string): string {
   const d = phone.replace(/\D/g, "");
   return d.startsWith("91") ? `tel:+${d}` : `tel:+91${d}`;
+}
+
+// ── Location rendering (patient-shared map pins) ────────────────────────────
+// A WhatsApp location message stores its coords in messages.raw_payload as
+// `{ location: { latitude, longitude, name?, address? } }`. The loader parses
+// it server-side; the bubble renders a Google Maps link. Pure (no DB, no React)
+// so it's safe to import from data.ts, the client bubble, and the tests.
+
+export interface ParsedLocation {
+  latitude: number;
+  longitude: number;
+  /** Present only for named-place shares; null for a raw pin. */
+  name: string | null;
+  address: string | null;
+}
+
+/** Accept a finite number, or a non-empty numeric string; reject everything
+ *  else (null/undefined/boolean/object/"" → null). Guards against 0,0 from a
+ *  Number(null)/Number("") coercion and keeps the Maps URL injection-safe (the
+ *  output is always a finite number, never raw user text). */
+function toFiniteNumber(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/**
+ * Parse a WhatsApp location payload into validated coords. Returns null for a
+ * non-location payload or one whose latitude/longitude is missing or
+ * non-numeric — the caller then falls back to the plain "[location]" text.
+ */
+export function parseLocation(rawPayload: unknown): ParsedLocation | null {
+  if (!rawPayload || typeof rawPayload !== "object") return null;
+  const loc = (rawPayload as Record<string, unknown>).location;
+  if (!loc || typeof loc !== "object") return null;
+  const l = loc as Record<string, unknown>;
+
+  const latitude = toFiniteNumber(l.latitude);
+  const longitude = toFiniteNumber(l.longitude);
+  if (latitude === null || longitude === null) return null;
+
+  const name = typeof l.name === "string" && l.name.trim() ? l.name : null;
+  const address = typeof l.address === "string" && l.address.trim() ? l.address : null;
+  return { latitude, longitude, name, address };
+}
+
+/** Google Maps "search" deep link for a coordinate pair (opens the location).
+ *  Caller must pass finite numbers (see parseLocation / Number.isFinite gate). */
+export function mapsSearchUrl(latitude: number, longitude: number): string {
+  return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
 }

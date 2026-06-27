@@ -26,8 +26,10 @@ import { getConversationMeta, getThread, listConversations } from "./data";
 import {
   HIDDEN_AUDIT_TYPES,
   isWithinActiveWindow,
+  mapsSearchUrl,
   matchesFilter,
   matchesSearch,
+  parseLocation,
   redactPhone,
   relativeTime,
   telHref,
@@ -108,6 +110,44 @@ describe("getThread", () => {
       "m:m2",
       "a:a2",
     ]);
+  });
+
+  it("surfaces parsed location coords (+ name/address) for location messages", async () => {
+    rows.messages = {
+      data: [
+        // raw pin
+        { id: "m1", direction: "inbound", content: "[location]", content_type: "location", claude_model_used: null, claude_tokens_out: null, created_at: "2026-06-18T10:00:00Z", raw_payload: { location: { latitude: 28.5465, longitude: 77.2455 } } },
+        // named place
+        { id: "m2", direction: "inbound", content: "[location]", content_type: "location", claude_model_used: null, claude_tokens_out: null, created_at: "2026-06-18T10:00:05Z", raw_payload: { location: { latitude: 28.61, longitude: 77.23, name: "AIIMS", address: "Ansari Nagar, New Delhi" } } },
+        // bad/missing coords → fall back to plain text (all coord fields null)
+        { id: "m3", direction: "inbound", content: "[location]", content_type: "location", claude_model_used: null, claude_tokens_out: null, created_at: "2026-06-18T10:00:10Z", raw_payload: { location: { latitude: "nope", longitude: 77.2 } } },
+        // a non-location message must never carry coords
+        { id: "m4", direction: "inbound", content: "hi", content_type: "text", claude_model_used: null, claude_tokens_out: null, created_at: "2026-06-18T10:00:15Z", raw_payload: { location: { latitude: 1, longitude: 2 } } },
+      ],
+      error: null,
+    };
+    rows.audit_log = { data: [], error: null };
+
+    const thread = await getThread("c1");
+    const byId = new Map(
+      thread.filter((t) => t.kind === "message").map((t) => [t.id, t] as const),
+    );
+
+    const m1 = byId.get("m1")!;
+    expect(m1.kind === "message" && m1.latitude).toBe(28.5465);
+    expect(m1.kind === "message" && m1.longitude).toBe(77.2455);
+    expect(m1.kind === "message" && m1.locationName).toBeNull();
+
+    const m2 = byId.get("m2")!;
+    expect(m2.kind === "message" && m2.locationName).toBe("AIIMS");
+    expect(m2.kind === "message" && m2.locationAddress).toBe("Ansari Nagar, New Delhi");
+
+    const m3 = byId.get("m3")!;
+    expect(m3.kind === "message" && m3.latitude).toBeNull();
+    expect(m3.kind === "message" && m3.longitude).toBeNull();
+
+    const m4 = byId.get("m4")!; // text message ignores raw_payload.location
+    expect(m4.kind === "message" && m4.latitude).toBeNull();
   });
 });
 
@@ -210,5 +250,58 @@ describe("HIDDEN_AUDIT_TYPES", () => {
     expect(HIDDEN_AUDIT_TYPES.has("agent_response")).toBe(true);
     expect(HIDDEN_AUDIT_TYPES.has("message_received")).toBe(true);
     expect(HIDDEN_AUDIT_TYPES.has("emergency_detected")).toBe(false);
+  });
+});
+
+describe("parseLocation", () => {
+  it("parses a raw coordinate pin", () => {
+    expect(parseLocation({ location: { latitude: 28.5465, longitude: 77.2455 } })).toEqual({
+      latitude: 28.5465,
+      longitude: 77.2455,
+      name: null,
+      address: null,
+    });
+  });
+  it("surfaces name + address for a named place", () => {
+    expect(
+      parseLocation({ location: { latitude: 28.61, longitude: 77.23, name: "AIIMS", address: "New Delhi" } }),
+    ).toEqual({ latitude: 28.61, longitude: 77.23, name: "AIIMS", address: "New Delhi" });
+  });
+  it("coerces numeric-string coords", () => {
+    expect(parseLocation({ location: { latitude: "28.5", longitude: "77.2" } })).toEqual({
+      latitude: 28.5,
+      longitude: 77.2,
+      name: null,
+      address: null,
+    });
+  });
+  it("accepts 0,0 as valid finite coords (null-coercion guard)", () => {
+    expect(parseLocation({ location: { latitude: 0, longitude: 0 } })).toEqual({
+      latitude: 0,
+      longitude: 0,
+      name: null,
+      address: null,
+    });
+  });
+  it("returns null for non-numeric, missing, or null coords", () => {
+    expect(parseLocation({ location: { latitude: "nope", longitude: 77 } })).toBeNull();
+    expect(parseLocation({ location: { longitude: 77 } })).toBeNull();
+    expect(parseLocation({ location: { latitude: null, longitude: null } })).toBeNull();
+    expect(parseLocation({ location: { latitude: NaN, longitude: 77 } })).toBeNull();
+  });
+  it("returns null for a missing/non-object payload or location", () => {
+    expect(parseLocation(null)).toBeNull();
+    expect(parseLocation(undefined)).toBeNull();
+    expect(parseLocation("[location]")).toBeNull();
+    expect(parseLocation({})).toBeNull();
+    expect(parseLocation({ location: "nope" })).toBeNull();
+  });
+});
+
+describe("mapsSearchUrl", () => {
+  it("builds a Google Maps search deep link with the coord pair", () => {
+    expect(mapsSearchUrl(28.5465, 77.2455)).toBe(
+      "https://www.google.com/maps/search/?api=1&query=28.5465,77.2455",
+    );
   });
 });
