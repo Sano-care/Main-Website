@@ -57,9 +57,9 @@ describe("BANDS — the visual contract", () => {
     expect(CATEGORY_CONFIG.vitals.detailAction.type).toBe("link");
     expect(CATEGORY_CONFIG.medications.detailAction.type).toBe("link");
     expect(CATEGORY_CONFIG.documents.detailAction.type).toBe("modal");
-    // Conditions/Allergies present-but-disabled this slice (R2 wires them).
-    expect(CATEGORY_CONFIG.conditions.detailAction.type).toBe("soon");
-    expect(CATEGORY_CONFIG.allergies.detailAction.type).toBe("soon");
+    // R2a — Conditions/Allergies now open an add modal (were "soon" in R1).
+    expect(CATEGORY_CONFIG.conditions.detailAction.type).toBe("modal");
+    expect(CATEGORY_CONFIG.allergies.detailAction.type).toBe("modal");
   });
 
   it("marks Reports + Invoices as stubs (empty this slice)", () => {
@@ -99,13 +99,13 @@ describe("isRecordTileKey", () => {
   });
 });
 
-describe("sourceTag — You vs Home visit (hybrid trust signal)", () => {
+describe("sourceTag — You vs Sanocare (hybrid trust signal)", () => {
   it("manual → You (self-entered)", () => {
     expect(sourceTag("manual")).toEqual({ label: "You", kind: "you" });
   });
-  it("device + rx_import → Home visit (clinician/Sanocare origin)", () => {
-    expect(sourceTag("device")).toEqual({ label: "Home visit", kind: "sanocare" });
-    expect(sourceTag("rx_import")).toEqual({ label: "Home visit", kind: "sanocare" });
+  it("device + rx_import → Sanocare (clinician-entered; relabelled from 'Home visit')", () => {
+    expect(sourceTag("device")).toEqual({ label: "Sanocare", kind: "sanocare" });
+    expect(sourceTag("rx_import")).toEqual({ label: "Sanocare", kind: "sanocare" });
   });
   it("null/undefined → no tag (never invented)", () => {
     expect(sourceTag(null)).toBeNull();

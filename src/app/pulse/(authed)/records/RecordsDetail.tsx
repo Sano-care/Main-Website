@@ -2,7 +2,7 @@
 
 import { useCallback, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowLeft, Plus, Download } from "lucide-react";
+import { ArrowLeft, Plus, Download, Trash2 } from "lucide-react";
 
 import { useViewingFirstName } from "@/app/pulse/_lib/MemberViewingContext";
 import { pulseFetch } from "@/app/pulse/_lib/pulseClient";
@@ -18,6 +18,7 @@ import type {
 } from "@/lib/pulse/recordsFetch";
 import { useRecords } from "./useRecords";
 import UploadDocumentModal from "./UploadDocumentModal";
+import AddRecordModal from "./AddRecordModal";
 import {
   CATEGORY_CONFIG,
   TIER_ICON,
@@ -64,10 +65,10 @@ export default function RecordsDetail({ category }: { category: RecordTileKey })
   const cfg = CATEGORY_CONFIG[category];
   const { state, viewing, members, initialLoading, stale, reload } = useRecords();
   const viewingName = useViewingFirstName();
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
 
   const subjectLabel = viewing.kind === "self" ? "your" : `${viewingName}'s`;
-  const uploadDefaultMemberId = viewing.kind === "member" ? viewing.member.id : null;
+  const addDefaultMemberId = viewing.kind === "member" ? viewing.member.id : null;
   const tint = TIER_ICON[cfg.tier];
   const Icon = cfg.icon;
 
@@ -94,7 +95,7 @@ export default function RecordsDetail({ category }: { category: RecordTileKey })
         </div>
       </header>
 
-      <DetailActionControl cfg={cfg} onUpload={() => setUploadOpen(true)} />
+      <DetailActionControl cfg={cfg} onAdd={() => setAddOpen(true)} />
 
       <div className="mt-4">
         {initialLoading ? (
@@ -112,18 +113,29 @@ export default function RecordsDetail({ category }: { category: RecordTileKey })
               category={category}
               records={state.records}
               subjectLabel={subjectLabel}
+              onChanged={reload}
             />
           </>
         ) : null}
       </div>
 
-      {cfg.detailAction.type === "modal" ? (
+      {/* Documents → upload modal; Conditions/Allergies → add-record modal. */}
+      {category === "documents" ? (
         <UploadDocumentModal
-          open={uploadOpen}
-          onClose={() => setUploadOpen(false)}
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
           members={members}
-          defaultMemberId={uploadDefaultMemberId}
+          defaultMemberId={addDefaultMemberId}
           onUploaded={reload}
+        />
+      ) : category === "conditions" || category === "allergies" ? (
+        <AddRecordModal
+          open={addOpen}
+          category={category}
+          onClose={() => setAddOpen(false)}
+          members={members}
+          defaultMemberId={addDefaultMemberId}
+          onSaved={reload}
         />
       ) : null}
     </div>
@@ -132,10 +144,10 @@ export default function RecordsDetail({ category }: { category: RecordTileKey })
 
 function DetailActionControl({
   cfg,
-  onUpload,
+  onAdd,
 }: {
   cfg: (typeof CATEGORY_CONFIG)[RecordTileKey];
-  onUpload: () => void;
+  onAdd: () => void;
 }) {
   const a = cfg.detailAction;
   if (a.type === "none") return null;
@@ -151,25 +163,16 @@ function DetailActionControl({
       </Link>
     );
   }
-  if (a.type === "modal") {
-    return (
-      <button
-        type="button"
-        onClick={onUpload}
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-bold text-white outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary/40"
-      >
-        <Plus className="h-4 w-4" />
-        {a.label}
-      </button>
-    );
-  }
-  // "soon" — present but disabled this slice (wired in R2).
+  // "modal" — open an add/upload modal in place.
   return (
-    <div className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 px-6 py-3 text-sm font-semibold text-slate-400">
+    <button
+      type="button"
+      onClick={onAdd}
+      className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-bold text-white outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary/40"
+    >
       <Plus className="h-4 w-4" />
       {a.label}
-      <span className="text-xs font-normal">· coming soon</span>
-    </div>
+    </button>
   );
 }
 
@@ -177,10 +180,12 @@ function CategoryStatement({
   category,
   records,
   subjectLabel,
+  onChanged,
 }: {
   category: RecordTileKey;
   records: PulseRecords;
   subjectLabel: string;
+  onChanged: () => void;
 }) {
   const omitted = (records.accountLevelOmitted as string[]).includes(category);
   if (omitted) {
@@ -240,7 +245,7 @@ function CategoryStatement({
       return records.conditions.length ? (
         <Statement>
           {records.conditions.map((c) => (
-            <ConditionStatementRow key={c.id} condition={c} />
+            <ConditionStatementRow key={c.id} condition={c} onChanged={onChanged} />
           ))}
         </Statement>
       ) : (
@@ -251,7 +256,7 @@ function CategoryStatement({
       return records.allergies.length ? (
         <Statement>
           {records.allergies.map((a) => (
-            <AllergyStatementRow key={a.id} allergy={a} />
+            <AllergyStatementRow key={a.id} allergy={a} onChanged={onChanged} />
           ))}
         </Statement>
       ) : (
@@ -425,14 +430,28 @@ function MedicationStatementRow({ med }: { med: MedicationRecord }) {
   );
 }
 
-function ConditionStatementRow({ condition }: { condition: ConditionRecord }) {
+function ConditionStatementRow({
+  condition,
+  onChanged,
+}: {
+  condition: ConditionRecord;
+  onChanged: () => void;
+}) {
   return (
     <StatementRow
       day={formatStatementDay(condition.noted_at ?? condition.created_at)}
       trailing={
-        <Badge className="bg-slate-100 text-slate-600">
-          {conditionStatusLabel(condition.status)}
-        </Badge>
+        <span className="flex items-center gap-1.5">
+          <Badge className="bg-slate-100 text-slate-600">
+            {conditionStatusLabel(condition.status)}
+          </Badge>
+          {condition.source === "patient" ? (
+            <DeleteRowButton
+              endpoint={`/api/pulse/conditions?id=${condition.id}`}
+              onDeleted={onChanged}
+            />
+          ) : null}
+        </span>
       }
     >
       <span className="truncate text-sm font-medium text-text-main">{condition.label}</span>
@@ -440,14 +459,28 @@ function ConditionStatementRow({ condition }: { condition: ConditionRecord }) {
   );
 }
 
-function AllergyStatementRow({ allergy }: { allergy: AllergyRecord }) {
+function AllergyStatementRow({
+  allergy,
+  onChanged,
+}: {
+  allergy: AllergyRecord;
+  onChanged: () => void;
+}) {
   return (
     <StatementRow
       day={formatStatementDay(allergy.noted_at ?? allergy.created_at)}
       trailing={
-        <Badge className={severityBadgeClass(allergy.severity)}>
-          {severityLabel(allergy.severity)}
-        </Badge>
+        <span className="flex items-center gap-1.5">
+          <Badge className={severityBadgeClass(allergy.severity)}>
+            {severityLabel(allergy.severity)}
+          </Badge>
+          {allergy.source === "patient" ? (
+            <DeleteRowButton
+              endpoint={`/api/pulse/allergies?id=${allergy.id}`}
+              onDeleted={onChanged}
+            />
+          ) : null}
+        </span>
       }
     >
       <span className="block truncate text-sm font-medium text-text-main">{allergy.label}</span>
@@ -455,6 +488,40 @@ function AllergyStatementRow({ allergy }: { allergy: AllergyRecord }) {
         <span className="text-xs text-text-secondary">{allergy.reaction}</span>
       ) : null}
     </StatementRow>
+  );
+}
+
+// Delete affordance for patient-sourced rows only (the parent gates on
+// source==='patient'; the route re-enforces customer scope + source='patient').
+function DeleteRowButton({ endpoint, onDeleted }: { endpoint: string; onDeleted: () => void }) {
+  const [deleting, setDeleting] = useState(false);
+
+  const onClick = useCallback(async () => {
+    if (deleting) return;
+    if (typeof window !== "undefined" && !window.confirm("Remove this entry?")) return;
+    setDeleting(true);
+    try {
+      const res = await pulseFetch(endpoint, { method: "DELETE" });
+      if (res.ok) {
+        onDeleted();
+        return;
+      }
+    } catch (err) {
+      console.error("[pulse/records] delete failed", err);
+    }
+    setDeleting(false);
+  }, [deleting, endpoint, onDeleted]);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={deleting}
+      aria-label="Remove"
+      className="flex h-7 w-7 items-center justify-center rounded-lg text-text-secondary hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+    >
+      <Trash2 className="h-4 w-4" />
+    </button>
   );
 }
 

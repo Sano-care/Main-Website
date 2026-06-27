@@ -36,6 +36,29 @@ export function isUuid(v: unknown): v is string {
   return typeof v === "string" && UUID_RE.test(v);
 }
 
+// Conditions + allergies (R2a). Mirror the DB CHECK constraints exactly so the
+// route gives a friendly 400 rather than leaning on the CHECK to surface it.
+export const RECORD_STATUSES = ["active", "resolved", "inactive"] as const;
+export type RecordStatus = (typeof RECORD_STATUSES)[number];
+export function isRecordStatus(v: unknown): v is RecordStatus {
+  return typeof v === "string" && (RECORD_STATUSES as readonly string[]).includes(v);
+}
+
+export const ALLERGY_SEVERITIES = ["mild", "moderate", "severe", "unknown"] as const;
+export type AllergySeverity = (typeof ALLERGY_SEVERITIES)[number];
+export function isAllergySeverity(v: unknown): v is AllergySeverity {
+  return typeof v === "string" && (ALLERGY_SEVERITIES as readonly string[]).includes(v);
+}
+
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Validate an ISO date (YYYY-MM-DD) for a `date` column; returns it or null. */
+export function asYmdDate(v: unknown): string | null {
+  if (typeof v !== "string" || !YMD_RE.test(v)) return null;
+  const d = new Date(v);
+  return Number.isFinite(d.getTime()) ? v : null;
+}
+
 /** Parse a finite number from unknown; returns null on failure. */
 export function asFiniteNumber(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return v;
