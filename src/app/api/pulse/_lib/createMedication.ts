@@ -14,6 +14,26 @@ import { expandIntakeLog } from "./medications";
 export const MED_SELECT =
   "id, name, dose, frequency_label, times_per_day, scheduled_times, start_date, end_date, reason, source, source_rx_id, imported_needs_review, refill_warning_threshold_days, supply_qty, supply_updated_at, created_at";
 
+/**
+ * Allowed `medications.source` values — MUST mirror the `medications_source_check`
+ * CHECK constraint (see migration 20260627034703). Any source written by a
+ * caller has to be in this set or the insert is rejected at the DB. Keeping the
+ * list here lets a unit test catch code↔constraint drift (the bug behind that
+ * migration: #112 wrote 'aarogya_whatsapp' while the constraint allowed only
+ * 'manual'/'rx_import', and the mocked tests never hit the real constraint).
+ */
+export const ALLOWED_MEDICATION_SOURCES = [
+  "manual", // Pulse web app
+  "rx_import", // doctor Rx → Pulse import
+  "aarogya_whatsapp", // Aarogya chat-set reminder (#112)
+] as const;
+
+export type MedicationSource = (typeof ALLOWED_MEDICATION_SOURCES)[number];
+
+/** The source the Aarogya chat-set reminder writes (referenced by the executor
+ *  and the drift guard, so the written value and the allow-list can't diverge). */
+export const AAROGYA_MEDICATION_SOURCE: MedicationSource = "aarogya_whatsapp";
+
 export interface CreateMedicationInput {
   customerId: string;
   name: string;

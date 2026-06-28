@@ -35,6 +35,7 @@ import {
   findActiveMedicationByName,
   updateMedicationSchedule,
   frequencyLabelForCount,
+  AAROGYA_MEDICATION_SOURCE,
 } from "@/app/api/pulse/_lib/createMedication";
 
 const NOT_A_CUSTOMER =
@@ -304,7 +305,7 @@ export async function executeLogMedication(args: {
     startDate: todayYmd,
     endDate: null,
     reason,
-    source: "aarogya_whatsapp",
+    source: AAROGYA_MEDICATION_SOURCE,
   });
   if (result.error || !result.medication) {
     return "I couldn't save that just now — could you try again in a moment?";
