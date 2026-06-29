@@ -4,6 +4,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
+import {
+  Home,
+  ClipboardList,
+  User,
+  Users,
+  Settings,
+  HelpCircle,
+  type LucideIcon,
+} from "lucide-react";
 
 import { useViewingFirstName } from "../_lib/MemberViewingContext";
 import PulseSignOutButton from "./PulseSignOutButton";
@@ -130,7 +139,7 @@ export default function PulseDrawer({ isOpen, onClose }: PulseDrawerProps) {
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-1 text-sm">
             <DrawerItem
-              icon="🏠"
+              icon={Home}
               label="Home"
               href="/pulse"
               currentPath={pathname}
@@ -141,7 +150,7 @@ export default function PulseDrawer({ isOpen, onClose }: PulseDrawerProps) {
             {/* prescriptions, vitals, medications, conditions, allergies, */}
             {/* documents), scoped to the active viewing member. */}
             <DrawerItem
-              icon="📋"
+              icon={ClipboardList}
               label="Your records"
               href="/pulse/records"
               currentPath={pathname}
@@ -149,7 +158,7 @@ export default function PulseDrawer({ isOpen, onClose }: PulseDrawerProps) {
             />
 
             <DrawerItem
-              icon="👤"
+              icon={User}
               label="Your profile"
               subtitle={profileSubtitle}
               href="/pulse/profile"
@@ -157,21 +166,21 @@ export default function PulseDrawer({ isOpen, onClose }: PulseDrawerProps) {
               onNavigate={onClose}
             />
             <DrawerItem
-              icon="👥"
+              icon={Users}
               label="Family members"
               href="/pulse/family-members"
               currentPath={pathname}
               onNavigate={onClose}
             />
             <DrawerItem
-              icon="⚙"
+              icon={Settings}
               label="Account settings"
               href="/pulse/account"
               currentPath={pathname}
               onNavigate={onClose}
             />
             <DrawerItem
-              icon="❓"
+              icon={HelpCircle}
               label="Help & support"
               href="/pulse/help"
               currentPath={pathname}
@@ -197,7 +206,7 @@ export default function PulseDrawer({ isOpen, onClose }: PulseDrawerProps) {
 }
 
 interface DrawerItemProps {
-  icon: string;
+  icon: LucideIcon;
   label: string;
   subtitle?: string;
   href: string;
@@ -206,7 +215,7 @@ interface DrawerItemProps {
 }
 
 function DrawerItem({
-  icon,
+  icon: Icon,
   label,
   subtitle,
   href,
@@ -229,9 +238,15 @@ function DrawerItem({
             : "text-gray-800 hover:bg-gray-50"
         }`}
       >
-        <span className="text-base" aria-hidden="true">
-          {icon}
-        </span>
+        {/* Monoline lucide icon (R1.2): neutral slate, brand blue when active —
+            matching the records tiles / homepage icon language. */}
+        <Icon
+          className={
+            "h-5 w-5 shrink-0 [stroke-width:1.8] " +
+            (isActive ? "text-primary" : "text-slate-500")
+          }
+          aria-hidden="true"
+        />
         <span className="flex flex-1 flex-col">
           <span className="font-medium leading-tight">{label}</span>
           {subtitle ? (

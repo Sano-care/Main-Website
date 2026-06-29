@@ -13,8 +13,8 @@ import {
  * T90 Pulse v1 Phase 1 — Top app bar (Surface 2).
  *
  * Layout (brief spec, Surface 2):
- *   Mobile  ≤640px: [☰] [Sanocare lockup] [Mom ▼] [SA]      — 56px tall
- *   Desktop ≥640px: [☰] [Sanocare lockup] [Mom ▼] [Shashwat ▼] — 64px tall
+ *   Mobile  <=640px: [menu] [Sanocare lockup] [Mom v] [SA]      — 56px tall
+ *   Desktop >=640px: [menu] [Sanocare lockup] [Mom v] [Shashwat v] — 64px tall
  *
  * Visual:
  *   - White background, 1px bottom border `#E5E7EB`
