@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Smartphone, X } from "lucide-react";
+import { Smartphone, X, Share } from "lucide-react";
 
 import { getSessionCount } from "../_lib/sessionCount";
 
@@ -152,9 +152,10 @@ export default function PWAInstallPrompt() {
               <li>
                 <span className="font-semibold text-text-main">1.</span> Tap
                 the share icon{" "}
-                <span aria-hidden="true" className="text-text-main">
-                  ⬆
-                </span>{" "}
+                <Share
+                  className="inline-block h-3.5 w-3.5 align-text-bottom text-text-main [stroke-width:1.8]"
+                  aria-hidden="true"
+                />{" "}
                 at the bottom of your screen
               </li>
               <li>

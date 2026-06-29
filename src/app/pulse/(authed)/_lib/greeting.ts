@@ -34,8 +34,8 @@ const PERIOD_COPY: Record<Period, string> = {
 /**
  * Returns the time-aware greeting string for the current IST hour.
  * Pass the user's first name (or null for nameless greeting).
- * Caller is responsible for any 👋 emoji or surrounding punctuation —
- * this returns the pure greeting + optional ", {name}" suffix.
+ * Caller owns any surrounding punctuation — this returns the pure
+ * greeting + optional ", {name}" suffix.
  */
 export function getGreeting(firstName: string | null): string {
   const period = bucketForHour(getISTHour());

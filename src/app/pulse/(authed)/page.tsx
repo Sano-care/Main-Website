@@ -126,7 +126,7 @@ async function PulseHomeBody() {
             {formatIST(new Date(), "dateLong")}
           </p>
           <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
-            {greeting} <span aria-hidden="true">👋</span>
+            {greeting}
           </h1>
           <ViewingSubLine />
         </header>
