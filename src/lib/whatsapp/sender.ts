@@ -68,7 +68,7 @@ function toSendError(e: unknown): WhatsAppSendError {
   return classifySendError({ message: e instanceof Error ? e.message : String(e) });
 }
 
-async function persistOutbound(args: {
+export async function persistOutbound(args: {
   conversationId: string;
   content: string;
   contentType: string;

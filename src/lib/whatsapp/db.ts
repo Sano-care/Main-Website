@@ -10,7 +10,11 @@
 //   * messages / audit_log are append-only.
 
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { sendHardenedTemplate, sendHardenedText } from "@/lib/whatsapp/sender";
+import {
+  persistOutbound,
+  sendHardenedTemplate,
+  sendHardenedText,
+} from "@/lib/whatsapp/sender";
 import { isTemplateName, type TemplateName } from "@/lib/whatsapp/templates";
 import { AuditEvent, writeAudit } from "@/lib/whatsapp/safety/audit";
 import { log, maskPhone } from "@/lib/whatsapp/log";
@@ -204,6 +208,56 @@ export async function dispatchTextMessage(args: {
     return { sent: false, blocked: false, error: "session_expired" };
   }
   return { sent: false, blocked: false, error: result.error.classification };
+}
+
+/**
+ * Persist a successfully-sent ops-founder relay into the RECIPIENT's thread.
+ *
+ * The relay send is attributed to the OPS conversation (founder echo), so the
+ * recipient's /ops/conversations thread never showed the relay — it looked
+ * unsent. This writes the outbound row into the recipient's own conversation
+ * via the SAME outbound writer normal replies use (persistOutbound), so it
+ * renders in order, marked `safety_flags.ops_relay` so ops can tell relays from
+ * Aarogya's own replies.
+ *
+ * Call ONLY after a real send (a wamid came back). Idempotent: skips if this
+ * wamid is already in the recipient thread (there is no unique index on
+ * provider_message_id for OUTBOUND rows, so we guard in code). Soft-fail — the
+ * send already happened; a persist hiccup must not break the confirm.
+ */
+export async function persistRelayIntoRecipientThread(args: {
+  targetPhone: string;
+  body: string;
+  providerMessageId: string;
+  draftId: string;
+}): Promise<void> {
+  try {
+    const { conversation } = await findOrCreateConversation(args.targetPhone);
+
+    const { data: existing } = await supabaseAdmin
+      .from("messages")
+      .select("id")
+      .eq("conversation_id", conversation.id)
+      .eq("provider_message_id", args.providerMessageId)
+      .limit(1)
+      .maybeSingle();
+    if (existing) return; // already persisted (retry / concurrent confirm)
+
+    await persistOutbound({
+      conversationId: conversation.id,
+      content: args.body,
+      contentType: "text",
+      providerMessageId: args.providerMessageId,
+      idempotencyKey: `ops_relay:${args.draftId}`,
+      safetyFlags: { ops_relay: true, topic: "ops_relay", draft_id: args.draftId },
+    });
+  } catch (err) {
+    log.error(
+      "persistRelayIntoRecipientThread failed",
+      maskPhone(args.targetPhone),
+      err instanceof Error ? err.message : String(err),
+    );
+  }
 }
 
 /**

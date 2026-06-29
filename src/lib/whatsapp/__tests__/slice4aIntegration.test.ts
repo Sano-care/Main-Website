@@ -24,6 +24,12 @@ const h = vi.hoisted(() => ({
   auditRows: [] as AuditRow[],
   nextId: 0,
   dispatched: [] as { conversationId: string; phone: string; body: string }[],
+  relayPersists: [] as {
+    targetPhone: string;
+    body: string;
+    providerMessageId: string;
+    draftId: string;
+  }[],
   storedLanguage: null as string | null,
 }));
 
@@ -99,6 +105,11 @@ vi.mock("@/lib/whatsapp/db", () => ({
     h.dispatched.push({ conversationId: args.conversationId, phone: args.phone, body: args.body });
     return { sent: true, providerMessageId: `wamid-${h.dispatched.length}` };
   }),
+  persistRelayIntoRecipientThread: vi.fn(
+    async (args: { targetPhone: string; body: string; providerMessageId: string; draftId: string }) => {
+      h.relayPersists.push(args);
+    },
+  ),
 }));
 
 vi.mock("@/lib/whatsapp/log", () => ({
@@ -113,6 +124,7 @@ beforeEach(() => {
   h.auditRows = [];
   h.nextId = 0;
   h.dispatched = [];
+  h.relayPersists = [];
   h.storedLanguage = null;
 });
 
@@ -165,6 +177,14 @@ describe("Slice 4a — ops relay end-to-end", () => {
     const confirmedRow = h.auditRows.find((r) => r.event_type === "ops_relay_confirmed");
     expect(confirmedRow).toBeTruthy();
     expect((confirmedRow!.event_data as { draft_id: string }).draft_id).toBe(draftedRow!.id);
+
+    // 5. the relay was persisted into the RECIPIENT's thread (the fix) — exactly
+    //    once, with the body + the real wamid + the draft marker.
+    expect(h.relayPersists).toHaveLength(1);
+    expect(h.relayPersists[0].targetPhone).toBe("+919876543210");
+    expect(h.relayPersists[0].body).toContain("Apologies for the delay");
+    expect(h.relayPersists[0].providerMessageId).toBe("wamid-1");
+    expect(h.relayPersists[0].draftId).toBe(draftedRow!.id);
   });
 
   it("ops_founder cancels (CANCEL) → no send, ops_relay_cancelled row written", async () => {
@@ -187,6 +207,7 @@ describe("Slice 4a — ops relay end-to-end", () => {
 
     expect(cancel).toContain("Cancelled");
     expect(h.dispatched).toHaveLength(0);
+    expect(h.relayPersists).toHaveLength(0); // nothing persisted on cancel
     expect(h.auditRows.find((r) => r.event_type === "ops_relay_cancelled")).toBeTruthy();
   });
 
@@ -212,5 +233,29 @@ describe("Slice 4a — ops relay end-to-end", () => {
     });
     expect(out).toContain("No pending draft");
     expect(h.dispatched).toHaveLength(0);
+  });
+
+  it("failed send (no wamid) → nothing persisted to the recipient thread", async () => {
+    h.storedLanguage = "english";
+    await executeRelayToPatient(
+      {
+        identity: { role: "ops_founder", phone: "+919760059900" },
+        opsConversationId: "ops-conv-fail",
+        input: { target_phone: "+919876543210", instruction: "remind them" },
+      },
+      { composeDraftBody: async () => "Draft body" },
+    );
+
+    // Next send fails (blocked / no wamid).
+    vi.mocked(dispatchTextMessage).mockResolvedValueOnce({ sent: false, blocked: true });
+
+    const out = await executeConfirmRelay({
+      identity: { role: "ops_founder", phone: "+919760059900" },
+      opsConversationId: "ops-conv-fail",
+      input: { resolution: "YES" },
+    });
+
+    expect(out).toMatch(/blocked or failed/i);
+    expect(h.relayPersists).toHaveLength(0); // no row on a failed send
   });
 });
