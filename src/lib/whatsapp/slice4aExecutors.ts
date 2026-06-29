@@ -16,7 +16,7 @@ import {
   markRelayDraftResolved,
 } from "@/lib/whatsapp/opsRouter";
 import { detectLanguage } from "@/lib/whatsapp/languageDetect";
-import { dispatchTextMessage } from "@/lib/whatsapp/db";
+import { dispatchTextMessage, persistRelayIntoRecipientThread } from "@/lib/whatsapp/db";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { log } from "@/lib/whatsapp/log";
 import type { Identity } from "@/lib/whatsapp/identity";
@@ -184,6 +184,18 @@ export async function executeConfirmRelay(args: {
     sentWamid = sendResult.providerMessageId;
   } else {
     return `Patient send blocked or failed. Draft kept; call them directly.`;
+  }
+  // Persist the relay into the RECIPIENT's thread so it shows in
+  // /ops/conversations (the send is attributed to the ops conversation, so
+  // without this the recipient thread never reflects the relay). Only on a real
+  // send (wamid present); soft-fail inside the helper.
+  if (sentWamid) {
+    await persistRelayIntoRecipientThread({
+      targetPhone: draft.targetPhone,
+      body: draft.draftBody,
+      providerMessageId: sentWamid,
+      draftId: draft.draftId,
+    });
   }
   await markRelayDraftResolved({
     opsConversationId: args.opsConversationId,
