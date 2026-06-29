@@ -7,7 +7,11 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase-server", () => ({ supabaseAdmin: {} }));
 
 import { executeLogMedication } from "@/lib/whatsapp/pulseExecutors";
-import { frequencyLabelForCount } from "@/app/api/pulse/_lib/createMedication";
+import {
+  frequencyLabelForCount,
+  ALLOWED_MEDICATION_SOURCES,
+  AAROGYA_MEDICATION_SOURCE,
+} from "@/app/api/pulse/_lib/createMedication";
 import type { Identity } from "@/lib/whatsapp/identity";
 
 const registered: Identity = { role: "customer", subRole: "registered", customerId: "cus-1" };
@@ -163,6 +167,31 @@ describe("executeLogMedication — ops_founder (the founder is also a customer)"
     const out = await call({ name: "Telma 40", scheduled_times: ["10:00"] }, opsFounder, deps);
     expect((deps.createFn as AnyMock)).not.toHaveBeenCalled();
     expect(out).toMatch(/Sanocare account/i);
+  });
+});
+
+// Drift guard for the prod hotfix (migration 20260627034703): the source the
+// executor writes MUST be in the allow-list that mirrors medications_source_check.
+// The original bug — 'aarogya_whatsapp' written while the constraint allowed only
+// 'manual'/'rx_import' — slipped through because the tests mock supabaseAdmin and
+// never hit the real CHECK. This ties the executor's written value to the list.
+describe("medications.source ↔ medications_source_check (drift guard)", () => {
+  it("allow-list mirrors the live CHECK constraint (manual / rx_import / aarogya_whatsapp)", () => {
+    expect([...ALLOWED_MEDICATION_SOURCES].sort()).toEqual(
+      ["aarogya_whatsapp", "manual", "rx_import"].sort(),
+    );
+  });
+
+  it("the Aarogya source constant is a member of the allow-list", () => {
+    expect(ALLOWED_MEDICATION_SOURCES).toContain(AAROGYA_MEDICATION_SOURCE);
+  });
+
+  it("the value executeLogMedication actually writes is an allowed source", async () => {
+    const deps = baseDeps();
+    await call({ name: "Telma 40", scheduled_times: ["10:00"] }, registered, deps);
+    const written = (firstArg(deps.createFn as AnyMock) as { source: string }).source;
+    expect(written).toBe(AAROGYA_MEDICATION_SOURCE);
+    expect(ALLOWED_MEDICATION_SOURCES as readonly string[]).toContain(written);
   });
 });
 
