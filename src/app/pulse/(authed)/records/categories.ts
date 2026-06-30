@@ -108,7 +108,7 @@ export const CATEGORY_CONFIG: Record<RecordTileKey, CategoryConfig> = {
     icon: HeartPulse,
     tier: "hybrid",
     tileAction: "+ Log",
-    detailAction: { type: "link", href: "/pulse/vitals?add=bp", label: "Log a reading" },
+    detailAction: { type: "modal", label: "Log a reading" },
     detailSubtitle: "Logged by you, and auto-added from every Sanocare home visit.",
   },
   medications: {
@@ -117,7 +117,7 @@ export const CATEGORY_CONFIG: Record<RecordTileKey, CategoryConfig> = {
     icon: Pill,
     tier: "hybrid",
     tileAction: "+ Add",
-    detailAction: { type: "link", href: "/pulse/medications", label: "Add a medication" },
+    detailAction: { type: "modal", label: "Add a medication" },
     detailSubtitle: "What you take — added by you or from a Sanocare prescription.",
   },
   // Yours — patient-only.

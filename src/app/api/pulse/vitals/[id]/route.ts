@@ -18,7 +18,9 @@ export const dynamic = "force-dynamic";
 //
 // Ownership is enforced by scoping every mutation with
 // `.eq("customer_id", customer.id)` so a guessed id belonging to another
-// customer affects zero rows and returns 404.
+// customer affects zero rows and returns 404. DELETE additionally scopes to
+// `source='manual'` (R2b): a patient may remove only their own self-entered
+// readings, never a clinician-captured one (source='device' from a home visit).
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -118,14 +120,15 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx) {
     return NextResponse.json({ error: "Invalid reading id." }, { status: 400 });
   }
 
-  // HARD delete — no archived_at column exists on vital_readings. The
-  // customer_id scope makes this a no-op (404) for rows the caller doesn't
-  // own. .select() returns the deleted row so we can distinguish 200 vs 404.
+  // HARD delete — no archived_at column exists on vital_readings. Scoped to the
+  // caller AND source='manual', so a guessed id, another customer's row, or a
+  // clinician-captured (device) reading all affect zero rows → 404.
   const { data, error } = await supabaseAdmin
     .from("vital_readings")
     .delete()
     .eq("id", id)
     .eq("customer_id", customer.id)
+    .eq("source", "manual")
     .select("id")
     .maybeSingle();
 

@@ -54,8 +54,9 @@ describe("BANDS — the visual contract", () => {
     for (const key of ["bookings", "prescriptions", "reports", "invoices"] as const) {
       expect(CATEGORY_CONFIG[key].detailAction.type).toBe("none");
     }
-    expect(CATEGORY_CONFIG.vitals.detailAction.type).toBe("link");
-    expect(CATEGORY_CONFIG.medications.detailAction.type).toBe("link");
+    // R2b — Vitals/Medications now open in-place add modals (were "link" in R1).
+    expect(CATEGORY_CONFIG.vitals.detailAction.type).toBe("modal");
+    expect(CATEGORY_CONFIG.medications.detailAction.type).toBe("modal");
     expect(CATEGORY_CONFIG.documents.detailAction.type).toBe("modal");
     // R2a — Conditions/Allergies now open an add modal (were "soon" in R1).
     expect(CATEGORY_CONFIG.conditions.detailAction.type).toBe("modal");
