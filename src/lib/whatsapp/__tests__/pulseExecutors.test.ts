@@ -25,6 +25,8 @@ vi.mock("@/lib/pulse/recordsFetch", () => ({
       scope: { memberId: null },
       bookings: [{ id: "b1", member_id: null, service_category: "home-visit", status: "COMPLETED", scheduled_for: null, created_at: "2026-06-01T00:00:00Z" }],
       prescriptions: [],
+      reports: [],
+      invoices: [],
       vitals: [],
       medications: [],
       conditions: [],

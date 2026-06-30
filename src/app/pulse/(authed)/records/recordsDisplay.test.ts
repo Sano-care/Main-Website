@@ -16,6 +16,9 @@ import {
   vitalValue,
   formatScheduleTimes,
   formatRecordDate,
+  formatPaiseINR,
+  invoiceStatusLabel,
+  invoiceStatusBadgeClass,
 } from "./recordsDisplay";
 
 describe("parseMemberParam", () => {
@@ -99,6 +102,25 @@ describe("formatScheduleTimes", () => {
     expect(formatScheduleTimes(["00:30"])).toBe("12:30 AM");
     expect(formatScheduleTimes(null)).toBe("");
     expect(formatScheduleTimes([])).toBe("");
+  });
+});
+
+describe("invoices (receipts)", () => {
+  it("formatPaiseINR — paise → ₹, Indian grouping, decimals only when needed", () => {
+    expect(formatPaiseINR(49900)).toBe("₹499");
+    expect(formatPaiseINR(120050)).toBe("₹1,200.50");
+    expect(formatPaiseINR(20000000)).toBe("₹2,00,000");
+    expect(formatPaiseINR(0)).toBe("₹0");
+    expect(formatPaiseINR(Number.NaN)).toBe("—");
+  });
+  it("invoiceStatusLabel — CAPTURED → Paid, REFUNDED → Refunded", () => {
+    expect(invoiceStatusLabel("CAPTURED")).toBe("Paid");
+    expect(invoiceStatusLabel("REFUNDED")).toBe("Refunded");
+  });
+  it("invoiceStatusBadgeClass — paid green, refunded amber", () => {
+    expect(invoiceStatusBadgeClass("CAPTURED")).toContain("emerald");
+    expect(invoiceStatusBadgeClass("REFUNDED")).toContain("amber");
+    expect(invoiceStatusBadgeClass("OTHER")).toContain("slate");
   });
 });
 

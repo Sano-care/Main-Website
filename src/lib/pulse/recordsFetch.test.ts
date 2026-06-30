@@ -16,7 +16,7 @@ const h = vi.hoisted(() => ({
 function makeBuilder(rec: { table: string; filters: { method: string; args: unknown[] }[] }) {
   const b: Record<string, unknown> = {};
   for (const m of ["select", "order", "limit"]) b[m] = () => b;
-  for (const m of ["eq", "is", "in", "or"]) {
+  for (const m of ["eq", "is", "in", "or", "neq", "not"]) {
     b[m] = (...args: unknown[]) => {
       rec.filters.push({ method: m, args });
       return b;
@@ -70,7 +70,36 @@ beforeEach(() => {
     conditions: { data: [{ id: "c1", member_id: null }, { id: "c2", member_id: "m1" }], error: null },
     allergies: { data: [{ id: "a1", member_id: "m1", severity: "severe" }], error: null },
     pulse_documents: { data: [{ id: "doc1", member_id: null, doc_type: "lab_report" }], error: null },
-    bookings: { data: [{ id: "b1", member_id: null, status: "COMPLETED" }], error: null },
+    bookings: {
+      // report_* fields present (used by fetchReports); report_url intentionally
+      // NOT in the fixture — fetchReports never selects it, only filters on it.
+      data: [
+        {
+          id: "b1",
+          member_id: null,
+          status: "COMPLETED",
+          service_category: "lab-tests",
+          report_uploaded_at: "2026-06-12T00:00:00Z",
+          report_unlock_token: "rtok_123",
+        },
+      ],
+      error: null,
+    },
+    payments_v: {
+      data: [
+        {
+          booking_id: "bk1",
+          booking_code: "SAN-B-1",
+          service_category: "lab-tests",
+          amount_paise: 120050,
+          status: "CAPTURED",
+          razorpay_payment_id: "pay_ABCD1234WXYZ",
+          captured_at: "2026-06-10T00:00:00Z",
+          created_at: "2026-06-10T00:00:00Z",
+        },
+      ],
+      error: null,
+    },
     prescriptions: {
       data: [{ id: "p1", sent_at: "2026-06-01T00:00:00Z", patient_view_token: "tok", doctor_id: "d1" }],
       error: null,
@@ -128,12 +157,53 @@ describe("fetchPulseRecords — member subject filter", () => {
     const res = await fetchPulseRecords("cust-1", { memberId: "m1" }, AUDIT);
     expect(hasFilter("conditions", "eq", ["member_id", "m1"])).toBe(true);
     expect(hasFilter("prescriptions", "eq", ["bookings.member_id", "m1"])).toBe(true);
-    // account-level tables NOT queried at all
+    // account-level tables NOT queried at all (vitals/meds/invoices)
     expect(queryFor("vital_readings")).toBeUndefined();
     expect(queryFor("medications")).toBeUndefined();
+    expect(queryFor("payments_v")).toBeUndefined();
     expect(res.vitals).toEqual([]);
     expect(res.medications).toEqual([]);
-    expect(res.accountLevelOmitted).toEqual(["vitals", "medications"]);
+    expect(res.invoices).toEqual([]);
+    expect(res.accountLevelOmitted).toEqual(["vitals", "medications", "invoices"]);
+  });
+});
+
+describe("fetchPulseRecords — invoices (payments_v receipts)", () => {
+  it("customer-scoped, excludes NOT_DUE, masks the payment id (full id never in the payload)", async () => {
+    const res = await fetchPulseRecords("cust-1", { categories: ["invoices"] }, AUDIT);
+    expect(hasFilter("payments_v", "eq", ["customer_id", "cust-1"])).toBe(true);
+    // NOT_DUE = no payment occurred → excluded from the receipt list at the DB.
+    expect(hasFilter("payments_v", "neq", ["status", "NOT_DUE"])).toBe(true);
+    expect(res.invoices[0]?.amount_paise).toBe(120050);
+    expect(res.invoices[0]?.payment_ref).toBe("•••• WXYZ");
+    // DPDP: only the masked last-4 leaves the data layer — never the raw id.
+    expect(JSON.stringify(res.invoices)).not.toContain("pay_ABCD1234WXYZ");
+  });
+
+  it("account-level: omitted for a specific member view, never faked", async () => {
+    const res = await fetchPulseRecords("cust-1", { memberId: "m1" }, AUDIT);
+    expect(queryFor("payments_v")).toBeUndefined();
+    expect(res.invoices).toEqual([]);
+    expect(res.accountLevelOmitted).toContain("invoices");
+  });
+});
+
+describe("fetchPulseRecords — reports (bookings with a report)", () => {
+  it("customer-scoped, filters report_url IS NOT NULL, and never exposes report_url", async () => {
+    const res = await fetchPulseRecords("cust-1", { memberId: null, categories: ["reports"] }, AUDIT);
+    expect(hasFilter("bookings", "eq", ["customer_id", "cust-1"])).toBe(true);
+    expect(hasFilter("bookings", "not", ["report_url", "is", null])).toBe(true);
+    // self view → account holder only
+    expect(hasFilter("bookings", "is", ["member_id", null])).toBe(true);
+    // only the token (the link target) is exposed; report_url never is
+    expect(res.reports[0]?.report_unlock_token).toBe("rtok_123");
+    expect(JSON.stringify(res.reports)).not.toContain("report_url");
+  });
+
+  it("member-aware: a specific member filters by bookings.member_id (customer scope makes a forged id match nothing)", async () => {
+    await fetchPulseRecords("cust-1", { memberId: "m1", categories: ["reports"] }, AUDIT);
+    expect(hasFilter("bookings", "eq", ["member_id", "m1"])).toBe(true);
+    expect(hasFilter("bookings", "eq", ["customer_id", "cust-1"])).toBe(true);
   });
 });
 
@@ -178,6 +248,6 @@ describe("fetchPulseRecords — DPDP audit", () => {
   it("still audits when a specific member omits account-level categories", async () => {
     await fetchPulseRecords("cust-1", { memberId: "m1" }, AUDIT);
     const entry = writeAuditMock.mock.calls[0][0];
-    expect(entry.eventData?.account_level_omitted).toEqual(["vitals", "medications"]);
+    expect(entry.eventData?.account_level_omitted).toEqual(["vitals", "medications", "invoices"]);
   });
 });
