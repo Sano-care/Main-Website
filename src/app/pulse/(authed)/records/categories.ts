@@ -57,8 +57,6 @@ export interface CategoryConfig {
   detailAction: DetailAction;
   /** One-line subtitle on the detail "bank statement" screen. */
   detailSubtitle: string;
-  /** Categories with no data layer this slice render an honest empty state only. */
-  stub?: boolean;
 }
 
 export const CATEGORY_CONFIG: Record<RecordTileKey, CategoryConfig> = {
@@ -89,7 +87,6 @@ export const CATEGORY_CONFIG: Record<RecordTileKey, CategoryConfig> = {
     tileAction: "Open ›",
     detailAction: { type: "none" },
     detailSubtitle: "Lab reports from your Sanocare tests.",
-    stub: true,
   },
   invoices: {
     key: "invoices",
@@ -99,7 +96,6 @@ export const CATEGORY_CONFIG: Record<RecordTileKey, CategoryConfig> = {
     tileAction: "Open ›",
     detailAction: { type: "none" },
     detailSubtitle: "Receipts for your Sanocare visits and tests.",
-    stub: true,
   },
   // Tracked together — you + home visits.
   vitals: {
@@ -245,10 +241,16 @@ export function tileSummary(key: RecordTileKey, records: PulseRecords): TileSumm
       const n = records.prescriptions.length;
       return n > 0 ? { count: n, label: "on file" } : { count: null, label: "No prescriptions yet" };
     }
-    case "reports":
-      return { count: null, label: "No reports yet" };
-    case "invoices":
-      return { count: null, label: "No invoices yet" };
+    case "reports": {
+      const n = records.reports.length;
+      return n > 0 ? { count: n, label: n === 1 ? "report" : "reports" } : { count: null, label: "No reports yet" };
+    }
+    case "invoices": {
+      // Account-level (payments_v has no member_id) — omitted on a member view.
+      if (omitted(records, "invoices")) return { count: null, label: "For your account" };
+      const n = records.invoices.length;
+      return n > 0 ? { count: n, label: n === 1 ? "receipt" : "receipts" } : { count: null, label: "No invoices yet" };
+    }
     case "vitals": {
       if (omitted(records, "vitals")) return { count: null, label: "For your account" };
       const n = records.vitals.length;

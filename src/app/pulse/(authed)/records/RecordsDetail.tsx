@@ -15,6 +15,8 @@ import type {
   ConditionRecord,
   AllergyRecord,
   DocumentRecord,
+  InvoiceRecord,
+  ReportRecord,
 } from "@/lib/pulse/recordsFetch";
 import { useRecords } from "./useRecords";
 import UploadDocumentModal from "./UploadDocumentModal";
@@ -43,14 +45,18 @@ import {
   formatScheduleTimes,
   formatStatementDay,
   formatStatementTime,
+  formatPaiseINR,
+  invoiceStatusLabel,
+  invoiceStatusBadgeClass,
 } from "./recordsDisplay";
 
 // R1 — per-category "bank statement" detail screen. Date-wise list, newest
 // first, monospace for numbers/dates. Hybrid categories (vitals/medications)
 // carry a per-row source tag (You / Home visit). Read-only categories have no
-// add control; patient categories surface the add/upload affordance. Reports +
-// Invoices are honest empty stubs this slice. Scoped by the viewing member via
-// useRecords — no cross-member leakage.
+// add control; patient categories surface the add/upload affordance. Reports
+// (member-aware, link out to the token-gated /reports page) and Invoices
+// (account-level receipts from payments_v, read-only) are now wired to real
+// data. Scoped by the viewing member via useRecords — no cross-member leakage.
 
 const VITAL_SHORT: Record<string, string> = {
   bp: "BP",
@@ -284,14 +290,26 @@ function CategoryStatement({
       );
 
     case "reports":
-      return (
+      return records.reports.length ? (
+        <Statement>
+          {records.reports.map((r) => (
+            <ReportStatementRow key={r.id} report={r} />
+          ))}
+        </Statement>
+      ) : (
         <EmptyCard>
           No reports yet. Lab reports from {subjectLabel} Sanocare tests will appear here.
         </EmptyCard>
       );
 
     case "invoices":
-      return (
+      return records.invoices.length ? (
+        <Statement>
+          {records.invoices.map((inv) => (
+            <InvoiceStatementRow key={inv.booking_id} invoice={inv} />
+          ))}
+        </Statement>
+      ) : (
         <EmptyCard>
           No invoices yet. Receipts for {subjectLabel} visits and tests will appear here.
         </EmptyCard>
@@ -369,6 +387,60 @@ function PrescriptionStatementRow({ rx }: { rx: PrescriptionRecord }) {
     >
       <span className="block truncate text-sm font-medium text-text-main">Prescription</span>
       <span className="text-xs text-text-secondary">{title}</span>
+    </StatementRow>
+  );
+}
+
+// Lab report → link out to the existing token-gated patient page; we never
+// expose report_url and never bypass its payment/unlock gate.
+function ReportStatementRow({ report }: { report: ReportRecord }) {
+  return (
+    <StatementRow
+      day={formatStatementDay(report.report_uploaded_at)}
+      time={formatStatementTime(report.report_uploaded_at)}
+      trailing={
+        report.report_unlock_token ? (
+          <Link
+            href={`/reports/${report.report_unlock_token}`}
+            className="rounded-lg bg-primary-50 px-2.5 py-1 text-xs font-bold text-primary hover:bg-blue-100"
+          >
+            View →
+          </Link>
+        ) : null
+      }
+    >
+      <span className="block truncate text-sm font-medium text-text-main">
+        {serviceLabel(report.service_category)}
+      </span>
+      <span className="text-xs text-text-secondary">Lab report</span>
+    </StatementRow>
+  );
+}
+
+// Receipt from payments_v. Amount in IBM Plex Mono; status chip; booking code +
+// masked payment ref as the sub-line. No tax line (Sanocare services are GST-exempt).
+function InvoiceStatementRow({ invoice }: { invoice: InvoiceRecord }) {
+  const when = invoice.captured_at ?? invoice.created_at;
+  const sub = [invoice.booking_code, invoice.payment_ref].filter(Boolean).join(" · ");
+  return (
+    <StatementRow
+      day={formatStatementDay(when)}
+      time={formatStatementTime(when)}
+      trailing={
+        <span className="flex flex-col items-end gap-1">
+          <span className="font-mono text-sm font-bold text-text-main">
+            {formatPaiseINR(invoice.amount_paise)}
+          </span>
+          <Badge className={invoiceStatusBadgeClass(invoice.status)}>
+            {invoiceStatusLabel(invoice.status)}
+          </Badge>
+        </span>
+      }
+    >
+      <span className="block truncate text-sm font-medium text-text-main">
+        {serviceLabel(invoice.service_category)}
+      </span>
+      {sub ? <span className="text-xs text-text-secondary">{sub}</span> : null}
     </StatementRow>
   );
 }

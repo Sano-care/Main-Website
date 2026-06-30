@@ -80,6 +80,44 @@ export function bookingStatusBadgeClass(status: string): string {
   return "bg-slate-100 text-slate-600";
 }
 
+// ---------------------------------------------------------------------------
+// Invoices (receipts) — paise → ₹, and the paid/refunded status chip.
+// ---------------------------------------------------------------------------
+
+/**
+ * Integer paise → an Indian-grouped rupee string for the receipt amount
+ * (rendered in IBM Plex Mono). Whole amounts show no decimals; part-rupee
+ * amounts show two. e.g. 49900 → "₹499", 120050 → "₹1,200.50". Invalid → "—".
+ */
+export function formatPaiseINR(paise: number): string {
+  if (!Number.isFinite(paise)) return "—";
+  const rupees = paise / 100;
+  const hasPaise = Math.round(paise) % 100 !== 0;
+  return (
+    "₹" +
+    rupees.toLocaleString("en-IN", {
+      minimumFractionDigits: hasPaise ? 2 : 0,
+      maximumFractionDigits: 2,
+    })
+  );
+}
+
+/** payments_v.status → a patient-facing receipt label. NOT_DUE never reaches the UI. */
+export function invoiceStatusLabel(status: string): string {
+  const s = status.toUpperCase();
+  if (s === "CAPTURED") return "Paid";
+  if (s === "REFUNDED") return "Refunded";
+  return titleCaseFromSlug(status.toLowerCase());
+}
+
+/** Neutral status tint for a receipt — lifecycle colour, not a clinical signal. */
+export function invoiceStatusBadgeClass(status: string): string {
+  const s = status.toUpperCase();
+  if (s === "CAPTURED") return "bg-emerald-50 text-emerald-700";
+  if (s === "REFUNDED") return "bg-amber-50 text-amber-700";
+  return "bg-slate-100 text-slate-600";
+}
+
 const DOC_TYPE_LABELS: Record<string, string> = {
   lab_report: "Lab report",
   prescription: "Prescription",

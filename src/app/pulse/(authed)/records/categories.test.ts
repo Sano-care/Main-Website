@@ -21,6 +21,8 @@ function emptyRecords(over: Partial<PulseRecords> = {}): PulseRecords {
     scope: { memberId: null },
     bookings: [],
     prescriptions: [],
+    reports: [],
+    invoices: [],
     vitals: [],
     medications: [],
     conditions: [],
@@ -63,9 +65,10 @@ describe("BANDS — the visual contract", () => {
     expect(CATEGORY_CONFIG.allergies.detailAction.type).toBe("modal");
   });
 
-  it("marks Reports + Invoices as stubs (empty this slice)", () => {
-    expect(CATEGORY_CONFIG.reports.stub).toBe(true);
-    expect(CATEGORY_CONFIG.invoices.stub).toBe(true);
+  it("R3 — Reports + Invoices are wired (read-only, no 'stub' flag left)", () => {
+    // The stub concept is retired now that both pull real data.
+    expect("stub" in CATEGORY_CONFIG.reports).toBe(false);
+    expect("stub" in CATEGORY_CONFIG.invoices).toBe(false);
   });
 });
 
@@ -126,15 +129,27 @@ describe("tileSummary", () => {
     expect(tileSummary("conditions", emptyRecords())).toEqual({ count: null, label: "None yet" });
   });
 
-  it("Reports + Invoices are always empty stubs", () => {
-    const full = emptyRecords({ bookings: [{} as never] });
-    expect(tileSummary("reports", full)).toEqual({ count: null, label: "No reports yet" });
-    expect(tileSummary("invoices", full)).toEqual({ count: null, label: "No invoices yet" });
+  it("R3 — Reports + Invoices now reflect real counts", () => {
+    const withData = emptyRecords({
+      reports: [{} as never, {} as never],
+      invoices: [{} as never],
+    });
+    expect(tileSummary("reports", withData)).toEqual({ count: 2, label: "reports" });
+    expect(tileSummary("invoices", withData)).toEqual({ count: 1, label: "receipt" });
   });
 
-  it("hybrid categories show 'For your account' when omitted for a member view", () => {
-    const omitted = emptyRecords({ accountLevelOmitted: ["vitals", "medications"] });
+  it("R3 — Reports + Invoices empty states; one report → singular", () => {
+    const empty = emptyRecords({ bookings: [{} as never] });
+    expect(tileSummary("reports", empty)).toEqual({ count: null, label: "No reports yet" });
+    expect(tileSummary("invoices", empty)).toEqual({ count: null, label: "No invoices yet" });
+    expect(tileSummary("reports", emptyRecords({ reports: [{} as never] }))).toEqual({ count: 1, label: "report" });
+  });
+
+  it("account-level categories show 'For your account' when omitted for a member view", () => {
+    // R3 adds invoices alongside vitals/medications (payments_v has no member_id).
+    const omitted = emptyRecords({ accountLevelOmitted: ["vitals", "medications", "invoices"] });
     expect(tileSummary("vitals", omitted)).toEqual({ count: null, label: "For your account" });
     expect(tileSummary("medications", omitted)).toEqual({ count: null, label: "For your account" });
+    expect(tileSummary("invoices", omitted)).toEqual({ count: null, label: "For your account" });
   });
 });

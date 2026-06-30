@@ -36,6 +36,8 @@ import {
 export type RecordCategory =
   | "bookings"
   | "prescriptions"
+  | "reports"
+  | "invoices"
   | "vitals"
   | "medications"
   | "conditions"
@@ -45,6 +47,8 @@ export type RecordCategory =
 export const ALL_RECORD_CATEGORIES: RecordCategory[] = [
   "bookings",
   "prescriptions",
+  "reports",
+  "invoices",
   "vitals",
   "medications",
   "conditions",
@@ -53,12 +57,15 @@ export const ALL_RECORD_CATEGORIES: RecordCategory[] = [
 ];
 
 /**
- * vital_readings + medications are account-level only this slice (no member_id
- * column — see the tracked per-member-vitals follow-up). When the caller asks
- * for ONE specific family member, these two cannot be attributed to that member
- * and are intentionally omitted (reported via `accountLevelOmitted`).
+ * Account-level categories have no per-member attribution, so when the caller
+ * asks for ONE specific family member they are intentionally omitted (reported
+ * via `accountLevelOmitted`):
+ *   - vital_readings + medications — no member_id column (tracked follow-up).
+ *   - invoices (payments_v) — payments are booking/account financials with no
+ *     member_id on the view, so a payment can't be attributed to one member.
+ * Reports DO carry member_id (via bookings) and are member-aware — not here.
  */
-const ACCOUNT_LEVEL_CATEGORIES: RecordCategory[] = ["vitals", "medications"];
+const ACCOUNT_LEVEL_CATEGORIES: RecordCategory[] = ["vitals", "medications", "invoices"];
 
 const DEFAULT_LIMIT = 50;
 
@@ -155,12 +162,51 @@ export interface MedicationRecord {
   source: string | null;
 }
 
+/**
+ * A paid receipt, derived from the `payments_v` view (account-level — the view
+ * has no member_id). NOT_DUE rows (no payment occurred) are excluded upstream;
+ * only CAPTURED / REFUNDED reach here. DPDP: the full Razorpay payment id never
+ * leaves the server — `payment_ref` is masked to the last 4 chars in the data
+ * layer. Sanocare's clinical services are GST-exempt, so there is no tax line.
+ */
+export interface InvoiceRecord {
+  /** Booking the payment belongs to — used as the row key. */
+  booking_id: string;
+  booking_code: string | null;
+  service_category: string | null;
+  amount_paise: number;
+  /** CAPTURED (paid) | REFUNDED. NOT_DUE is filtered out. */
+  status: string;
+  /** Masked last-4 of razorpay_payment_id (e.g. "•••• 9aK2"); full id never sent. */
+  payment_ref: string | null;
+  captured_at: string | null;
+  created_at: string;
+}
+
+/**
+ * A lab report attached to a booking. Member-aware (bookings.member_id). The
+ * raw `report_url` is NEVER exposed — the UI links to the existing token-gated
+ * patient page `/reports/[report_unlock_token]`, which keeps its own payment /
+ * unlock gate. Only bookings with a `report_url` set are surfaced.
+ */
+export interface ReportRecord {
+  /** Booking id — the row key. */
+  id: string;
+  member_id: string | null;
+  service_category: string | null;
+  report_uploaded_at: string | null;
+  /** Link target for /reports/[token]. report_url is intentionally not exposed. */
+  report_unlock_token: string | null;
+}
+
 export interface PulseRecords {
   customerId: string;
   /** Echo of the resolved subject scope for the consumer's display logic. */
   scope: { memberId: string | null | undefined };
   bookings: BookingRecord[];
   prescriptions: PrescriptionRecord[];
+  reports: ReportRecord[];
+  invoices: InvoiceRecord[];
   vitals: VitalRecord[];
   medications: MedicationRecord[];
   conditions: ConditionRecord[];
@@ -402,6 +448,101 @@ async function fetchMedications(customerId: string, limit: number): Promise<Medi
   }
 }
 
+/**
+ * Mask a Razorpay payment id to its last 4 characters. The full id never leaves
+ * the server — only this masked form is placed on an InvoiceRecord. Null-safe.
+ */
+function maskPaymentRef(id: string | null | undefined): string | null {
+  if (!id) return null;
+  const trimmed = id.trim();
+  if (trimmed.length === 0) return null;
+  return `•••• ${trimmed.slice(-4)}`;
+}
+
+/** Effective receipt date for sorting/display: captured_at, falling back to created_at. */
+function invoiceTime(r: { captured_at: string | null; created_at: string }): number {
+  const t = Date.parse(r.captured_at ?? r.created_at);
+  return Number.isNaN(t) ? 0 : t;
+}
+
+async function fetchInvoices(customerId: string, limit: number): Promise<InvoiceRecord[]> {
+  // Account-level receipts from payments_v (no member_id on the view). Receipts
+  // only — NOT_DUE means no payment occurred, so it is filtered out. The full
+  // razorpay_payment_id is masked here so it never enters the response payload.
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("payments_v")
+      .select("booking_id, booking_code, service_category, amount_paise, status, razorpay_payment_id, captured_at, created_at")
+      .eq("customer_id", customerId)
+      .neq("status", "NOT_DUE")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) {
+      logErr("invoices", error);
+      return [];
+    }
+    const rows = (data ?? []) as Array<{
+      booking_id: string;
+      booking_code: string | null;
+      service_category: string | null;
+      amount_paise: number;
+      status: string;
+      razorpay_payment_id: string | null;
+      captured_at: string | null;
+      created_at: string;
+    }>;
+    return rows
+      .map((r) => ({
+        booking_id: r.booking_id,
+        booking_code: r.booking_code,
+        service_category: r.service_category,
+        amount_paise: r.amount_paise,
+        status: r.status,
+        payment_ref: maskPaymentRef(r.razorpay_payment_id),
+        captured_at: r.captured_at,
+        created_at: r.created_at,
+      }))
+      .sort((a, b) => invoiceTime(b) - invoiceTime(a)); // newest first by captured_at ?? created_at
+  } catch (err) {
+    logErr("invoices", err);
+    return [];
+  }
+}
+
+async function fetchReports(
+  customerId: string,
+  memberId: string | null | undefined,
+  limit: number,
+): Promise<ReportRecord[]> {
+  // Lab reports attached to bookings. Member-aware (bookings.member_id) and
+  // always customer-scoped, so a forged member id matches nothing (IDOR-safe,
+  // same posture as fetchBookings). report_url is used only as a filter — it is
+  // NEVER selected/exposed; the UI links to the token-gated /reports page.
+  try {
+    let q = supabaseAdmin
+      .from("bookings")
+      .select("id, member_id, service_category, report_uploaded_at, report_unlock_token")
+      .eq("customer_id", customerId)
+      .not("report_url", "is", null);
+    // Inline the member filter (not the generic applyMemberFilter) — the .not()
+    // narrowing makes the generic instantiation excessively deep. Same inline
+    // pattern as fetchPrescriptions.
+    if (memberId === null) q = q.is("member_id", null);
+    else if (memberId !== undefined) q = q.eq("member_id", memberId);
+    const { data, error } = await q
+      .order("report_uploaded_at", { ascending: false })
+      .limit(limit);
+    if (error) {
+      logErr("reports", error);
+      return [];
+    }
+    return (data ?? []) as ReportRecord[];
+  } catch (err) {
+    logErr("reports", err);
+    return [];
+  }
+}
+
 function memberScopeLabel(memberId: string | null | undefined): "all" | "account_holder" | "member" {
   if (memberId === undefined) return "all";
   if (memberId === null) return "account_holder";
@@ -434,10 +575,12 @@ export async function fetchPulseRecords(
     : [];
   const includeAccountLevel = !specificMember;
 
-  const [bookings, prescriptions, vitals, medications, conditions, allergies, documents] =
+  const [bookings, prescriptions, reports, invoices, vitals, medications, conditions, allergies, documents] =
     await Promise.all([
       want("bookings") ? fetchBookings(customerId, memberId, limit) : Promise.resolve([]),
       want("prescriptions") ? fetchPrescriptions(customerId, memberId, limit) : Promise.resolve([]),
+      want("reports") ? fetchReports(customerId, memberId, limit) : Promise.resolve([]),
+      want("invoices") && includeAccountLevel ? fetchInvoices(customerId, limit) : Promise.resolve([]),
       want("vitals") && includeAccountLevel ? fetchVitals(customerId, limit) : Promise.resolve([]),
       want("medications") && includeAccountLevel
         ? fetchMedications(customerId, limit)
@@ -452,6 +595,8 @@ export async function fetchPulseRecords(
     scope: { memberId },
     bookings,
     prescriptions,
+    reports,
+    invoices,
     vitals,
     medications,
     conditions,
@@ -473,6 +618,8 @@ export async function fetchPulseRecords(
       counts: {
         bookings: bookings.length,
         prescriptions: prescriptions.length,
+        reports: reports.length,
+        invoices: invoices.length,
         vitals: vitals.length,
         medications: medications.length,
         conditions: conditions.length,
