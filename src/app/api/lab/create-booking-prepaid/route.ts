@@ -430,13 +430,14 @@ export async function POST(req: NextRequest) {
 
     // Marketing closed-loop (Slice 2) — link this lab booking back to the
     // marketing lead that drove it (matched by phone): flip to `booked` + roll
-    // up lifetime_value. Same linker the razorpay path uses; soft-fail. Covers
-    // both lab modes (CAPTURED / PARTIAL_PAID) — the lead converts either way.
+    // up lifetime_value_paise. Same linker the razorpay path uses; soft-fail.
+    // Covers both lab modes (CAPTURED / PARTIAL_PAID) — the lead converts either
+    // way. grandTotalInr is the full case value (rupees) → paise.
     if (data?.id) {
       await linkBookingToMarketingLead({
         phone: submittedPhone,
         bookingId: data.id as string,
-        amount: grandTotalInr, // rupees, matching the razorpay wiring's unit
+        amountPaise: grandTotalInr * 100, // = final_amount_paise on this path
       });
     }
 

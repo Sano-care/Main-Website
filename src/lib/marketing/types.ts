@@ -80,7 +80,7 @@ export interface MarketingLead {
   service_intent: ServiceIntent | null;
   linked_booking_id: string | null;
   linked_lead_id: string | null;
-  lifetime_value: number;
+  lifetime_value_paise: number;
   aarogya_nurture: boolean;
   assigned_to: string | null;
   routed_at: string | null;
