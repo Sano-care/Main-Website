@@ -8,6 +8,7 @@ import {
 } from "@/lib/otp/token";
 import { sendAarogyaLeadAlert } from "@/lib/booking/meta";
 import { sendBookingConfirmed } from "@/lib/aarogya/meta";
+import { linkBookingToMarketingLead } from "@/lib/marketing/closedLoop";
 import { formatLeadAlertContext } from "@/lib/booking/contextFormat";
 import {
   validatePatientName,
@@ -343,6 +344,17 @@ export async function POST(req: NextRequest) {
         "[razorpay/verify] template dispatch threw unexpectedly",
         alertErr,
       );
+    }
+
+    // Marketing closed-loop — link this booking back to the marketing lead that
+    // drove it (matched by phone): flip the lead to `booked` + roll up its
+    // lifetime_value. Soft-fail; the booking row stays the source of truth.
+    if (data?.id) {
+      await linkBookingToMarketingLead({
+        phone: insertPayload.phone,
+        bookingId: data.id as string,
+        amount: typeof booking.amount === "number" ? booking.amount : null,
+      });
     }
 
     return NextResponse.json({
