@@ -19,6 +19,8 @@ import type {
 import { useRecords } from "./useRecords";
 import UploadDocumentModal from "./UploadDocumentModal";
 import AddRecordModal from "./AddRecordModal";
+import AddVitalModal from "./AddVitalModal";
+import AddMedicationModal from "./AddMedicationModal";
 import {
   CATEGORY_CONFIG,
   TIER_ICON,
@@ -119,7 +121,8 @@ export default function RecordsDetail({ category }: { category: RecordTileKey })
         ) : null}
       </div>
 
-      {/* Documents → upload modal; Conditions/Allergies → add-record modal. */}
+      {/* Documents → upload modal; Conditions/Allergies → add-record modal;
+          Vitals/Medications → account-level add modals (no member selector). */}
       {category === "documents" ? (
         <UploadDocumentModal
           open={addOpen}
@@ -137,6 +140,10 @@ export default function RecordsDetail({ category }: { category: RecordTileKey })
           defaultMemberId={addDefaultMemberId}
           onSaved={reload}
         />
+      ) : category === "vitals" ? (
+        <AddVitalModal open={addOpen} onClose={() => setAddOpen(false)} onSaved={reload} />
+      ) : category === "medications" ? (
+        <AddMedicationModal open={addOpen} onClose={() => setAddOpen(false)} onSaved={reload} />
       ) : null}
     </div>
   );
@@ -223,7 +230,7 @@ function CategoryStatement({
       return records.vitals.length ? (
         <Statement>
           {groupVitalsByTime(records.vitals).map((g) => (
-            <VitalStatementRow key={g.takenAt} group={g} />
+            <VitalStatementRow key={g.takenAt} group={g} onChanged={onChanged} />
           ))}
         </Statement>
       ) : (
@@ -234,7 +241,7 @@ function CategoryStatement({
       return records.medications.length ? (
         <Statement>
           {records.medications.map((m) => (
-            <MedicationStatementRow key={m.id} med={m} />
+            <MedicationStatementRow key={m.id} med={m} onChanged={onChanged} />
           ))}
         </Statement>
       ) : (
@@ -391,12 +398,24 @@ function groupVitalsByTime(vitals: VitalRecord[]): VitalGroup[] {
   return groups;
 }
 
-function VitalStatementRow({ group }: { group: VitalGroup }) {
+function VitalStatementRow({ group, onChanged }: { group: VitalGroup; onChanged: () => void }) {
+  // Self-entered groups only — every reading at this instant is source='manual'.
+  const allManual = group.readings.every((r) => r.source === "manual");
   return (
     <StatementRow
       day={formatStatementDay(group.takenAt)}
       time={formatStatementTime(group.takenAt)}
-      trailing={<SourceChip tag={sourceTag(group.source)} />}
+      trailing={
+        <span className="flex items-center gap-1.5">
+          <SourceChip tag={sourceTag(group.source)} />
+          {allManual ? (
+            <DeleteRowButton
+              endpoints={group.readings.map((r) => `/api/pulse/vitals/${r.id}`)}
+              onDeleted={onChanged}
+            />
+          ) : null}
+        </span>
+      }
     >
       <span className="flex flex-wrap gap-1.5">
         {group.readings.map((v) => (
@@ -416,13 +435,29 @@ function VitalStatementRow({ group }: { group: VitalGroup }) {
   );
 }
 
-function MedicationStatementRow({ med }: { med: MedicationRecord }) {
+function MedicationStatementRow({
+  med,
+  onChanged,
+}: {
+  med: MedicationRecord;
+  onChanged: () => void;
+}) {
   const schedule = formatScheduleTimes(med.scheduled_times);
   const sub = [med.dose, schedule].filter(Boolean).join(" · ");
   return (
     <StatementRow
       day={formatStatementDay(med.start_date)}
-      trailing={<SourceChip tag={sourceTag(med.source)} />}
+      trailing={
+        <span className="flex items-center gap-1.5">
+          <SourceChip tag={sourceTag(med.source)} />
+          {med.source === "manual" ? (
+            <DeleteRowButton
+              endpoints={[`/api/pulse/medications/${med.id}`]}
+              onDeleted={onChanged}
+            />
+          ) : null}
+        </span>
+      }
     >
       <span className="block truncate text-sm font-medium text-text-main">{med.name}</span>
       {sub ? <span className="text-xs text-text-secondary">{sub}</span> : null}
@@ -447,7 +482,7 @@ function ConditionStatementRow({
           </Badge>
           {condition.source === "patient" ? (
             <DeleteRowButton
-              endpoint={`/api/pulse/conditions?id=${condition.id}`}
+              endpoints={[`/api/pulse/conditions?id=${condition.id}`]}
               onDeleted={onChanged}
             />
           ) : null}
@@ -476,7 +511,7 @@ function AllergyStatementRow({
           </Badge>
           {allergy.source === "patient" ? (
             <DeleteRowButton
-              endpoint={`/api/pulse/allergies?id=${allergy.id}`}
+              endpoints={[`/api/pulse/allergies?id=${allergy.id}`]}
               onDeleted={onChanged}
             />
           ) : null}
@@ -491,9 +526,11 @@ function AllergyStatementRow({
   );
 }
 
-// Delete affordance for patient-sourced rows only (the parent gates on
-// source==='patient'; the route re-enforces customer scope + source='patient').
-function DeleteRowButton({ endpoint, onDeleted }: { endpoint: string; onDeleted: () => void }) {
+// Delete affordance for self-entered rows only (the parent gates on
+// source==='patient'/'manual'; the route re-enforces customer scope + source).
+// `endpoints` is usually one URL; a vitals group captured at the same instant
+// can be several, deleted together.
+function DeleteRowButton({ endpoints, onDeleted }: { endpoints: string[]; onDeleted: () => void }) {
   const [deleting, setDeleting] = useState(false);
 
   const onClick = useCallback(async () => {
@@ -501,8 +538,10 @@ function DeleteRowButton({ endpoint, onDeleted }: { endpoint: string; onDeleted:
     if (typeof window !== "undefined" && !window.confirm("Remove this entry?")) return;
     setDeleting(true);
     try {
-      const res = await pulseFetch(endpoint, { method: "DELETE" });
-      if (res.ok) {
+      const results = await Promise.all(
+        endpoints.map((e) => pulseFetch(e, { method: "DELETE" })),
+      );
+      if (results.every((r) => r.ok)) {
         onDeleted();
         return;
       }
@@ -510,7 +549,7 @@ function DeleteRowButton({ endpoint, onDeleted }: { endpoint: string; onDeleted:
       console.error("[pulse/records] delete failed", err);
     }
     setDeleting(false);
-  }, [deleting, endpoint, onDeleted]);
+  }, [deleting, endpoints, onDeleted]);
 
   return (
     <button

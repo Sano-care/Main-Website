@@ -188,6 +188,48 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx) {
   return NextResponse.json({ medication: med, intake_regenerated: regenerated });
 }
 
+/**
+ * DELETE /api/pulse/medications/:id — remove one of the caller's OWN
+ * self-entered medications. Scoped to customer_id AND source='manual', so a
+ * clinician/imported med (source='rx_import') or another customer's row affects
+ * zero rows → 404. The medication_intake_log rows are removed automatically by
+ * the ON DELETE CASCADE FK.
+ */
+export async function DELETE(req: NextRequest, ctx: RouteCtx) {
+  const auth = await requirePulseCustomer(req);
+  if ("response" in auth) return auth.response;
+  const { customer } = auth;
+
+  const { id } = await ctx.params;
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: "Invalid medication id." }, { status: 400 });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("medications")
+    .delete()
+    .eq("id", id)
+    .eq("customer_id", customer.id)
+    .eq("source", "manual")
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[pulse/medications/:id] DELETE failed:", error);
+    return NextResponse.json(
+      { error: "Could not delete the medication." },
+      { status: 500 },
+    );
+  }
+  if (!data) {
+    return NextResponse.json(
+      { error: "Not found, or it isn't one you can remove." },
+      { status: 404 },
+    );
+  }
+  return NextResponse.json({ ok: true, id: data.id });
+}
+
 function badField(field: string): NextResponse {
   return NextResponse.json(
     { error: `Invalid value for ${field}.` },
