@@ -46,7 +46,7 @@ function makeDb() {
           updated_at: "2026-06-30T00:00:00Z",
           score: 0,
           state: "new",
-          lifetime_value: 0,
+          lifetime_value_paise: 0,
           aarogya_nurture: false,
           campaign: null,
           utm_source: null,
@@ -129,7 +129,7 @@ const lead = (over: Partial<MarketingLead> = {}): MarketingLead => ({
   service_intent: "medic_home",
   linked_booking_id: null,
   linked_lead_id: null,
-  lifetime_value: 0,
+  lifetime_value_paise: 0,
   aarogya_nurture: false,
   assigned_to: null,
   routed_at: null,
@@ -301,27 +301,27 @@ describe("scoreLead", () => {
 });
 
 describe("linkBookingToMarketingLead (closed-loop)", () => {
-  it("matches by phone → state=booked, linked_booking_id set, lifetime_value rolled up", async () => {
+  it("matches by phone → state=booked, linked_booking_id set, lifetime_value_paise rolled up", async () => {
     const { client, rows } = makeDb();
     await upsertMarketingLead(
       { source: "website_book", contact: { phone: "+919812345678" }, consent_status: "opted_in" },
       { supabase: client } as never,
     );
-    rows[0].lifetime_value = 100; // pre-existing value to roll up
+    rows[0].lifetime_value_paise = 100; // pre-existing paise to roll up
 
     const res = await linkBookingToMarketingLead(
-      { phone: "9812345678", bookingId: "bk-1", amount: 499 },
+      { phone: "9812345678", bookingId: "bk-1", amountPaise: 499 },
       { supabase: client },
     );
     expect(res.linked).toBe(true);
     expect(rows[0].state).toBe("booked");
     expect(rows[0].linked_booking_id).toBe("bk-1");
-    expect(rows[0].lifetime_value).toBe(599); // 100 + 499
+    expect(rows[0].lifetime_value_paise).toBe(599); // 100 + 499 (paise)
   });
 
   it("no marketing lead for the phone → linked:false, nothing written", async () => {
     const { client } = makeDb();
-    const res = await linkBookingToMarketingLead({ phone: "+910000000000", bookingId: "bk-2", amount: 200 }, { supabase: client });
+    const res = await linkBookingToMarketingLead({ phone: "+910000000000", bookingId: "bk-2", amountPaise: 200 }, { supabase: client });
     expect(res.linked).toBe(false);
   });
 });
