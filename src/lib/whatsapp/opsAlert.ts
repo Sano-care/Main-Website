@@ -30,7 +30,9 @@ export const OPS_ALERT_TARGET_DIGITS = FOUNDER_OPS_PHONE_DIGITS; // "91976005990
 export const OPS_ALERT_ALT_DIGITS = FOUNDER_OPS_PHONE_DIGITS; // "919760059900"
 
 export interface OpsAlertArgs {
-  conversationId: string;
+  /** Null for alerts not tied to a WhatsApp conversation (e.g. a marketing
+   *  hot-lead alert). audit_log.conversation_id is nullable, so this is safe. */
+  conversationId: string | null;
   escalationId: string | null;
   patientName: string;
   patientAge: string;
