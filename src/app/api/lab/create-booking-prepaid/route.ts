@@ -16,6 +16,7 @@ import {
 } from "@/lib/booking/customerLink";
 import { LAB_COLLECTION_FEE_INR } from "@/lib/services/labCatalog";
 import { PHONE_DISPLAY } from "@/lib/contact";
+import { linkBookingToMarketingLead } from "@/lib/marketing/closedLoop";
 
 export const runtime = "nodejs";
 
@@ -425,6 +426,18 @@ export async function POST(req: NextRequest) {
         "[lab/create-booking-prepaid] template dispatch threw unexpectedly",
         alertErr,
       );
+    }
+
+    // Marketing closed-loop (Slice 2) — link this lab booking back to the
+    // marketing lead that drove it (matched by phone): flip to `booked` + roll
+    // up lifetime_value. Same linker the razorpay path uses; soft-fail. Covers
+    // both lab modes (CAPTURED / PARTIAL_PAID) — the lead converts either way.
+    if (data?.id) {
+      await linkBookingToMarketingLead({
+        phone: submittedPhone,
+        bookingId: data.id as string,
+        amount: grandTotalInr, // rupees, matching the razorpay wiring's unit
+      });
     }
 
     return NextResponse.json({
