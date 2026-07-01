@@ -4,6 +4,7 @@ import type { PulseRecords } from "@/lib/pulse/recordsFetch";
 import {
   BANDS,
   CATEGORY_CONFIG,
+  RECORD_TILE_ORDER,
   TIER_ICON,
   isRecordTileKey,
   sourceTag,
@@ -42,6 +43,15 @@ describe("BANDS — the visual contract", () => {
     const keys = BANDS.flatMap((b) => b.keys);
     expect(keys.slice().sort()).toEqual(ALL_KEYS.slice().sort());
     expect(new Set(keys).size).toBe(keys.length); // no dupes
+  });
+
+  it("R4 — RECORD_TILE_ORDER is the flat band order (single source for the home shortcuts)", () => {
+    // The Pulse home "Your records" shortcuts map over exactly this list.
+    expect(RECORD_TILE_ORDER).toEqual(BANDS.flatMap((b) => b.keys));
+    expect(RECORD_TILE_ORDER.slice().sort()).toEqual(ALL_KEYS.slice().sort());
+    // From-Sanocare tier leads (blue), Yours tier (coral) is last.
+    expect(CATEGORY_CONFIG[RECORD_TILE_ORDER[0]].tier).toBe("sanocare");
+    expect(CATEGORY_CONFIG[RECORD_TILE_ORDER[RECORD_TILE_ORDER.length - 1]].tier).toBe("yours");
   });
 
   it("places each category in its config tier's band", () => {
