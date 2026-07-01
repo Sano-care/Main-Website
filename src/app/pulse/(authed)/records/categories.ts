@@ -181,6 +181,14 @@ export function isRecordTileKey(slug: string): slug is RecordTileKey {
 }
 
 /**
+ * Every record category, flattened in band/tier order (From Sanocare → hybrid →
+ * Yours). Single source for any surface that iterates the categories — the
+ * records landing grid AND the Pulse home "Your records" shortcuts (R4) both
+ * derive from here, so icons/labels/slugs never drift between the two.
+ */
+export const RECORD_TILE_ORDER: RecordTileKey[] = BANDS.flatMap((b) => b.keys);
+
+/**
  * R1.1 — monoline tile-icon treatment per tier: a soft-tint wrapper + the icon
  * stroke in the tier accent (blue / slate / coral). Single-sourced so the
  * landing tiles and the detail-screen headers read identically. Stroke colours

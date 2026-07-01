@@ -441,6 +441,17 @@ function InvoiceStatementRow({ invoice }: { invoice: InvoiceRecord }) {
         {serviceLabel(invoice.service_category)}
       </span>
       {sub ? <span className="text-xs text-text-secondary">{sub}</span> : null}
+      {/* R4 Part B — receipt PDF. Plain same-origin anchor: the browser sends the
+          Pulse session cookie and the route's attachment disposition downloads
+          without leaving the page. The route hard-scopes the payment to the
+          session customer (404 otherwise). */}
+      <a
+        href={`/api/pulse/invoices/${invoice.booking_id}/receipt`}
+        className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40"
+      >
+        <Download className="h-3 w-3" />
+        Download receipt
+      </a>
     </StatementRow>
   );
 }
