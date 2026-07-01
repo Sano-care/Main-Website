@@ -57,3 +57,11 @@ medic-app/.kotlin/
 *.apk
 *.aab
 *.iml
+
+# T67 Sanocare Pulse Android app — build artifacts
+patient-app/build/
+patient-app/.gradle/
+patient-app/.idea/
+patient-app/local.properties
+patient-app/app/build/
+patient-app/.kotlin/
