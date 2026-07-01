@@ -21,30 +21,39 @@ import { linkBookingToMarketingLead } from "@/lib/marketing/closedLoop";
 
 describe("aggregateAttribution", () => {
   const leads: LeadAggRow[] = [
-    { source: "meta_ctwa", campaign: "monsoon", state: "booked", lifetime_value: 499 }, // ₹499 → 49900p
-    { source: "meta_ctwa", campaign: "monsoon", state: "booked", lifetime_value: 200 },
-    { source: "meta_ctwa", campaign: "monsoon", state: "hot", lifetime_value: 0 },
-    { source: "meta_ctwa", campaign: "monsoon", state: "qualified", lifetime_value: 0 },
-    { source: "meta_ctwa", campaign: "monsoon", state: "nurturing", lifetime_value: 0 },
-    { source: "google_lead_form", campaign: "search1", state: "new", lifetime_value: 0 }, // leads, no spend
+    { source: "meta_ctwa", campaign: "monsoon", state: "booked", lifetime_value_paise: 49_900 }, // ₹499
+    { source: "meta_ctwa", campaign: "monsoon", state: "booked", lifetime_value_paise: 20_000 }, // ₹200
+    { source: "meta_ctwa", campaign: "monsoon", state: "hot", lifetime_value_paise: 0 },
+    { source: "meta_ctwa", campaign: "monsoon", state: "qualified", lifetime_value_paise: 0 },
+    { source: "meta_ctwa", campaign: "monsoon", state: "nurturing", lifetime_value_paise: 0 },
+    { source: "google_lead_form", campaign: "search1", state: "new", lifetime_value_paise: 0 }, // leads, no spend
   ];
   const spend: SpendAggRow[] = [
     { source: "meta_ctwa", campaign: "monsoon", spend_paise: 100_000 }, // ₹1000
     { source: "justdial", campaign: "listing", spend_paise: 50_000 }, // spend, no leads
   ];
 
-  it("computes counts, revenue (rupees→paise), CAC, ROAS, conv per source/campaign", () => {
+  it("computes counts, revenue (paise), CAC, ROAS, conv per source/campaign", () => {
     const { rows } = aggregateAttribution(leads, spend);
     const m = rows.find((r) => r.source === "meta_ctwa")!;
     expect(m.leads).toBe(5);
     expect(m.booked).toBe(2);
     expect(m.hot).toBe(1);
     expect(m.qualified).toBe(1);
-    expect(m.revenue_paise).toBe(69_900); // (499 + 200) × 100
+    expect(m.revenue_paise).toBe(69_900); // 49900 + 20000 (already paise — no ×100)
     expect(m.spend_paise).toBe(100_000);
     expect(m.cac_paise).toBe(50_000); // 100000 / 2 booked
     expect(m.roas).toBeCloseTo(0.699); // 69900 / 100000
     expect(m.conv_rate).toBeCloseTo(2 / 5);
+  });
+
+  it("ROAS is a clean ratio with NO ×100 step: ₹1,000 revenue vs ₹500 spend → 2.0", () => {
+    const { rows } = aggregateAttribution(
+      [{ source: "meta_ctwa", campaign: "c", state: "booked", lifetime_value_paise: 100_000 }], // ₹1,000
+      [{ source: "meta_ctwa", campaign: "c", spend_paise: 50_000 }], // ₹500
+    );
+    expect(rows[0].revenue_paise).toBe(100_000); // summed directly, not ×100
+    expect(rows[0].roas).toBe(2.0);
   });
 
   it("is null-safe: booked=0 → CAC null; spend=0 → ROAS null; leads=0 → conv null", () => {
@@ -103,7 +112,7 @@ function fakeAttrSupabase(cfg: { leadRows?: unknown[]; spendRows?: unknown[] }) 
 describe("fetchAttribution", () => {
   it("filters leads by created_at and spend by date over the range", async () => {
     const { client, captured } = fakeAttrSupabase({
-      leadRows: [{ source: "meta_ctwa", campaign: "c", state: "booked", lifetime_value: 100 }],
+      leadRows: [{ source: "meta_ctwa", campaign: "c", state: "booked", lifetime_value_paise: 10000 }],
       spendRows: [{ source: "meta_ctwa", campaign: "c", spend_paise: 10000, date: "2026-06-15" }],
     });
     const res = await fetchAttribution({ from: "2026-06-01", to: "2026-06-30" }, { supabase: client });
@@ -114,7 +123,7 @@ describe("fetchAttribution", () => {
     expect(captured.lte).toContainEqual(["date", "2026-06-30"]);
     expect(res.spendPresent).toBe(true);
     expect(res.latestSpendDate).toBe("2026-06-15");
-    expect(res.rows[0].roas).toBeCloseTo(1.0); // 100×100 paise revenue / 10000 spend
+    expect(res.rows[0].roas).toBeCloseTo(1.0); // 10000 paise revenue / 10000 paise spend
   });
 
   it("flags spendPresent=false when no spend in range", async () => {
@@ -162,7 +171,7 @@ describe("upsertAdSpend", () => {
 });
 
 describe("lab-path closed loop (reuses Slice 1 linkBookingToMarketingLead)", () => {
-  function closedLoopFake(existing: { id: string; lifetime_value: number } | null) {
+  function closedLoopFake(existing: { id: string; lifetime_value_paise: number } | null) {
     const store: { row: Record<string, unknown> | null } = {
       row: existing ? { ...existing, state: "new", linked_booking_id: null } : null,
     };
@@ -188,21 +197,21 @@ describe("lab-path closed loop (reuses Slice 1 linkBookingToMarketingLead)", () 
     return { client, store };
   }
 
-  it("a lab booking links to its lead → booked + lifetime_value rolled up", async () => {
-    const { client, store } = closedLoopFake({ id: "ml-9", lifetime_value: 0 });
+  it("a lab booking links to its lead → booked + lifetime_value_paise rolled up", async () => {
+    const { client, store } = closedLoopFake({ id: "ml-9", lifetime_value_paise: 0 });
     const res = await linkBookingToMarketingLead(
-      { phone: "+919812345678", bookingId: "lab-bk-1", amount: 850 }, // lab grand total (rupees)
+      { phone: "+919812345678", bookingId: "lab-bk-1", amountPaise: 85_000 }, // ₹850 grand total → paise
       { supabase: client },
     );
     expect(res.linked).toBe(true);
     expect(store.row!.state).toBe("booked");
     expect(store.row!.linked_booking_id).toBe("lab-bk-1");
-    expect(store.row!.lifetime_value).toBe(850);
+    expect(store.row!.lifetime_value_paise).toBe(85_000);
   });
 
   it("soft-fail when no lead matches the lab booking phone", async () => {
     const { client } = closedLoopFake(null);
-    const res = await linkBookingToMarketingLead({ phone: "+910000000000", bookingId: "lab-bk-2", amount: 850 }, { supabase: client });
+    const res = await linkBookingToMarketingLead({ phone: "+910000000000", bookingId: "lab-bk-2", amountPaise: 85_000 }, { supabase: client });
     expect(res.linked).toBe(false);
   });
 });

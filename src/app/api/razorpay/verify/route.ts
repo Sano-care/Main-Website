@@ -348,12 +348,14 @@ export async function POST(req: NextRequest) {
 
     // Marketing closed-loop — link this booking back to the marketing lead that
     // drove it (matched by phone): flip the lead to `booked` + roll up its
-    // lifetime_value. Soft-fail; the booking row stays the source of truth.
+    // lifetime_value_paise. Soft-fail; the booking row stays the source of truth.
     if (data?.id) {
       await linkBookingToMarketingLead({
         phone: insertPayload.phone,
         bookingId: data.id as string,
-        amount: typeof booking.amount === "number" ? booking.amount : null,
+        // booking.amount is rupees here (no final_amount_paise on this path) → paise.
+        amountPaise:
+          typeof booking.amount === "number" ? Math.round(booking.amount * 100) : null,
       });
     }
 

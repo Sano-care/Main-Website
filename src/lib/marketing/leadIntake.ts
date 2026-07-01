@@ -20,7 +20,7 @@ import {
 type SupabaseLike = typeof supabaseAdmin;
 
 const LEAD_COLS =
-  "id, created_at, updated_at, source, campaign, utm_source, utm_medium, utm_content, utm_term, gclid, consent_status, score, state, contact, last_touch, normalized_phone, email_lc, service_intent, linked_booking_id, linked_lead_id, lifetime_value, aarogya_nurture, assigned_to, routed_at, notes";
+  "id, created_at, updated_at, source, campaign, utm_source, utm_medium, utm_content, utm_term, gclid, consent_status, score, state, contact, last_touch, normalized_phone, email_lc, service_intent, linked_booking_id, linked_lead_id, lifetime_value_paise, aarogya_nurture, assigned_to, routed_at, notes";
 
 const CONSENT_RANK: Record<ConsentStatus, number> = {
   none: 0,
