@@ -37,6 +37,7 @@ import EmergencyRibbon from "./_components/EmergencyRibbon";
 import PWAInstallPrompt from "./_components/PWAInstallPrompt";
 import PulseBookingPhonePrime from "./_components/PulseBookingPhonePrime";
 import PulseHomeTiles from "./_components/PulseHomeTiles";
+import PulseRecordsShortcuts from "./_components/PulseRecordsShortcuts";
 import SnapshotDivider from "./_components/SnapshotDivider";
 import ViewingSubLine from "./_components/ViewingSubLine";
 import { getGreeting } from "./_lib/greeting";
@@ -303,9 +304,16 @@ async function PulseHomeBody() {
           </section>
         </SectionReveal>
 
+        {/* R4 Part A — "Your records" quick-access: deep-links into the R1
+            per-category detail screens. Single-sourced from categories.ts. */}
+        <SectionReveal delay={240}>
+          <PulseRecordsShortcuts />
+        </SectionReveal>
+
         {/* Recent activity */}
         {recent.length > 0 && (
-          <SectionReveal delay={240}>
+          <SectionReveal delay={320}>
+
             <section>
               <h2 className="mb-2 ml-1 text-sm font-bold text-text-main">
                 Recent activity
