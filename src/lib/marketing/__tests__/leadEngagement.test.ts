@@ -164,12 +164,15 @@ describe("runLeadEngagementSweep", () => {
     expect(deps.sendTemplate).not.toHaveBeenCalled();
   });
 
-  it("enabled → sends T1 to eligible pending justdial leads, marks t1_sent", async () => {
+  it("enabled → sends T1 (static, ZERO body params) + marks t1_sent", async () => {
     const { client, leads } = makeDb({ leads: [lead({ id: "a" })] });
     const deps = baseDeps(client);
     const r = await runLeadEngagementSweep(deps as never);
     expect(r.t1Sent).toBe(1);
     expect(deps.sendTemplate).toHaveBeenCalledTimes(1);
+    const t1 = (deps.sendTemplate.mock.calls[0] as unknown[])[0] as { templateName: string; bodyParams: string[] };
+    expect(t1.templateName).toBe("lead_first_contact");
+    expect(t1.bodyParams).toEqual([]); // zero-variable → no params (avoids Meta 132000)
     expect(leads[0].engagement_state).toBe("t1_sent");
     expect(leads[0].t1_sent_at).toBe(NOW.toISOString());
   });
@@ -205,6 +208,10 @@ describe("runLeadEngagementSweep", () => {
     const r = await runLeadEngagementSweep(deps as never);
     expect(r.t2Sent).toBe(1);
     expect(leads[0].engagement_state).toBe("t2_sent");
+    // T2 keeps ONE variable {{1}} = the service phrase (lowercase).
+    const t2 = (deps.sendTemplate.mock.calls[0] as unknown[])[0] as { templateName: string; bodyParams: string[] };
+    expect(t2.templateName).toBe("lead_follow_up");
+    expect(t2.bodyParams).toEqual(["home nursing care"]); // service_intent medic_home
   });
 });
 

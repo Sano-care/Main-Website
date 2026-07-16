@@ -41,20 +41,20 @@ export function isEngageEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env[ENGAGE_FLAG] === "true";
 }
 
-function firstName(name: string | null | undefined): string {
-  const t = (name ?? "").trim().split(/\s+/)[0];
-  return t || "there";
-}
-
-/** Source-aware opening-line variable for the T1 template. */
-function sourceOpener(source: string): string {
-  switch (source) {
-    case "justdial":
-      return "You enquired about home healthcare on JustDial";
-    case "google_lead_form":
-      return "You enquired about home healthcare through our ad";
+/** T2 `{{1}}` — the service phrase, LOWERCASE for natural reading in the copy.
+ *  T1 is a static zero-variable template and takes no params. */
+export function serviceIntentPhrase(intent: ServiceIntent | null | undefined): string {
+  switch (intent) {
+    case "medic_home":
+      return "home nursing care";
+    case "gda":
+      return "a home attendant / caregiver";
+    case "lab":
+      return "home lab sample collection";
+    case "teleconsult":
+      return "a doctor consultation";
     default:
-      return "You enquired about home healthcare";
+      return "home healthcare";
   }
 }
 
@@ -169,11 +169,11 @@ export async function runLeadEngagementSweep(deps: EngageDeps = {}): Promise<Swe
       try {
         const send = await sendTemplate({
           to: phone,
-          // {{1}} greeting (lead name isn't stored on the row → generic),
-          // {{2}} source-aware opener. Marketing session finalizes the approved
-          // template's var order; align here at go-live.
+          // T1 lead_first_contact is a STATIC, zero-variable template → NO body
+          // params (an empty array trips Meta 132000; cloud-api omits the body
+          // component when empty).
           templateName: t1Template(env),
-          bodyParams: [firstName(null), sourceOpener(lead.source)],
+          bodyParams: [],
         });
         await supabase
           .from("marketing_leads")
@@ -208,8 +208,9 @@ export async function runLeadEngagementSweep(deps: EngageDeps = {}): Promise<Swe
     try {
       await sendTemplate({
         to: phone,
+        // T2 lead_follow_up keeps ONE variable {{1}} = the service phrase.
         templateName: t2Template(env),
-        bodyParams: ["there", sourceOpener(lead.source)],
+        bodyParams: [serviceIntentPhrase(lead.service_intent)],
       });
       await supabase
         .from("marketing_leads")

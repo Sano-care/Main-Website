@@ -224,10 +224,16 @@ export async function sendTemplateMessage(input: {
     });
   }
 
-  components.push({
-    type: "body",
-    parameters: input.bodyParams.map((text) => ({ type: "text", text })),
-  });
+  // Zero-variable templates (e.g. the static lead_first_contact) must send NO
+  // body component — an empty `parameters: []` still trips Meta's 132000
+  // parameter-count check. Omit the body component entirely when there are no
+  // params. Every variable template passes a non-empty array, so unaffected.
+  if (input.bodyParams.length > 0) {
+    components.push({
+      type: "body",
+      parameters: input.bodyParams.map((text) => ({ type: "text", text })),
+    });
+  }
 
   if (input.quickReplyPayload !== undefined) {
     components.push({
