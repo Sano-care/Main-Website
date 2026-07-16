@@ -44,7 +44,12 @@ fun HomeScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp),
     ) {
+        // Emergency ribbon sits directly under the top app bar (mockup §3) — the
+        // one coral accent on the screen, above the greeting + tiles.
         Spacer(Modifier.height(12.dp))
+        EmergencyRibbon(text = stringResource(R.string.emergency_ribbon))
+
+        Spacer(Modifier.height(16.dp))
         Text(text = todayLine(), color = InkMute, style = MaterialTheme.typography.labelMedium)
         Spacer(Modifier.height(2.dp))
         Text(
@@ -87,9 +92,6 @@ fun HomeScreen(
                 modifier = Modifier.weight(1f),
             )
         }
-
-        Spacer(Modifier.height(16.dp))
-        EmergencyRibbon(text = stringResource(R.string.emergency_ribbon))
 
         Spacer(Modifier.height(16.dp))
         SnapshotCard(
