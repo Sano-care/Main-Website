@@ -105,6 +105,9 @@ dependencies {
     // Jetpack Security — EncryptedSharedPreferences for the bearer token.
     implementation(libs.androidx.security.crypto)
 
+    // Chrome Custom Tabs — public-token Rx/report pages (PB2).
+    implementation(libs.androidx.browser)
+
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.android.compiler)

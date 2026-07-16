@@ -69,4 +69,52 @@
     <string name="snapshot_meds_empty">No medications yet.</string>
 
     <string name="coming_soon">Coming soon</string>
+
+    <!-- ===== Records (PB2) ===== -->
+    <string name="records_title">Your records</string>
+    <string name="records_tier_sanocare">From Sanocare</string>
+    <string name="records_tier_sanocare_sub">Read-only — what Sanocare has issued for you.</string>
+    <string name="records_tier_tracked">Tracked together</string>
+    <string name="records_tier_yours">Yours to manage</string>
+
+    <string name="records_bookings">Bookings</string>
+    <string name="records_prescriptions">Prescriptions</string>
+    <string name="records_reports">Lab reports</string>
+    <string name="records_invoices">Invoices</string>
+    <string name="records_vitals">Vitals</string>
+    <string name="records_medications">Medications</string>
+    <string name="records_conditions">Conditions</string>
+    <string name="records_allergies">Allergies</string>
+    <string name="records_documents">Documents</string>
+
+    <string name="records_retry">Try again</string>
+    <string name="records_error">Couldn\'t load your records. Check your connection and try again.</string>
+
+    <string name="bookings_empty">No bookings yet — visits you book with Sanocare will appear here.</string>
+    <string name="prescriptions_empty">No prescriptions yet — they\'ll appear here after a consult.</string>
+    <string name="reports_empty">No lab reports yet — they\'ll appear here once your tests are ready.</string>
+    <string name="invoices_empty">No invoices yet — receipts for your visits and tests will appear here.</string>
+
+    <string name="booking_detail_service">Service</string>
+    <string name="booking_detail_for">For</string>
+    <string name="booking_detail_when">When</string>
+    <string name="booking_detail_status">Status</string>
+    <string name="booking_detail_amount">Amount</string>
+    <string name="booking_for_self">You</string>
+    <string name="booking_for_member">A family member</string>
+
+    <string name="prescription_view">View prescription (PDF)</string>
+    <string name="prescription_by">Dr %1$s</string>
+    <string name="prescription_by_unknown">Prescription</string>
+
+    <string name="report_open">Open report</string>
+    <string name="report_new">New</string>
+
+    <string name="invoice_detail_receipt_no">Receipt no.</string>
+    <string name="invoice_detail_service">Service</string>
+    <string name="invoice_detail_date">Date</string>
+    <string name="invoice_detail_ref">Payment ref</string>
+    <string name="invoice_download_receipt">Download receipt (PDF)</string>
+    <string name="invoice_download_failed">Couldn\'t open the receipt. Try again.</string>
+    <string name="pdf_no_viewer">No PDF viewer found on this device.</string>
 </resources>
