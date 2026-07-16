@@ -41,7 +41,7 @@ describe("sendTemplateMessage — body component by param count", () => {
   });
 
   it("non-empty bodyParams → body component with the params (regression)", async () => {
-    await sendTemplateMessage({ to: "+919812345678", templateName: "lead_follow_up", bodyParams: ["home nursing care"] });
+    await sendTemplateMessage({ to: "+919812345678", templateName: "lead_followup", bodyParams: ["home nursing care"] });
     const components = lastBody(fetchMock).template.components as {
       type: string;
       parameters?: { type: string; text: string }[];

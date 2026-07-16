@@ -210,7 +210,7 @@ describe("runLeadEngagementSweep", () => {
     expect(leads[0].engagement_state).toBe("t2_sent");
     // T2 keeps ONE variable {{1}} = the service phrase (lowercase).
     const t2 = (deps.sendTemplate.mock.calls[0] as unknown[])[0] as { templateName: string; bodyParams: string[] };
-    expect(t2.templateName).toBe("lead_follow_up");
+    expect(t2.templateName).toBe("lead_followup");
     expect(t2.bodyParams).toEqual(["home nursing care"]); // service_intent medic_home
   });
 });

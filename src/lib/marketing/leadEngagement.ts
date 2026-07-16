@@ -34,7 +34,7 @@ function t1Template(env: NodeJS.ProcessEnv): string {
   return env.AAROGYA_LEAD_T1_TEMPLATE ?? "lead_first_contact";
 }
 function t2Template(env: NodeJS.ProcessEnv): string {
-  return env.AAROGYA_LEAD_T2_TEMPLATE ?? "lead_follow_up";
+  return env.AAROGYA_LEAD_T2_TEMPLATE ?? "lead_followup";
 }
 
 export function isEngageEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -208,7 +208,7 @@ export async function runLeadEngagementSweep(deps: EngageDeps = {}): Promise<Swe
     try {
       await sendTemplate({
         to: phone,
-        // T2 lead_follow_up keeps ONE variable {{1}} = the service phrase.
+        // T2 lead_followup keeps ONE variable {{1}} = the service phrase.
         templateName: t2Template(env),
         bodyParams: [serviceIntentPhrase(lead.service_intent)],
       });
