@@ -98,7 +98,7 @@ describe("GET /api/leads/justdial", () => {
     expect(h.audits[0]).toMatchObject({ event_type: "jd_lead_no_contact" });
   });
 
-  it("valid lead (created) → inserts source=justdial + service_intent + notes, fires ops alert", async () => {
+  it("valid lead (created) → inserts source=justdial + service_intent + notes, does NOT ping ops (Lead Engine P1)", async () => {
     vi.mocked(upsertMarketingLead).mockResolvedValue({ lead: { id: "ml-1" } as never, created: true, error: null });
     const res = await call(
       "key=secretkey&leadid=T1&prefix=Mr&name=Test&mobile=%2B91%2099999%2088888&category=Home%20Nursing%20Services&area=Kalkaji&city=Delhi&pincode=110019",
@@ -114,22 +114,24 @@ describe("GET /api/leads/justdial", () => {
     });
     expect(arg.contact.phone).toBe("9999988888"); // normalized last-10
     expect(arg.notes).toContain("JD#T1");
-    expect(sendOpsAlert).toHaveBeenCalledTimes(1);
+    // Founder re-architecture 2026-07-16: ingest hands off to the Aarogya
+    // engagement sweep; ops is pinged ONLY on a qualified lead, never on ingest.
+    expect(sendOpsAlert).not.toHaveBeenCalled();
   });
 
-  it("repeat push (deduped, created=false) → 200, NO second ops alert", async () => {
+  it("repeat push (deduped, created=false) → 200, still no ops ping", async () => {
     vi.mocked(upsertMarketingLead).mockResolvedValue({ lead: { id: "ml-1" } as never, created: false, error: null });
     const res = await call("key=secretkey&leadid=T1&name=Test&mobile=9999988888&category=Nursing");
     expect(res.status).toBe(200);
     expect(sendOpsAlert).not.toHaveBeenCalled();
   });
 
-  it("ops-alert failure is swallowed → still 200", async () => {
+  it("created lead → 200 SUCCESS and ops is never pinged at ingest", async () => {
     vi.mocked(upsertMarketingLead).mockResolvedValue({ lead: { id: "ml-2" } as never, created: true, error: null });
-    vi.mocked(sendOpsAlert).mockRejectedValue(new Error("graph down"));
     const res = await call("key=secretkey&leadid=T2&name=X&mobile=9812345678&category=Lab");
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("SUCCESS");
+    expect(sendOpsAlert).not.toHaveBeenCalled();
   });
 
   it("upsert failure → still 200 (logged, no retry storm)", async () => {
