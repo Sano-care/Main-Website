@@ -81,3 +81,53 @@ fun invoicePill(status: String): StatusPill = when (status.uppercase()) {
     "REFUNDED" -> StatusPill("Refunded", Amber.first, Amber.second)
     else -> StatusPill("Paid", Green.first, Green.second)
 }
+
+// ── Vitals ────────────────────────────────────────────────────────────────────
+
+data class VitalKindMeta(val key: String, val label: String, val unit: String, val hasSecondary: Boolean)
+
+/** The kinds the app lets a patient log (M2: BP / pulse / sugar / weight). */
+val LOGGABLE_VITALS: List<VitalKindMeta> = listOf(
+    VitalKindMeta("bp", "Blood pressure", "mmHg", true),
+    VitalKindMeta("pulse_bpm", "Pulse", "bpm", false),
+    VitalKindMeta("sugar_random", "Blood sugar", "mg/dL", false),
+    VitalKindMeta("weight_kg", "Weight", "kg", false),
+)
+
+private val VITAL_LABELS = mapOf(
+    "bp" to ("Blood pressure" to "mmHg"),
+    "pulse_bpm" to ("Pulse" to "bpm"),
+    "sugar_random" to ("Blood sugar" to "mg/dL"),
+    "sugar_fasting" to ("Blood sugar (fasting)" to "mg/dL"),
+    "sugar_postprandial" to ("Blood sugar (post-meal)" to "mg/dL"),
+    "weight_kg" to ("Weight" to "kg"),
+    "temperature_c" to ("Temperature" to "°C"),
+    "spo2_pct" to ("SpO₂" to "%"),
+)
+
+fun vitalLabel(kind: String): String = VITAL_LABELS[kind]?.first
+    ?: kind.split('_').joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+
+fun vitalUnit(kind: String): String = VITAL_LABELS[kind]?.second ?: ""
+
+/** "128/82" for BP, else the primary value, trimming a trailing ".0". */
+fun vitalValueText(kind: String, primary: Double?, secondary: Double?): String {
+    fun n(d: Double?): String = d?.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() } ?: "—"
+    return if (kind == "bp" && secondary != null) "${n(primary)}/${n(secondary)}" else n(primary)
+}
+
+fun severityLabel(severity: String): String =
+    severity.replaceFirstChar { it.uppercase() }
+
+fun severityPill(severity: String): StatusPill = when (severity.lowercase()) {
+    "severe" -> StatusPill("Severe", Rose.first, Rose.second)
+    "moderate" -> StatusPill("Moderate", Amber.first, Amber.second)
+    "mild" -> StatusPill("Mild", Slate.first, Slate.second)
+    else -> StatusPill(severity.replaceFirstChar { it.uppercase() }.ifBlank { "Unknown" }, Slate.first, Slate.second)
+}
+
+/** IST "today" as YYYY-MM-DD, for defaulting a vital's taken_at / a noted_at. */
+fun istTodayYmd(): String = java.time.LocalDate.now(IST).toString()
+
+/** IST "now" as an ISO instant, for a vital's taken_at. */
+fun istNowIso(): String = java.time.Instant.now().toString()
