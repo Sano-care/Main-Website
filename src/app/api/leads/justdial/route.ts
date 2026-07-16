@@ -3,8 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { upsertMarketingLead } from "@/lib/marketing/leadIntake";
 import { normalizeEmail, normalizePhone } from "@/lib/marketing/types";
-import { sendOpsAlert } from "@/lib/whatsapp/opsAlert";
-import { buildJdNotes, buildJdOpsAlert, mapJdCategory } from "@/lib/marketing/justdial";
+import { buildJdNotes, mapJdCategory } from "@/lib/marketing/justdial";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,16 +93,11 @@ export async function GET(req: Request) {
     return SUCCESS();
   }
 
-  let alerted = false;
-  if (created) {
-    // Best-effort — an alert failure must never fail the webhook response.
-    try {
-      const res = await sendOpsAlert(buildJdOpsAlert(fields));
-      alerted = res.sent;
-    } catch (e) {
-      console.error(`[jd] ops alert threw (leadid=${leadid})`, e);
-    }
-  }
-  console.log(`[jd] leadid=${leadid} lead_id=${lead.id} created=${created} alerted=${alerted}`);
+  // Lead Engine P1 (2026-07-16 founder re-architecture): ingest NO LONGER pings
+  // ops. A newly-created pending lead is picked up by the throttled Aarogya
+  // engagement sweep (first-contact template), then Aarogya qualifies, and ONLY
+  // a qualified lead is forwarded to ops. Nothing to enqueue here — the lead
+  // sits `engagement_state='none'` for the sweep.
+  console.log(`[jd] leadid=${leadid} lead_id=${lead.id} created=${created} → engagement sweep will pick up`);
   return SUCCESS();
 }
