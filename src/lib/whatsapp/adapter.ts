@@ -24,6 +24,7 @@ import {
 } from "@/lib/whatsapp/safety/opt-out";
 import { AuditEvent, writeAudit } from "@/lib/whatsapp/safety/audit";
 import { identityForAudit, resolveIdentity } from "@/lib/whatsapp/identity";
+import { handleLeadReplied, markLeadOptedOut } from "@/lib/marketing/leadEngagement";
 import {
   countInboundMessages,
   createEscalation,
@@ -208,6 +209,10 @@ async function executeEscalateToOps(
 
 async function executeSetOptOut(conversation: ConversationRow): Promise<void> {
   await setOptOut({ conversationId: conversation.id, leadId: conversation.lead_id });
+  // Lead Engine P1 — mirror the opt-out onto any marketing lead for this phone.
+  await markLeadOptedOut(conversation.whatsapp_phone).catch((err) =>
+    log.error("markLeadOptedOut (tool) threw", err),
+  );
   await writeAudit({
     conversationId: conversation.id,
     eventType: AuditEvent.OPT_OUT_SET,
@@ -387,6 +392,16 @@ export async function handleInboundMessage(
     },
   });
   if (!inserted) return; // idempotent: Meta retry
+
+  // Lead Engine P1 — a genuine inbound from an ENGAGED marketing lead flips it to
+  // opted_in (+ v0 qualify → ops forward). No-op unless an engaged lead exists
+  // for this phone, so it's safe on every inbound. Skip on STOP (handled below).
+  // Best-effort — must never break the patient turn.
+  if (!optOut.matched) {
+    handleLeadReplied(inbound.phone).catch((err) =>
+      log.error("handleLeadReplied threw", maskPhone(inbound.phone), err),
+    );
+  }
 
   // ---- Identity resolution (T-Aarogya-P1 C2/C3) --------------------------
   // Resolve WHO this number is, ONCE, at conversation start (after the
@@ -587,6 +602,11 @@ export async function handleInboundMessage(
       safetyFlags: { opt_out_confirmation: true },
     });
     await setOptOut({ conversationId: conversation.id, leadId: conversation.lead_id });
+    // Lead Engine P1 — also flag any marketing lead for this phone opted_out
+    // (never re-contact). Best-effort.
+    await markLeadOptedOut(inbound.phone).catch((err) =>
+      log.error("markLeadOptedOut threw", maskPhone(inbound.phone), err),
+    );
     await audit(AuditEvent.OPT_OUT_SET, { keyword: optOut.keyword });
     return;
   }
