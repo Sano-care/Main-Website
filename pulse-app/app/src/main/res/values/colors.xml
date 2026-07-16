@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Launcher/window colors only. Compose surfaces use the tokens in
+         in.sanocare.pulse.theme.Color (Sanocare brand spec). -->
+    <color name="sanocare_blue">#FF2B81FF</color>
+    <color name="paper">#FFFFFFFF</color>
+</resources>

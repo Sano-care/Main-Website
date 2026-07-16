@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Window/splash background before Compose attaches. The real Material 3
+         ColorScheme lives in theme/Theme.kt. Concept A is a quiet white screen,
+         so the window background is Paper (not brand blue) to avoid a blue flash
+         before the login paints. -->
+    <style name="Theme.SanocarePulse" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#FFFFFFFF</item>
+        <item name="android:windowBackground">#FFFFFFFF</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

@@ -1,0 +1,72 @@
+<resources>
+    <string name="app_name">Sanocare</string>
+
+    <!-- ===== Login — Concept A (calm clinical / quiet white) ===== -->
+    <string name="login_headline">Healthcare at home, in one place.</string>
+    <string name="login_sub">Sign in with your phone number. We\'ll send a one-time code on WhatsApp.</string>
+    <string name="login_phone_prefix">+91</string>
+    <string name="login_phone_hint">10-digit mobile number</string>
+    <string name="login_trust">Your number is used only to sign you in. We never share it.</string>
+    <string name="login_cta">Continue</string>
+    <string name="login_terms">By continuing, you agree to our Terms and Privacy Policy.</string>
+    <string name="login_phone_invalid">Enter a valid 10-digit mobile number.</string>
+
+    <!-- ===== OTP (shared) ===== -->
+    <string name="otp_title">Enter the code</string>
+    <string name="otp_sent_prefix">Sent on WhatsApp to</string>
+    <string name="otp_change">Change</string>
+    <string name="otp_delivered">Code delivered on WhatsApp</string>
+    <string name="otp_resend_in">Resend in %1$s</string>
+    <string name="otp_resend">Resend code</string>
+    <string name="otp_cta">Verify</string>
+
+    <!-- Medic-number edge case (edge case 1): patient app shows this and stays on login. -->
+    <string name="login_medic_number">This number is registered as Sanocare staff — please use the Medic app.</string>
+
+    <!-- ===== Onboarding ===== -->
+    <string name="onboarding_stay_title">Stay signed in on this phone</string>
+    <string name="onboarding_stay_body">Keep this device signed in so you don\'t re-enter a code each time. Turn it off if this is a shared phone.</string>
+    <string name="onboarding_stay_toggle">Stay signed in on this phone</string>
+    <string name="onboarding_continue">Continue</string>
+
+    <string name="onboarding_family_title">Add a family member</string>
+    <string name="onboarding_family_body">Manage care for a parent, partner, or child from your account. You can always do this later.</string>
+    <string name="onboarding_family_add">Add a family member</string>
+    <string name="onboarding_family_skip">Skip for now</string>
+
+    <!-- ===== App shell ===== -->
+    <string name="shell_menu">Menu</string>
+    <string name="shell_account">Account</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_records">Your records</string>
+    <string name="nav_profile">Your profile</string>
+    <string name="nav_family">Family members</string>
+    <string name="nav_settings">Account settings</string>
+    <string name="nav_help">Help</string>
+    <string name="nav_sign_out">Sign out</string>
+    <string name="member_switch_title">Viewing records for</string>
+    <string name="member_self">Myself</string>
+
+    <!-- ===== Home ===== -->
+    <string name="home_greeting_morning">Good morning</string>
+    <string name="home_greeting_afternoon">Good afternoon</string>
+    <string name="home_greeting_evening">Good evening</string>
+
+    <string name="tile_doctor_title">Talk to a doctor</string>
+    <string name="tile_doctor_sub">Video consult with an MBBS doctor</string>
+    <string name="tile_lab_title">Get tested at home</string>
+    <string name="tile_lab_sub">Sample collected at your door</string>
+    <string name="tile_care_title">Get Care at Home</string>
+    <string name="tile_care_sub">A nurse visit for planned care</string>
+    <string name="tile_medic_title">Book a medic</string>
+    <string name="tile_medic_sub">A trained medic at home</string>
+
+    <string name="emergency_ribbon">In an emergency, call 112</string>
+
+    <string name="snapshot_vitals_title">Vitals</string>
+    <string name="snapshot_vitals_empty">No readings yet.</string>
+    <string name="snapshot_meds_title">Medications</string>
+    <string name="snapshot_meds_empty">No medications yet.</string>
+
+    <string name="coming_soon">Coming soon</string>
+</resources>

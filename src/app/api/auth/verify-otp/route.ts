@@ -14,6 +14,10 @@ import {
   normaliseIndianPhone,
   pulseCookieOptions,
 } from "@/lib/otp/token";
+import {
+  isMobilePulseClient,
+  mintMobileSessionToken,
+} from "@/lib/otp/mobileToken";
 
 export const runtime = "nodejs";
 
@@ -51,7 +55,12 @@ export const runtime = "nodejs";
  * customers.full_name + customer_code) — applied 2026-06-09.
  */
 export async function POST(req: NextRequest) {
-  let body: { phone?: string; otp?: string; stay_signed_in?: boolean };
+  let body: {
+    phone?: string;
+    otp?: string;
+    stay_signed_in?: boolean;
+    device_label?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -295,6 +304,20 @@ export async function POST(req: NextRequest) {
     console.error("[verify-otp] customer resolve threw unexpectedly", cause);
   }
 
+  // PB1 — native Pulse app: on the CUSTOMER branch only (medics returned
+  // earlier), when the request carries the app header, mint an opaque bearer
+  // token and return it once in the body. The web path never sets the header,
+  // so the web response is byte-identical (no mobile_token key). The cookie is
+  // still set below — harmless for the app, which ignores Set-Cookie.
+  const isMobile = isMobilePulseClient(req);
+  let mobileToken: string | null = null;
+  if (isMobile && customerId) {
+    mobileToken = await mintMobileSessionToken({
+      customerId,
+      deviceLabel: body.device_label ?? null,
+    });
+  }
+
   const response = NextResponse.json({
     ok: true,
     phone,
@@ -303,6 +326,8 @@ export async function POST(req: NextRequest) {
     // T90: drives the onboarding gate on the client. The PulseLoginForm
     // routes to /pulse/welcome when true, /pulse when false.
     is_new_customer: isFirstPulseSignin,
+    // PB1: opaque bearer token for the native app — mobile requests only.
+    ...(isMobile ? { mobile_token: mobileToken } : {}),
   });
   response.cookies.set({
     name: VERIFY_COOKIE_NAME,

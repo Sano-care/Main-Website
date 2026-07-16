@@ -11,9 +11,14 @@ import {
   verifyToken,
 } from "@/lib/otp/token";
 import {
+  resolveCustomerById,
   resolveCustomerFromToken,
   type PulseCustomer,
 } from "./getCurrentCustomer";
+import {
+  bearerFromAuthHeader,
+  resolveMobileSessionCustomerId,
+} from "@/lib/otp/mobileToken";
 
 // Auth guard for the /api/pulse/* route handlers.
 //
@@ -61,6 +66,22 @@ export function pulseUnauthorized(
 export async function requirePulseCustomer(
   req: NextRequest,
 ): Promise<PulseAuthResult> {
+  // ── Native-app bearer path (additive; PB1) ──────────────────────────────
+  // The Pulse Android app sends `Authorization: Bearer <opaque token>` instead
+  // of the web cookie. Resolve it via mobile_session_tokens (hash → customer_id,
+  // revoked rows excluded). Checked FIRST so the app never depends on cookies.
+  // When no bearer header is present (every web request), this block is a no-op
+  // and the cookie path below runs exactly as before.
+  const bearer = bearerFromAuthHeader(req.headers.get("authorization"));
+  if (bearer) {
+    const customerId = await resolveMobileSessionCustomerId(bearer);
+    if (!customerId) return { response: pulseUnauthorized() };
+    const customer = await resolveCustomerById(customerId);
+    if (!customer) return { response: pulseUnauthorized() };
+    return { customer };
+  }
+
+  // ── Web cookie path (UNCHANGED) ─────────────────────────────────────────
   const token = req.cookies.get(VERIFY_COOKIE_NAME)?.value;
   // Verify the token signature + TTL first so we have access to the
   // staySignedIn flag for the renewal decision below. resolveCustomerFromToken
