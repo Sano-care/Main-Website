@@ -143,6 +143,15 @@ export const AuditEvent = {
   MEDICINE_WEB_VERIFIED: "medicine_web_verified",
   MEDICINE_PHOTO_READ: "medicine_photo_read",
   MEDICINE_CATALOG_ADDED: "medicine_catalog_added",
+  // Aarogya lead engine (P1) — Aarogya engages/qualifies a marketing lead before
+  // ops. Phone-free: lead_id + source + template/counts only.
+  LEAD_ENGAGE_SWEEP_RUN: "lead_engage_sweep_run",
+  LEAD_ENGAGE_SENT: "lead_engage_sent", // T1/T2 first-contact template sent
+  LEAD_ENGAGE_SKIPPED: "lead_engage_skipped", // flag off / halted
+  LEAD_ENGAGE_HALTED: "lead_engage_halted", // WABA stop-loss tripped
+  LEAD_REPLIED_OPTED_IN: "lead_replied_opted_in",
+  LEAD_QUALIFIED_FORWARDED: "lead_qualified_forwarded", // the only ops ping
+  LEAD_OPTED_OUT: "lead_opted_out",
 } as const;
 
 export type AuditEventType = (typeof AuditEvent)[keyof typeof AuditEvent];
