@@ -56,4 +56,14 @@ medic-app/captures/
 medic-app/.kotlin/
 *.apk
 *.aab
+
+# PB1 — Pulse App (Android) build artifacts
+pulse-app/build/
+pulse-app/.gradle/
+pulse-app/.idea/
+pulse-app/app/build/
+pulse-app/app/release/
+pulse-app/local.properties
+pulse-app/captures/
+pulse-app/.kotlin/
 *.iml

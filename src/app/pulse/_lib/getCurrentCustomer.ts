@@ -60,6 +60,34 @@ export async function resolveCustomerFromToken(
 }
 
 /**
+ * Resolve a `customers.id` directly to its row. Used by the native-app bearer
+ * path (mobile_session_tokens binds to customer_id, not phone), parallel to
+ * resolveCustomerFromToken's phone-based lookup for the web cookie. Returns null
+ * when the id has no row.
+ */
+export async function resolveCustomerById(
+  customerId: string,
+): Promise<PulseCustomer | null> {
+  const { data, error } = await supabaseAdmin
+    .from("customers")
+    .select("id, full_name, phone")
+    .eq("id", customerId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[pulse/getCurrentCustomer] customer-by-id lookup failed:", error);
+    return null;
+  }
+  if (!data?.id) return null;
+
+  return {
+    id: data.id as string,
+    full_name: (data.full_name as string | null) ?? null,
+    phone: (data.phone as string) ?? "",
+  };
+}
+
+/**
  * The signed-in Pulse customer for the current server-component render, or
  * null if the visitor is unauthenticated / has no customer row yet.
  *

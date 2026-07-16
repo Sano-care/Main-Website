@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon foreground: the Sanocare butterfly mark in white, centred in
+     the 108x108 canvas. Same path data as ui/components/SanocareLogo.kt
+     (canonical source: Sanocare_Marketing_Context/Logos/Sanocare_Lockup_HD.svg,
+     mark only). The group scales the mark's path space (x∈[59.6,199], y∈[74,212],
+     ~139×138) by 0.5 and translates it so it's centred on (54,54), occupying
+     ~64% of the canvas — inside the ~66% adaptive safe zone, so round/squircle
+     masks never crop it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.5"
+        android:scaleY="0.5"
+        android:translateX="-10.65"
+        android:translateY="-17.5">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M64.25,131.47 C69.26,122.87 76.58,119.23 86.02,119.36 C89.85,119.41 93.7,119.44 97.49,119.04 C104.14,118.34 106.98,115.39 107.38,108.77 C107.69,103.79 107.35,98.78 107.69,93.81 C108.46,82.62 117.47,74.32 128.85,74.03 C140.55,73.74 150.61,82.09 152.05,93.12 C154.07,108.58 148.75,121.64 138.81,133.01 C127.51,145.95 114.34,156.54 98,162.48 C88.57,165.91 79.07,166.61 70.45,160.03 C61.71,153.37 59.56,143.53 64.25,131.47 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M147.6,202.53 C139.98,210.25 131.37,211.96 121.75,208.02 C112.36,204.18 108.35,196.78 107.9,186.86 C107.4,175.99 111.11,167.01 118.87,159.53 C129.04,149.71 139.15,139.81 149.32,129.98 C158.27,121.32 168.72,117.28 181.21,119.99 C192.18,122.37 199.57,132.16 198.97,143.34 C198.38,154.29 190.32,163.07 179.25,164.3 C174.3,164.85 169.27,164.55 164.29,164.78 C156.82,165.14 153.76,167.93 153.02,175.37 C152.52,180.34 152.94,185.43 152.06,190.31 C151.32,194.42 149.3,198.29 147.6,202.53 Z" />
+    </group>
+</vector>
