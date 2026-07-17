@@ -20,7 +20,7 @@ import retrofit2.http.Streaming
 interface RecordsApi {
 
     @GET("api/pulse/records")
-    suspend fun records(@Query("member") member: String = "self"): Response<RecordsResponse>
+    suspend fun records(@Query("member") member: String): Response<RecordsResponse>
 
     @Streaming
     @GET("api/pulse/invoices/{bookingId}/receipt")
@@ -39,6 +39,77 @@ data class RecordsPayload(
     val prescriptions: List<PrescriptionDto> = emptyList(),
     val reports: List<ReportDto> = emptyList(),
     val invoices: List<InvoiceDto> = emptyList(),
+    // PB3 — hybrid + yours tiers.
+    val vitals: List<VitalDto> = emptyList(),
+    val medications: List<MedicationDto> = emptyList(),
+    val conditions: List<ConditionDto> = emptyList(),
+    val allergies: List<AllergyDto> = emptyList(),
+    val documents: List<DocumentDto> = emptyList(),
+    // Categories the server omitted because a specific member is selected and
+    // the category is account-level (vitals, medications, invoices).
+    @SerialName("accountLevelOmitted") val accountLevelOmitted: List<String> = emptyList(),
+)
+
+@Serializable
+data class VitalDto(
+    val id: String,
+    val kind: String = "",
+    @SerialName("value_numeric") val valueNumeric: Double? = null,
+    @SerialName("value_secondary") val valueSecondary: Double? = null,
+    val unit: String? = null,
+    @SerialName("taken_at") val takenAt: String = "",
+    @SerialName("context_note") val contextNote: String? = null,
+    val source: String = "",
+)
+
+@Serializable
+data class MedicationDto(
+    val id: String,
+    val name: String = "",
+    val dose: String? = null,
+    @SerialName("scheduled_times") val scheduledTimes: List<String>? = null,
+    @SerialName("start_date") val startDate: String? = null,
+    @SerialName("end_date") val endDate: String? = null,
+    val reason: String? = null,
+    val source: String? = null,
+)
+
+@Serializable
+data class ConditionDto(
+    val id: String,
+    @SerialName("member_id") val memberId: String? = null,
+    val label: String = "",
+    val status: String = "",
+    val source: String = "",
+    @SerialName("noted_at") val notedAt: String? = null,
+    val notes: String? = null,
+    @SerialName("created_at") val createdAt: String = "",
+)
+
+@Serializable
+data class AllergyDto(
+    val id: String,
+    @SerialName("member_id") val memberId: String? = null,
+    val label: String = "",
+    val severity: String = "",
+    val reaction: String? = null,
+    val status: String = "",
+    val source: String = "",
+    @SerialName("noted_at") val notedAt: String? = null,
+    val notes: String? = null,
+    @SerialName("created_at") val createdAt: String = "",
+)
+
+@Serializable
+data class DocumentDto(
+    val id: String,
+    @SerialName("member_id") val memberId: String? = null,
+    @SerialName("doc_type") val docType: String = "",
+    val label: String? = null,
+    @SerialName("mime_type") val mimeType: String = "",
+    @SerialName("file_size_bytes") val fileSizeBytes: Long = 0,
+    val source: String = "",
+    @SerialName("uploaded_at") val uploadedAt: String = "",
 )
 
 @Serializable

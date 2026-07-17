@@ -88,26 +88,32 @@ fun RecordsScreen(onUnauthorized: () -> Unit) {
 
     NavHost(navController = nav, startDestination = "hub") {
         composable("hub") {
-            RecordsHub(state = state, onRetry = vm::load, onOpen = { nav.navigate(it) })
+            RecordsHub(state = state, onRetry = vm::reload, onOpen = { nav.navigate(it) })
         }
         composable("bookings") {
-            BookingsList(state, vm::load, onBack = { nav.popBackStack() }) { nav.navigate("booking/$it") }
+            BookingsList(state, vm::reload, onBack = { nav.popBackStack() }) { nav.navigate("booking/$it") }
         }
         composable("booking/{id}") { entry ->
             BookingDetail(state, entry.arguments?.getString("id").orEmpty()) { nav.popBackStack() }
         }
         composable("prescriptions") {
-            PrescriptionsList(state, vm::load) { nav.popBackStack() }
+            PrescriptionsList(state, vm::reload) { nav.popBackStack() }
         }
         composable("reports") {
-            ReportsList(state, vm::load) { nav.popBackStack() }
+            ReportsList(state, vm::reload) { nav.popBackStack() }
         }
         composable("invoices") {
-            InvoicesList(state, vm::load, onBack = { nav.popBackStack() }) { nav.navigate("invoice/$it") }
+            InvoicesList(state, vm::reload, onBack = { nav.popBackStack() }) { nav.navigate("invoice/$it") }
         }
         composable("invoice/{id}") { entry ->
             InvoiceDetail(state, vm, entry.arguments?.getString("id").orEmpty()) { nav.popBackStack() }
         }
+        // PB3 — Tracked-together + Yours tiers.
+        composable("vitals") { VitalsList(state, vm) { nav.popBackStack() } }
+        composable("medications") { MedicationsList(state, vm) { nav.popBackStack() } }
+        composable("conditions") { ConditionsList(state, vm) { nav.popBackStack() } }
+        composable("allergies") { AllergiesList(state, vm) { nav.popBackStack() } }
+        composable("documents") { DocumentsList(state, vm) { nav.popBackStack() } }
     }
 }
 
@@ -124,40 +130,45 @@ private fun RecordsHub(state: RecordsUiState, onRetry: () -> Unit, onOpen: (Stri
         Spacer(Modifier.height(8.dp))
         Text(stringResource(R.string.records_title), color = InkPrimary, fontWeight = FontWeight.Bold, fontSize = 24.sp)
 
-        Spacer(Modifier.height(16.dp))
-        TierHeader(stringResource(R.string.records_tier_sanocare), stringResource(R.string.records_tier_sanocare_sub))
-        Spacer(Modifier.height(10.dp))
-
-        val payload = (state as? RecordsUiState.Ready)?.payload
         when (state) {
-            is RecordsUiState.Error -> ErrorState(stringResource(R.string.records_error), onRetry)
-            RecordsUiState.Loading, RecordsUiState.Unauthorized -> HubSkeleton()
+            is RecordsUiState.Error -> {
+                Spacer(Modifier.height(16.dp))
+                ErrorState(stringResource(R.string.records_error), onRetry)
+            }
+            RecordsUiState.Loading, RecordsUiState.Unauthorized -> {
+                Spacer(Modifier.height(16.dp))
+                HubSkeleton()
+            }
             is RecordsUiState.Ready -> {
-                CategoryCard(Icons.Outlined.CalendarMonth, stringResource(R.string.records_bookings), payload?.bookings?.size ?: 0, true) { onOpen("bookings") }
+                val p = state.payload
+                Spacer(Modifier.height(16.dp))
+                TierHeader(stringResource(R.string.records_tier_sanocare), stringResource(R.string.records_tier_sanocare_sub))
                 Spacer(Modifier.height(10.dp))
-                CategoryCard(Icons.Outlined.Description, stringResource(R.string.records_prescriptions), payload?.prescriptions?.size ?: 0, true) { onOpen("prescriptions") }
+                CategoryCard(Icons.Outlined.CalendarMonth, stringResource(R.string.records_bookings), p.bookings.size, true) { onOpen("bookings") }
                 Spacer(Modifier.height(10.dp))
-                CategoryCard(Icons.Outlined.Science, stringResource(R.string.records_reports), payload?.reports?.size ?: 0, true) { onOpen("reports") }
+                CategoryCard(Icons.Outlined.Description, stringResource(R.string.records_prescriptions), p.prescriptions.size, true) { onOpen("prescriptions") }
                 Spacer(Modifier.height(10.dp))
-                CategoryCard(Icons.Outlined.ReceiptLong, stringResource(R.string.records_invoices), payload?.invoices?.size ?: 0, true) { onOpen("invoices") }
+                CategoryCard(Icons.Outlined.Science, stringResource(R.string.records_reports), p.reports.size, true) { onOpen("reports") }
+                Spacer(Modifier.height(10.dp))
+                CategoryCard(Icons.Outlined.ReceiptLong, stringResource(R.string.records_invoices), p.invoices.size, true) { onOpen("invoices") }
+
+                Spacer(Modifier.height(22.dp))
+                TierHeader(stringResource(R.string.records_tier_tracked), null)
+                Spacer(Modifier.height(10.dp))
+                CategoryCard(Icons.Outlined.MonitorHeart, stringResource(R.string.records_vitals), p.vitals.size, true) { onOpen("vitals") }
+                Spacer(Modifier.height(10.dp))
+                CategoryCard(Icons.Outlined.Medication, stringResource(R.string.records_medications), p.medications.size, true) { onOpen("medications") }
+
+                Spacer(Modifier.height(22.dp))
+                TierHeader(stringResource(R.string.records_tier_yours), null)
+                Spacer(Modifier.height(10.dp))
+                CategoryCard(Icons.Outlined.MonitorHeart, stringResource(R.string.records_conditions), p.conditions.size, true) { onOpen("conditions") }
+                Spacer(Modifier.height(10.dp))
+                CategoryCard(Icons.Outlined.WarningAmber, stringResource(R.string.records_allergies), p.allergies.size, true) { onOpen("allergies") }
+                Spacer(Modifier.height(10.dp))
+                CategoryCard(Icons.Outlined.FolderOpen, stringResource(R.string.records_documents), p.documents.size, true) { onOpen("documents") }
             }
         }
-
-        Spacer(Modifier.height(22.dp))
-        TierHeader(stringResource(R.string.records_tier_tracked), null)
-        Spacer(Modifier.height(10.dp))
-        ComingSoonCard(Icons.Outlined.MonitorHeart, stringResource(R.string.records_vitals))
-        Spacer(Modifier.height(10.dp))
-        ComingSoonCard(Icons.Outlined.Medication, stringResource(R.string.records_medications))
-
-        Spacer(Modifier.height(22.dp))
-        TierHeader(stringResource(R.string.records_tier_yours), null)
-        Spacer(Modifier.height(10.dp))
-        ComingSoonCard(Icons.Outlined.MonitorHeart, stringResource(R.string.records_conditions))
-        Spacer(Modifier.height(10.dp))
-        ComingSoonCard(Icons.Outlined.WarningAmber, stringResource(R.string.records_allergies))
-        Spacer(Modifier.height(10.dp))
-        ComingSoonCard(Icons.Outlined.FolderOpen, stringResource(R.string.records_documents))
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -305,11 +316,12 @@ private fun InvoiceDetail(state: RecordsUiState, vm: RecordsViewModel, id: Strin
 // ── Scaffolding + state renderers ────────────────────────────────────────────
 
 @Composable
-private fun RecordsScaffold(
+internal fun RecordsScaffold(
     title: String,
     onBack: () -> Unit,
     state: RecordsUiState,
     onRetry: () -> Unit,
+    action: @Composable () -> Unit = {},
     content: @Composable (RecordsPayload) -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
@@ -323,6 +335,8 @@ private fun RecordsScaffold(
             )
             Spacer(Modifier.width(4.dp))
             Text(title, color = InkPrimary, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
+            Spacer(Modifier.weight(1f))
+            action()
         }
         when (state) {
             is RecordsUiState.Ready -> content(state.payload)
@@ -363,7 +377,7 @@ private fun HubSkeleton() {
 }
 
 @Composable
-private fun EmptyState(text: String) {
+internal fun EmptyState(text: String) {
     Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
         Text(text, color = InkMute, fontSize = 14.sp)
     }
@@ -386,7 +400,7 @@ private fun ErrorState(text: String, onRetry: () -> Unit) {
 // ── Rows + cards + pills ─────────────────────────────────────────────────────
 
 @Composable
-private fun ListRow(title: String, subtitle: String, trailing: @Composable () -> Unit = {}, onClick: () -> Unit) {
+internal fun ListRow(title: String, subtitle: String, trailing: @Composable () -> Unit = {}, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 16.dp, vertical = 14.dp),
@@ -466,7 +480,7 @@ private fun DetailRowContent(label: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun Pill(pill: StatusPill) {
+internal fun Pill(pill: StatusPill) {
     Box(Modifier.background(pill.bg, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
         Text(pill.label, color = pill.fg, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
     }
@@ -480,11 +494,11 @@ private fun NewPill() {
 }
 
 @Composable
-private fun ActionText(text: String) {
+internal fun ActionText(text: String) {
     Text(text, color = SanocareBlue, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
 }
 
 @Composable
-private fun Chevron() {
+internal fun Chevron() {
     Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = InkMute, modifier = Modifier.size(20.dp))
 }

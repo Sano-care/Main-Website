@@ -37,11 +37,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -51,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import `in`.sanocare.pulse.R
 import `in`.sanocare.pulse.data.auth.CachedCustomer
+import `in`.sanocare.pulse.data.records.SelectedMember
 import `in`.sanocare.pulse.theme.BorderHair
 import `in`.sanocare.pulse.theme.InkMute
 import `in`.sanocare.pulse.theme.InkPrimary
@@ -84,6 +87,16 @@ fun MainShell(
     var showMemberSheet by remember { mutableStateOf(false) }
     val firstName = customer.fullName?.trim()?.split(" ")?.firstOrNull()
 
+    // PB3 — member switcher state (shared MemberScopeStore).
+    val shellVm: ShellViewModel = hiltViewModel()
+    val selected by shellVm.selected.collectAsState()
+    val members by shellVm.members.collectAsState()
+    val selfLabel = firstName ?: stringResource(R.string.member_self)
+    val chipLabel = when (val s = selected) {
+        SelectedMember.Self -> selfLabel
+        is SelectedMember.Member -> s.name.trim().split(" ").firstOrNull() ?: s.name
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -105,7 +118,7 @@ fun MainShell(
                 .navigationBarsPadding(),
         ) {
             TopBar(
-                memberLabel = firstName ?: stringResource(R.string.member_self),
+                memberLabel = chipLabel,
                 onMenu = { scope.launch { drawerState.open() } },
                 onMember = { showMemberSheet = true },
             )
@@ -133,12 +146,18 @@ fun MainShell(
                     fontSize = 12.sp,
                 )
                 Spacer(Modifier.height(12.dp))
-                // PB1 surfaces the account holder only; family members join here in PB2.
                 MemberRow(
-                    label = firstName ?: stringResource(R.string.member_self),
-                    selected = true,
-                    onClick = { showMemberSheet = false },
+                    label = selfLabel,
+                    selected = selected is SelectedMember.Self,
+                    onClick = { shellVm.selectSelf(); showMemberSheet = false },
                 )
+                members.forEach { m ->
+                    MemberRow(
+                        label = m.name,
+                        selected = (selected as? SelectedMember.Member)?.id == m.id,
+                        onClick = { shellVm.selectMember(m); showMemberSheet = false },
+                    )
+                }
                 Spacer(Modifier.height(16.dp))
             }
         }
