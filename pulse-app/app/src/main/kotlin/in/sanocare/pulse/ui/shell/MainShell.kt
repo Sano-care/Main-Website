@@ -60,6 +60,7 @@ import `in`.sanocare.pulse.theme.SanocareBlue
 import `in`.sanocare.pulse.theme.SanocareBlueSoft
 import `in`.sanocare.pulse.ui.components.SanocareLockup
 import `in`.sanocare.pulse.ui.home.HomeScreen
+import `in`.sanocare.pulse.ui.records.RecordsScreen
 import kotlinx.coroutines.launch
 
 private enum class Dest(val titleRes: Int, val icon: ImageVector) {
@@ -110,7 +111,8 @@ fun MainShell(
             )
             Box(modifier = Modifier.fillMaxSize()) {
                 when (dest) {
-                    Dest.HOME -> HomeScreen(firstName = firstName, onTile = { /* PB2–PB4 destinations */ })
+                    Dest.HOME -> HomeScreen(firstName = firstName, onTile = { /* PB3–PB4 destinations */ })
+                    Dest.RECORDS -> RecordsScreen(onUnauthorized = onSignOut)
                     else -> ComingSoon(title = stringResource(dest.titleRes))
                 }
             }
