@@ -68,7 +68,7 @@ export const SHARED_CONTENT = {
     brandWordmarkHighlight: "",
     logoAlt: "Sanocare",
     brandDescription:
-      "Doctor-led primary healthcare for urban families. A GNM / B.Sc Nursing-qualified medic arrives in under 30 minutes to execute the visit; a dedicated MBBS doctor joins on live video to diagnose, prescribe, and classify risk per MoHFW Telemedicine Practice Guidelines 2020. Sanocare NOW (on-demand) + CareHub (in-society) + Pulse (intelligence).",
+      "Doctor-led primary healthcare for urban families. A GNM / B.Sc Nursing-qualified medic arrives in under 30 minutes to execute the visit; a dedicated MBBS doctor joins on live video to diagnose and classify risk per MoHFW Telemedicine Practice Guidelines 2020. Sanocare NOW (on-demand) + CareHub (in-society) + Pulse (intelligence).",
     trustBadges: [
       { icon: UserCheck, label: "GNM / B.Sc Nursing medics · MBBS doctors" },
       { icon: Shield, label: "DPDP 2023 compliant" },
