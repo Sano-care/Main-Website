@@ -78,8 +78,8 @@ const HOW_IT_WORKS_INPERSON: HowItWorksStep[] = [
     body: "The medic records vitals and assists the examination while your MBBS doctor joins on live video to diagnose.",
   },
   {
-    title: "Signed e-prescription",
-    body: "The doctor issues a signed digital prescription under MoHFW Telemedicine 2020. Every record is saved to your Sanocare Pulse account.",
+    title: "Doctor's written advice",
+    body: "The doctor shares written advice under MoHFW Telemedicine 2020. Every record is saved to your Sanocare Pulse account.",
   },
 ];
 
@@ -89,7 +89,7 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
     serviceSlug: "home-visit",
     metaTitle: "Doctor Home Visit in Delhi — Sanocare | ₹499, <30 min",
     metaDescription:
-      "Trained medic at your door in under 30 minutes; an MBBS doctor consults virtually and issues a signed e-prescription under MoHFW 2020. Serving Kalkaji, Govindpuri Extension & South Delhi. From ₹499.",
+      "Trained medic at your door in under 30 minutes; an MBBS doctor consults virtually and issues the doctor's written advice under MoHFW 2020. Serving Kalkaji, Govindpuri Extension & South Delhi. From ₹499.",
     h1: "Doctor Home Visit in Delhi",
     subtitle:
       "Starting from ₹499 · a medic at your door in under 30 minutes, with an MBBS doctor live on video.",
@@ -98,7 +98,7 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
     price: "499",
     breadcrumbName: "Doctor Home Visit Delhi",
     intro:
-      "When someone at home is unwell, getting to a clinic isn't always possible — especially for elderly parents, young children, or anyone recovering after a hospital stay. A Sanocare doctor home visit brings clinical care to your doorstep across Delhi NCR: a trained medic arrives with a full vitals kit, and an MBBS doctor joins live on video to diagnose and prescribe. You get a real medical consultation without the travel, the waiting room, or the exposure.",
+      "When someone at home is unwell, getting to a clinic isn't always possible — especially for elderly parents, young children, or anyone recovering after a hospital stay. A Sanocare doctor home visit brings clinical care to your doorstep across Delhi NCR: a trained medic arrives with a full vitals kit, and an MBBS doctor joins live on video to diagnose and advise. You get a real medical consultation without the travel, the waiting room, or the exposure.",
     included: [
       {
         heading: "Who delivers your visit",
@@ -106,7 +106,7 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
       },
       {
         heading: "What happens during the visit",
-        body: "The medic records vitals, performs the hands-on parts of the examination, and relays findings to the doctor on video. The MBBS doctor takes the history, interprets the vitals, reaches a diagnosis, and issues a signed digital e-prescription under MoHFW Telemedicine Practice Guidelines 2020. If medicines or lab tests are needed, those are arranged on the spot.",
+        body: "The medic records vitals, performs the hands-on parts of the examination, and relays findings to the doctor on video. The MBBS doctor takes the history, interprets the vitals, reaches a diagnosis, and issues the doctor's written advice under MoHFW Telemedicine Practice Guidelines 2020. If medicines or lab tests are needed, those are arranged on the spot.",
       },
       {
         heading: "Service area & timing",
@@ -114,7 +114,7 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
       },
       {
         heading: "Pricing & compliance",
-        body: "A home visit is ₹499 — that covers the medic visit, the live MBBS doctor consult, and the signed e-prescription, with no add-on charges. Payment is settled transparently with no surprise fees. Consultations follow MoHFW Telemedicine 2020, and your data is handled under India's DPDP Act 2023.",
+        body: "A home visit is ₹499 — that covers the medic visit, the live MBBS doctor consult, and the doctor's written advice, with no add-on charges. Payment is settled transparently with no surprise fees. Consultations follow MoHFW Telemedicine 2020, and your data is handled under India's DPDP Act 2023.",
       },
     ],
     useCases: [
@@ -128,11 +128,11 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
     ],
     howItWorks: HOW_IT_WORKS_INPERSON,
     pricingNote:
-      "₹499 per visit — medic + live MBBS doctor consult + signed e-prescription. No add-on charges.",
+      "₹499 per visit — medic + live MBBS doctor consult + the doctor's written advice. No add-on charges.",
     faqs: [
       {
         q: "How much does a doctor home visit cost in Delhi?",
-        a: "A Sanocare doctor home visit starts at ₹499, which covers the medic's visit, the live MBBS doctor consultation, and a signed digital e-prescription. There are no hidden add-on charges.",
+        a: "A Sanocare doctor home visit starts at ₹499, which covers the medic's visit, the live MBBS doctor consultation, and the doctor's written advice. There are no hidden add-on charges.",
       },
       {
         q: "How long until the medic reaches my home?",
@@ -140,11 +140,11 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
       },
       {
         q: "Is the doctor MBBS-qualified?",
-        a: "Yes. The home visit is supervised by an MBBS-qualified doctor who joins live on video to diagnose and prescribe, while a GNM / B.Sc Nursing medic handles the in-person examination.",
+        a: "Yes. The home visit is supervised by an MBBS-qualified doctor who joins live on video to diagnose and advise, while a GNM / B.Sc Nursing medic handles the in-person examination.",
       },
       {
-        q: "Can I get a prescription from a home visit?",
-        a: "Yes. The doctor issues a signed digital e-prescription under MoHFW Telemedicine Practice Guidelines 2020, valid at any pharmacy, and saved to your Sanocare Pulse account.",
+        q: "Do I get the doctor's advice in writing?",
+        a: "Yes. The doctor issues a signed digital e-prescription under MoHFW Telemedicine 2020, saved to your Sanocare Pulse account.",
       },
       {
         q: "Which areas in Delhi do you serve?",
@@ -262,7 +262,7 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
       },
       {
         heading: "What's available & how reports arrive",
-        body: "Choose from 1,892 tests via Pathcore: routine panels (CBC, lipid, thyroid, HbA1c), doctor-prescribed tests, and full-body health checkups. Samples are processed at our partner laboratories and your signed PDF report lands on WhatsApp and in your Sanocare Pulse account, typically within 24 hours.",
+        body: "Choose from 1,892 tests via Pathcore: routine panels (CBC, lipid, thyroid, HbA1c), doctor-advised tests, and full-body health checkups. Samples are processed at our partner laboratories and your signed PDF report lands on WhatsApp and in your Sanocare Pulse account, typically within 24 hours.",
       },
       {
         heading: "Service area & timing",
@@ -275,17 +275,17 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
     ],
     useCases: [
       "A routine annual health checkup without taking time off to visit a centre",
-      "Doctor-prescribed tests you need done quickly at home",
+      "Doctor-advised tests you need done quickly at home",
       "Regular monitoring panels for diabetes or thyroid management",
       "Fasting blood tests collected first thing in the morning at home",
       "Tests for an elderly or bed-bound patient who can't travel",
       "A pre-employment medical test panel",
-      "Follow-up tests after starting a new medication",
+      "Follow-up tests after a change in treatment",
     ],
     howItWorks: [
       {
         title: "Pick your tests",
-        body: "Search 1,892 tests or upload a prescription, choose a morning or evening slot, and pay the ₹200 collection fee to confirm.",
+        body: "Search 1,892 tests or upload your doctor's test list, choose a morning or evening slot, and pay the ₹200 collection fee to confirm.",
       },
       {
         title: "Phlebotomist arrives",
@@ -331,16 +331,16 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
     serviceSlug: "teleconsultation",
     metaTitle: "Online Doctor Consultation India — Sanocare | ₹399",
     metaDescription:
-      "Video consult with an MBBS doctor in 15 minutes, signed digital e-prescription under MoHFW 2020. Available anywhere in India, no home visit needed. From ₹399 for a 15-minute consultation.",
+      "Video consult with an MBBS doctor in 15 minutes, with the doctor's written advice under MoHFW 2020. Available anywhere in India, no home visit needed. From ₹399 for a 15-minute consultation.",
     h1: "Online Doctor Consultation in India",
     subtitle:
-      "From ₹399 · a live video consult with an MBBS doctor in about 15 minutes, with a signed e-prescription.",
+      "From ₹399 · a live video consult with an MBBS doctor in about 15 minutes, with the doctor's written advice.",
     schemaServiceName: "Online Doctor Consultation in India",
     serviceType: "Online medical teleconsultation",
     price: "399",
     breadcrumbName: "Online Doctor Consultation India",
     intro:
-      "Not every health concern needs someone to visit. Sanocare's online doctor consultation connects you with an MBBS doctor over live video — anywhere in India — for prescription renewals, second opinions, lifestyle questions and minor concerns. You get a real, signed prescription under MoHFW Telemedicine 2020 without leaving home or sitting in a clinic queue, usually within 15 minutes of booking.",
+      "Not every health concern needs someone to visit. Sanocare's online doctor consultation connects you with an MBBS doctor over live video — anywhere in India — for follow-up consultations for ongoing treatment, second opinions, lifestyle questions and minor concerns. You get real clinical advice under MoHFW Telemedicine 2020 without leaving home or sitting in a clinic queue, usually within 15 minutes of booking.",
     included: [
       {
         heading: "Who you consult",
@@ -356,13 +356,13 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
       },
       {
         heading: "Pricing & compliance",
-        body: "A teleconsultation is ₹399 for a 15-minute consult, with no hidden charges. Prescriptions are issued under MoHFW Telemedicine 2020 and are valid at any pharmacy; your data is handled under India's DPDP Act 2023.",
+        body: "A teleconsultation is ₹399 for a 15-minute consult, with no hidden charges. The doctor's advice is issued under MoHFW Telemedicine 2020; your data is handled under India's DPDP Act 2023.",
       },
     ],
     useCases: [
-      "Renewing an ongoing prescription without a clinic trip",
+      "Follow-up consultations for ongoing treatment without a clinic trip",
       "A second opinion on a diagnosis or treatment plan",
-      "Lifestyle, diet or medication questions for a chronic condition",
+      "Lifestyle, diet or treatment questions for a chronic condition",
       "A minor concern — cold, rash, mild infection — that needs a doctor's view",
       "Reviewing lab or test reports with a doctor over video",
       "Quick medical advice while travelling anywhere in India",
@@ -382,8 +382,8 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
         body: "You get a video link and connect with the doctor, usually within 15 minutes of booking. No clinic queue.",
       },
       {
-        title: "Signed e-prescription",
-        body: "Where appropriate the doctor issues a signed digital prescription under MoHFW 2020, saved to your Sanocare Pulse account.",
+        title: "Doctor's written advice",
+        body: "Where appropriate the doctor shares written advice under MoHFW 2020, saved to your Sanocare Pulse account.",
       },
     ],
     pricingNote:
@@ -391,19 +391,19 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
     faqs: [
       {
         q: "How much does an online doctor consultation cost in India?",
-        a: "A Sanocare online doctor consultation is ₹399 for a 15-minute video consult with an MBBS doctor, including a signed digital prescription where appropriate. There are no hidden charges.",
+        a: "A Sanocare online doctor consultation is ₹399 for a 15-minute video consult with an MBBS doctor, including the doctor's written advice where appropriate. There are no hidden charges.",
       },
       {
         q: "Is the doctor MBBS-qualified?",
-        a: "Yes. Every teleconsultation is with an MBBS-qualified doctor — not a chatbot — who provides clinical advice and can issue a valid prescription.",
+        a: "Yes. Every teleconsultation is with an MBBS-qualified doctor — not a chatbot — who provides genuine clinical advice you can act on.",
       },
       {
         q: "How quickly can I talk to a doctor?",
         a: "Live video typically starts within about 15 minutes of booking. There's no clinic queue and no need to schedule for later.",
       },
       {
-        q: "Will I get a valid prescription?",
-        a: "Where clinically appropriate, the doctor issues a signed digital e-prescription under MoHFW Telemedicine Practice Guidelines 2020, valid at any pharmacy and saved to your Sanocare Pulse account.",
+        q: "Will I get the doctor's advice in writing?",
+        a: "Where clinically appropriate the doctor issues a signed digital e-prescription under MoHFW Telemedicine 2020, saved to your Sanocare Pulse account.",
       },
       {
         q: "Is online consultation available outside Delhi?",

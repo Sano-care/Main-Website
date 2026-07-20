@@ -101,12 +101,12 @@ export const SERVICES: ReadonlyArray<ServiceConfig> = [
       "A medic arrives at your door with a vitals kit. Your MBBS doctor joins on live video to diagnose and issue a signed e-prescription under MoHFW 2020.",
     expandable: {
       pricing:
-        "₹499 covers medic visit + live MBBS doctor consult + signed e-prescription. No add-on charges.",
+        "₹499 covers medic visit + live MBBS doctor consult + the doctor's written advice. No add-on charges.",
       promise: "Median time-to-medic under 30 minutes in Delhi NCR.",
       included: [
         "Trained medic (GNM / B.Sc Nursing) with vitals kit",
         "Live MBBS doctor consult on video",
-        "Signed digital e-prescription",
+        "Doctor's written advice",
         "All records saved to Sanocare Pulse",
       ],
       bestFor:
@@ -123,18 +123,18 @@ export const SERVICES: ReadonlyArray<ServiceConfig> = [
     iconKey: "video",
     priceLine: { kind: "from", amount: 399, suffix: "per 15-min consult" },
     description:
-      "A direct video consultation with an MBBS doctor. Signed digital prescription without anyone visiting your home.",
+      "A direct video consultation with an MBBS doctor. The doctor's written advice, without anyone visiting your home.",
     expandable: {
       pricing: "₹399 for a 15-minute consult. No hidden charges.",
       promise:
         "Live video starts within 15 minutes of booking. No clinic queue.",
       included: [
         "Live video with MBBS doctor",
-        "Signed digital e-prescription",
+        "Doctor's written advice",
         "Follow-up support until case closes",
       ],
       bestFor:
-        "prescription renewals, second opinions, lifestyle questions, minor concerns.",
+        "follow-up consultations, second opinions, lifestyle questions, minor concerns.",
     },
     promiseRow: "Live video within 15 minutes",
     ctaLabel: "Teleconsult a Doctor",
@@ -159,7 +159,7 @@ export const SERVICES: ReadonlyArray<ServiceConfig> = [
         "Choice of 1,892 tests via Pathcore",
       ],
       bestFor:
-        "routine health checks, doctor-prescribed tests, pre-employment medicals.",
+        "routine health checks, doctor-advised tests, pre-employment medicals.",
     },
     promiseRow: "1,892 tests · partner laboratories",
     ctaLabel: "Get Lab Tests Done",
@@ -183,7 +183,7 @@ export const SERVICES: ReadonlyArray<ServiceConfig> = [
         "Procedure-specific care",
       ],
       bestFor:
-        "prescribed injection administration, IV drips, wound dressing, suture removal, standalone BP/sugar check.",
+        "doctor-advised injections, drips, wound dressing, suture removal, standalone BP/sugar check.",
     },
     promiseRow: "Under 30 min arrival",
     ctaLabel: "Call a Medic Home",

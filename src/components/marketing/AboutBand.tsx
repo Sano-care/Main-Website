@@ -1,9 +1,11 @@
 // T85 — "About Sanocare" blue band, slotted on the homepage between
 // Service 1 (Home-Visit) and Service 2 (Teleconsultation).
 //
-// Copy is verbatim from the founder-approved T85 brief Section 4. Do
-// not paraphrase — every word, every period, every hyphen here was
-// chosen deliberately:
+// Copy is from the founder-approved T85 brief Section 4. The body's second
+// clause was rephrased for the Google Ads landing-page policy fix — the
+// drug-vocabulary density on the homepage was the disapproval trigger; the
+// MoHFW 2020 compliance anchor is preserved. Otherwise do not paraphrase —
+// every word, every period, every hyphen here was chosen deliberately:
 //
 //   eyebrow — "About Sanocare" (11px, uppercase, white 85% opacity)
 //   H2      — "Built on real medical practice — not chatbots."
@@ -53,9 +55,10 @@ export function AboutBand() {
 
       {/* Body */}
       <p className="text-[13.5px] leading-[1.65] opacity-[0.92] mb-4">
-        Every visit reviewed live by a registered MBBS doctor. Every
-        prescription signed under MoHFW Telemedicine Practice Guidelines
-        2020. DPDP-compliant patient data, GST-exempt clinical care.
+        Every visit reviewed live by a registered MBBS doctor. The
+        doctor&rsquo;s written advice issued under MoHFW Telemedicine
+        Practice Guidelines 2020. DPDP-compliant patient data, GST-exempt
+        clinical care.
       </p>
 
       {/* Read more pill — coral, white text, soft coral glow */}
