@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
+import { getRazorpayClient } from "@/lib/razorpay";
+import { ensureBookingForCapturedOrder } from "@/lib/booking/paymentSafetyNet";
 
 export const runtime = "nodejs";
 
@@ -102,15 +104,45 @@ export async function POST(req: NextRequest) {
           .eq("report_razorpay_order_id", orderId)
           .neq("report_payment_status", "CAPTURED"); // idempotent
       } else {
-        await supabase
-          .from("bookings")
-          .update({
-            razorpay_payment_id: paymentId,
-            payment_status: "CAPTURED",
-            payment_captured_at: new Date().toISOString(),
-          })
-          .eq("razorpay_order_id", orderId)
-          .neq("payment_status", "CAPTURED");
+        // Booking-fee capture — the revenue safety net. A booking is normally
+        // written by /api/razorpay/verify when the browser returns after
+        // checkout. If that never happened (tab close / network drop) the
+        // money is captured with NO booking row — the leak this endpoint
+        // exists to close. ensureBookingForCapturedOrder is idempotent:
+        //   - booking exists          → mark CAPTURED (no-op if already)
+        //   - no booking (orphan)     → create a reconciliation stub + alert ops
+        // The partial unique index on bookings(razorpay_order_id) collapses any
+        // webhook-vs-verify race to a single row (23505 swallowed as success).
+        try {
+          const result = await ensureBookingForCapturedOrder(
+            {
+              orderId,
+              paymentId,
+              amountPaise: Number(payment?.amount) || 0,
+              contact: (payment?.contact as string | undefined) ?? null,
+              email: (payment?.email as string | undefined) ?? null,
+            },
+            {
+              supabase,
+              fetchOrderNotes: async (id) => {
+                const order = await getRazorpayClient().orders.fetch(id);
+                return (order?.notes || {}) as Record<string, string>;
+              },
+            },
+          );
+          console.info("[webhook payment.captured] safety-net", {
+            orderId,
+            action: result.action,
+          });
+        } catch (e) {
+          // Never let a DB/Razorpay hiccup turn into a Razorpay retry storm —
+          // log loudly and ACK. The pg_cron monitor is the second backstop.
+          console.error(
+            "[webhook payment.captured] safety-net failed (order captured, booking NOT ensured)",
+            orderId,
+            e,
+          );
+        }
       }
 
       return NextResponse.json({ ok: true });
