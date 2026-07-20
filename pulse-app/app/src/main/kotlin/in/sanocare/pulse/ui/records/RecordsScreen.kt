@@ -176,7 +176,7 @@ private fun RecordsHub(state: RecordsUiState, onRetry: () -> Unit, onOpen: (Stri
 // ── Lists ───────────────────────────────────────────────────────────────────
 
 @Composable
-private fun BookingsList(state: RecordsUiState, onRetry: () -> Unit, onBack: () -> Unit, onDetail: (String) -> Unit) {
+internal fun BookingsList(state: RecordsUiState, onRetry: () -> Unit, onBack: (() -> Unit)?, onDetail: (String) -> Unit) {
     RecordsScaffold(stringResource(R.string.records_bookings), onBack, state, onRetry) { p ->
         if (p.bookings.isEmpty()) EmptyState(stringResource(R.string.bookings_empty))
         else LazyColumn(Modifier.fillMaxSize()) {
@@ -194,7 +194,7 @@ private fun BookingsList(state: RecordsUiState, onRetry: () -> Unit, onBack: () 
 }
 
 @Composable
-private fun BookingDetail(state: RecordsUiState, id: String, onBack: () -> Unit) {
+internal fun BookingDetail(state: RecordsUiState, id: String, onBack: () -> Unit) {
     RecordsScaffold(stringResource(R.string.records_bookings), onBack, state, {}) { p ->
         val b = p.bookings.firstOrNull { it.id == id } ?: return@RecordsScaffold EmptyState("Not found.")
         val amount = p.invoices.firstOrNull { it.bookingId == b.id }?.let { formatInr(it.amountPaise) } ?: "—"
@@ -318,7 +318,7 @@ private fun InvoiceDetail(state: RecordsUiState, vm: RecordsViewModel, id: Strin
 @Composable
 internal fun RecordsScaffold(
     title: String,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     state: RecordsUiState,
     onRetry: () -> Unit,
     action: @Composable () -> Unit = {},
@@ -329,11 +329,15 @@ internal fun RecordsScaffold(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp),
         ) {
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = InkSecondary,
-                modifier = Modifier.size(40.dp).clickable { onBack() }.padding(8.dp),
-            )
-            Spacer(Modifier.width(4.dp))
+            if (onBack != null) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = InkSecondary,
+                    modifier = Modifier.size(40.dp).clickable { onBack() }.padding(8.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+            } else {
+                Spacer(Modifier.width(8.dp))
+            }
             Text(title, color = InkPrimary, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
             Spacer(Modifier.weight(1f))
             action()
