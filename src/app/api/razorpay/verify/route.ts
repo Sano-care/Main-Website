@@ -224,11 +224,38 @@ export async function POST(req: NextRequest) {
       otp_verified_at: new Date(verified.verifiedAt * 1000).toISOString(),
     };
 
-    const { data, error } = await supabase
+    // Idempotent insert. The partial unique index on
+    // bookings(razorpay_order_id) (migration 20260720120000) guarantees one
+    // booking per order even if the /api/razorpay/webhook safety net already
+    // created a reconciliation stub for this capture, or the client
+    // double-submits. On a unique violation we UPGRADE the existing row with
+    // the real patient details captured here, and mark the booking as NOT
+    // newly inserted so the ops alert / patient confirmation / marketing link
+    // don't double-fire (the webhook already alerted ops for a stub).
+    const inserted = await supabase
       .from("bookings")
       .insert(insertPayload)
       .select("id, booking_code")
       .single();
+    let data = inserted.data;
+    let error = inserted.error;
+    let wasNewlyInserted = !error;
+
+    if (error && (error as { code?: string }).code === "23505") {
+      const upgraded = await supabase
+        .from("bookings")
+        .update(insertPayload)
+        .eq("razorpay_order_id", razorpay_order_id)
+        .select("id, booking_code")
+        .single();
+      data = upgraded.data;
+      error = upgraded.error;
+      wasNewlyInserted = false;
+      console.info(
+        "[razorpay/verify] order already had a booking — upgraded in place",
+        razorpay_order_id,
+      );
+    }
 
     if (error) {
       console.error("[razorpay/verify] supabase insert failed:", error);
@@ -248,7 +275,7 @@ export async function POST(req: NextRequest) {
     // `is('full_name', null)` filter is the gate). Patient can later
     // update via Pulse profile editing (T70/T71). Soft-fail discipline
     // matches the lead-alert pattern — logged + swallowed.
-    if (insertCustomerId) {
+    if (wasNewlyInserted && insertCustomerId) {
       try {
         const { error: nameWriteErr } = await supabase
           .from("customers")
@@ -309,6 +336,11 @@ export async function POST(req: NextRequest) {
     // other and parallelizes the two BSP round-trips so the patient
     // template adds no extra sequential latency on top of the alert.
     const bookingRef = data?.booking_code ?? data?.id ?? "?";
+    // Only fire on a genuinely new booking. On the idempotent-upgrade path
+    // (a webhook reconciliation stub, or a double-submit) the webhook already
+    // alerted ops for this order, so re-sending here would double-notify both
+    // the patient and ops.
+    if (wasNewlyInserted) {
     try {
       await Promise.allSettled([
         sendAarogyaLeadAlert({
@@ -346,17 +378,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Marketing closed-loop — link this booking back to the marketing lead that
-    // drove it (matched by phone): flip the lead to `booked` + roll up its
-    // lifetime_value_paise. Soft-fail; the booking row stays the source of truth.
-    if (data?.id) {
-      await linkBookingToMarketingLead({
-        phone: insertPayload.phone,
-        bookingId: data.id as string,
-        // booking.amount is rupees here (no final_amount_paise on this path) → paise.
-        amountPaise:
-          typeof booking.amount === "number" ? Math.round(booking.amount * 100) : null,
-      });
+      // Marketing closed-loop — link this booking back to the marketing lead
+      // that drove it (matched by phone): flip the lead to `booked` + roll up
+      // its lifetime_value_paise. Soft-fail; the booking row stays the source
+      // of truth. Inside the `wasNewlyInserted` guard so the LTV roll-up can
+      // never double-count on the idempotent-upgrade path.
+      if (data?.id) {
+        await linkBookingToMarketingLead({
+          phone: insertPayload.phone,
+          bookingId: data.id as string,
+          // booking.amount is rupees here (no final_amount_paise on this path) → paise.
+          amountPaise:
+            typeof booking.amount === "number" ? Math.round(booking.amount * 100) : null,
+        });
+      }
     }
 
     return NextResponse.json({

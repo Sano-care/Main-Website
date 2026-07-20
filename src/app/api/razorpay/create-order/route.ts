@@ -214,6 +214,9 @@ export async function POST(req: NextRequest) {
     // string-only map up front so TypeScript narrows correctly.
     const orderNotes: Record<string, string> = labBreakdown
       ? {
+          // t85_slug lets the /api/razorpay/webhook safety net recover the
+          // service for a reconciliation booking if verify never runs.
+          t85_slug: "lab-tests",
           flow: "t85_lab_prepaid",
           payment_mode: body.paymentMode === "partial" ? "partial" : "full",
           source: "sanocare.in/t85-lab-basket",
