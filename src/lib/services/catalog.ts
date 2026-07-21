@@ -98,7 +98,7 @@ export const SERVICES: ReadonlyArray<ServiceConfig> = [
     iconKey: "home",
     priceLine: { kind: "from", amount: 499, suffix: "per visit" },
     description:
-      "A medic arrives at your door with a vitals kit. Your MBBS doctor joins on live video to diagnose and issue a signed e-prescription under MoHFW 2020.",
+      "A medic arrives at your door with a vitals kit. Your MBBS doctor joins on live video to diagnose and share the doctor's written advice under MoHFW 2020.",
     expandable: {
       pricing:
         "₹499 covers medic visit + live MBBS doctor consult + the doctor's written advice. No add-on charges.",

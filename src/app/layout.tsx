@@ -43,7 +43,7 @@ export const metadata: Metadata = {
     template: "%s | Sanocare",
   },
   description:
-    "GNM / B.Sc Nursing-qualified medics arrive in under 30 minutes, supervised in real time by an MBBS doctor on live video. Signed e-prescription under MoHFW 2020. Starting from ₹499. Now serving Kalkaji & Govindpuri Extension.",
+    "GNM / B.Sc Nursing-qualified medics arrive in under 30 minutes, supervised in real time by an MBBS doctor on live video. Doctor's written advice under MoHFW 2020. Starting from ₹499. Now serving Kalkaji & Govindpuri Extension.",
   keywords: [
     "nurse home visit Delhi",
     "doctor home visit",
@@ -125,7 +125,7 @@ const structuredData = {
   telephone: PHONE_TEL,
   email: SUPPORT_EMAIL,
   description:
-    "Home healthcare in South Delhi. A GNM / B.Sc Nursing-qualified medic arrives at your home, supervised in real time by an MBBS doctor on live video, who issues a signed e-prescription per MoHFW Telemedicine Practice Guidelines 2020.",
+    "Home healthcare in South Delhi. A GNM / B.Sc Nursing-qualified medic arrives at your home, supervised in real time by an MBBS doctor on live video, who shares the doctor's written advice per MoHFW Telemedicine Practice Guidelines 2020.",
   // Visible homepage pricing spans ₹199 (home nursing) to full lab
   // checkups (~₹4,500). Explicit range > the opaque "₹₹" band.
   priceRange: "₹199 - ₹4500",
