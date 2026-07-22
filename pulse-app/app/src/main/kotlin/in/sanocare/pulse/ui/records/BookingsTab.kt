@@ -13,7 +13,7 @@ import androidx.navigation.compose.rememberNavController
 // (shared RecordsViewModel, member-scoped). Tab root shows no back arrow.
 
 @Composable
-fun BookingsTab(onUnauthorized: () -> Unit) {
+fun BookingsTab(onUnauthorized: () -> Unit, onStartBooking: () -> Unit) {
     val vm: RecordsViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
     val nav = rememberNavController()
@@ -22,7 +22,7 @@ fun BookingsTab(onUnauthorized: () -> Unit) {
 
     NavHost(navController = nav, startDestination = "list") {
         composable("list") {
-            BookingsList(state, vm::reload, onBack = null) { nav.navigate("detail/$it") }
+            BookingsList(state, vm::reload, onBack = null, onStartBooking = onStartBooking) { nav.navigate("detail/$it") }
         }
         composable("detail/{id}") { entry ->
             BookingDetail(state, entry.arguments?.getString("id").orEmpty()) { nav.popBackStack() }

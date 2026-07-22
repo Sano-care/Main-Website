@@ -9,10 +9,12 @@ import retrofit2.http.POST
 import retrofit2.http.Query
 
 // v2 — extra reads for the Home "care at a glance" section + the Profile/Family
-// screens. Every route is an EXISTING bearer endpoint (medications/schedule,
-// vitals/trends, profile/email, profile/health-notes, family-members). No new
-// server routes. (Identity for Profile is read from the cached login session, not
-// /api/pulse/account — that GET is gated by the web OTP cookie, not the bearer.)
+// screens. Mostly EXISTING bearer endpoints (medications/schedule, vitals/trends,
+// profile/email, profile/health-notes, family-members). v2.1 adds ONE small
+// additive bearer GET — /api/pulse/profile — so the Profile tab can read back the
+// saved email + health notes (the POSTs were write-only); customer-scoped, no
+// migration. (Name/phone for Profile still come from the cached login session,
+// not /api/pulse/account — that GET is gated by the web OTP cookie, not bearer.)
 
 interface PulseExtraApi {
 
@@ -24,6 +26,9 @@ interface PulseExtraApi {
         @Query("kind") kind: String,
         @Query("window") window: String = "30d",
     ): Response<TrendsResponse>
+
+    @GET("api/pulse/profile")
+    suspend fun profile(): Response<ProfileResponse>
 
     @POST("api/pulse/profile/email")
     suspend fun setEmail(@Body req: EmailRequest): Response<Unit>
@@ -67,6 +72,13 @@ data class TrendSummaryDto(
     val min: Double? = null,
     val max: Double? = null,
     val average: Double? = null,
+)
+
+// v2.1 — read-back of the caller's own editable profile fields (GET /profile).
+@Serializable
+data class ProfileResponse(
+    val email: String? = null,
+    @SerialName("health_notes") val healthNotes: String? = null,
 )
 
 @Serializable

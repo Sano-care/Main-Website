@@ -125,7 +125,10 @@ fun MainShell(
                 Crossfade(targetState = tab, animationSpec = tween(200), label = "tab") { current ->
                     when (current) {
                         Tab.HOME -> HomeV2Screen(firstName = firstName)
-                        Tab.BOOKINGS -> BookingsTab(onUnauthorized = onSignOut)
+                        Tab.BOOKINGS -> BookingsTab(
+                            onUnauthorized = onSignOut,
+                            onStartBooking = { showFamily = false; tab = Tab.HOME },
+                        )
                         Tab.RECORDS -> RecordsScreen(onUnauthorized = onSignOut)
                         Tab.PROFILE -> ProfileScreen(
                             fullName = customer.fullName,

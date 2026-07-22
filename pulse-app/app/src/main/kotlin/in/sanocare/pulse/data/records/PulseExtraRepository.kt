@@ -5,14 +5,16 @@ import `in`.sanocare.pulse.data.network.DoseDto
 import `in`.sanocare.pulse.data.network.EmailRequest
 import `in`.sanocare.pulse.data.network.FamilyAddRequest
 import `in`.sanocare.pulse.data.network.HealthNotesRequest
+import `in`.sanocare.pulse.data.network.ProfileResponse
 import `in`.sanocare.pulse.data.network.PulseExtraApi
 import retrofit2.Response
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// v2 — glance reads (meds-due, BP trend) + Profile/Family writes. All existing
-// bearer endpoints; no new routes. (Identity for Profile comes from the cached
-// login session, not a read call — /api/pulse/account is web-cookie-gated.)
+// v2 — glance reads (meds-due, BP trend) + Profile/Family writes. v2.1 adds the
+// profile() read-back (GET /api/pulse/profile) so Profile can DISPLAY the saved
+// email + health notes. (Name/phone still come from the cached login session —
+// /api/pulse/account is web-cookie-gated.)
 
 @Singleton
 class PulseExtraRepository @Inject constructor(
@@ -32,6 +34,13 @@ class PulseExtraRepository @Inject constructor(
         if (res.code() == 401) authStore.clear()
         res.body()?.series?.mapNotNull { it.valueNumeric } ?: emptyList()
     }.getOrElse { emptyList() }
+
+    /** Read-back of the caller's own email + health notes for the Profile tab. */
+    suspend fun profile(): ProfileResponse? = runCatching {
+        val res = api.profile()
+        if (res.code() == 401) authStore.clear()
+        if (res.isSuccessful) res.body() else null
+    }.getOrElse { null }
 
     suspend fun setEmail(email: String): WriteResult =
         call { api.setEmail(EmailRequest(email.trim())) }
