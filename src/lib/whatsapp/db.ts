@@ -14,6 +14,7 @@ import {
   persistOutbound,
   sendHardenedTemplate,
   sendHardenedText,
+  type OutboundTelemetry,
 } from "@/lib/whatsapp/sender";
 import { isTemplateName, type TemplateName } from "@/lib/whatsapp/templates";
 import { AuditEvent, writeAudit } from "@/lib/whatsapp/safety/audit";
@@ -169,8 +170,9 @@ export async function dispatchTextMessage(args: {
   phone: string;
   body: string;
   safetyFlags?: Record<string, unknown>;
+  telemetry?: OutboundTelemetry;
 }): Promise<DispatchResult> {
-  const { conversationId, phone, body, safetyFlags } = args;
+  const { conversationId, phone, body, safetyFlags, telemetry } = args;
 
   // Fresh opt-out check immediately before sending — never trust a cached flag.
   const { data: convo, error: readErr } = await supabaseAdmin
@@ -197,7 +199,7 @@ export async function dispatchTextMessage(args: {
   // failures, the outbound message-row persist, and the differentiated audit
   // events. dispatchTextMessage keeps ownership only of the opt-out gate above
   // and the DispatchResult contract its callers depend on.
-  const result = await sendHardenedText({ conversationId, phone, body, safetyFlags });
+  const result = await sendHardenedText({ conversationId, phone, body, safetyFlags, telemetry });
 
   if (result.ok) {
     return { sent: true, providerMessageId: result.providerMessageId };

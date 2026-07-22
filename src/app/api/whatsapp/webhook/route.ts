@@ -18,13 +18,32 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhookSignature } from "@/lib/whatsapp/webhook-signature";
-import { processWebhook } from "@/lib/whatsapp/adapter";
+import { processWebhook, processWebhookDecoupled } from "@/lib/whatsapp/adapter";
+import { asyncProcessingEnabled } from "@/lib/whatsapp/turnQueue";
 import { AuditEvent, writeAudit } from "@/lib/whatsapp/safety/audit";
 import { WebhookEnvelopeSchema } from "@/types/whatsapp";
 import { log } from "@/lib/whatsapp/log";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/**
+ * Best-effort immediate kick of the turn drain, so a media turn (due now) —
+ * and any turn once its debounce elapses — doesn't wait for the 1-min drain
+ * cron. Fire-and-forget: the durable queue + pg_cron drain are the correctness
+ * guarantee, so a dropped/slow kick only costs latency, never a message.
+ */
+function kickTurnDrain(origin: string): void {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return;
+  void fetch(`${origin}/api/cron/aarogya-turn-drain`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-cron-secret": secret },
+    body: "{}",
+  }).catch(() => {
+    // Swallowed by design — the drain cron is the backstop.
+  });
+}
 
 // ---------------------------------------------------------------------------
 // GET — webhook verification handshake.
@@ -93,12 +112,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: true }, { status: 200 });
   }
 
-  // Process inline (see latency note above), then 200.
+  // AAROGYA_ASYNC_PROCESSING (default off) switches between:
+  //  - decoupled: only the fast must-not-lose prechecks run here (persist +
+  //    emergency + opt-out); the LLM/media turn is enqueued and processed by
+  //    the drain worker with retries. This is the fix for the silent-drop bug
+  //    (a timeout in composition can no longer eat a message).
+  //  - inline (legacy): the whole turn runs here, then 200.
+  // Either way we return 200 so Meta doesn't retry a body that already landed.
   try {
-    await processWebhook(result.data);
+    if (asyncProcessingEnabled()) {
+      await processWebhookDecoupled(result.data);
+      kickTurnDrain(req.nextUrl.origin);
+    } else {
+      await processWebhook(result.data);
+    }
   } catch (err) {
-    // Should not happen — processWebhook swallows per-message errors — but a
-    // 200 is still correct so Meta doesn't hammer us with retries.
+    // Should not happen — both paths swallow per-message errors — but a 200 is
+    // still correct so Meta doesn't hammer us with retries.
     log.error("webhook processing error", err);
   }
 

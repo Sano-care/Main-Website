@@ -43,12 +43,21 @@ export type HardenedSendResult =
       attemptsUsed: number;
     };
 
+/** Claude turn telemetry stamped on the outbound message row (columns from 035). */
+export interface OutboundTelemetry {
+  model?: string;
+  tokensIn?: number;
+  tokensOut?: number;
+}
+
 interface CommonOpts {
   /** Injectable clock (ms) for tests. */
   clock?: () => number;
   /** Injectable backoff knobs for tests (sleep/random/budget). */
   backoff?: Partial<BackoffOptions>;
   safetyFlags?: Record<string, unknown>;
+  /** Model + token counts for the composing turn, when this is an agent reply. */
+  telemetry?: OutboundTelemetry;
 }
 
 /** Normalize any thrown value into a classified WhatsAppSendError. */
@@ -75,6 +84,7 @@ export async function persistOutbound(args: {
   providerMessageId?: string;
   idempotencyKey: string;
   safetyFlags?: Record<string, unknown>;
+  telemetry?: OutboundTelemetry;
 }): Promise<void> {
   const { error } = await supabaseAdmin.from("messages").insert({
     conversation_id: args.conversationId,
@@ -84,6 +94,12 @@ export async function persistOutbound(args: {
     provider_message_id: args.providerMessageId ?? null,
     idempotency_key: args.idempotencyKey,
     safety_flags: args.safetyFlags ?? {},
+    // Telemetry columns (035). Populated only on agent replies; null otherwise
+    // (deterministic/template sends have no Claude turn). Makes drop-rate +
+    // latency measurable — every outbound row was NULL before this.
+    claude_model_used: args.telemetry?.model ?? null,
+    claude_tokens_in: args.telemetry?.tokensIn ?? null,
+    claude_tokens_out: args.telemetry?.tokensOut ?? null,
   });
   if (error) {
     // A unique-violation here means a concurrent sender already persisted the
@@ -216,6 +232,7 @@ export async function sendHardenedText(
         providerMessageId: wamid,
         idempotencyKey: key,
         safetyFlags: args.safetyFlags,
+        telemetry: args.telemetry,
       });
       await writeAudit({
         conversationId: args.conversationId,
