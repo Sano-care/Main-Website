@@ -27,17 +27,20 @@ import androidx.compose.material.icons.outlined.Notes
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -61,19 +64,40 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-// v2 — Profile screen. Fills the PB1 "coming soon" stub. Shows identity from the
-// locally cached login session (name + phone — the /api/pulse/account GET is gated
-// by the web OTP cookie, not the bearer, so it is not reachable from the app) plus
-// write-only editors for email & health notes (existing bearer POSTs — no read
-// endpoint exposes their current values yet, flagged), and the menu that absorbs
-// the retired drawer: Family members, Manage devices, Help, Sign out.
+// v2 — Profile screen. Fills the PB1 "coming soon" stub. Identity (name + phone)
+// comes from the locally cached login session (the /api/pulse/account GET is gated
+// by the web OTP cookie, not the bearer, so it is not reachable from the app).
+// v2.1 — email + health notes are now READ BACK via GET /api/pulse/profile and
+// shown / pre-filled in the editors (they were write-only, so a saved email
+// looked un-saved). Writes still reuse POST /profile/email + /profile/health-notes;
+// on save success we re-read so the display refreshes. The menu absorbs the
+// retired drawer: Family members, Manage devices, Help, Sign out.
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
     private val extra: PulseExtraRepository,
 ) : ViewModel() {
-    suspend fun setEmail(email: String): WriteResult = extra.setEmail(email)
-    suspend fun setHealthNotes(notes: String?): WriteResult = extra.setHealthNotes(notes)
+    private val _email = MutableStateFlow<String?>(null)
+    val email: StateFlow<String?> = _email.asStateFlow()
+    private val _healthNotes = MutableStateFlow<String?>(null)
+    val healthNotes: StateFlow<String?> = _healthNotes.asStateFlow()
+
+    init { load() }
+
+    fun load() {
+        viewModelScope.launch {
+            val p = extra.profile() ?: return@launch
+            _email.value = p.email
+            _healthNotes.value = p.healthNotes
+        }
+    }
+
+    // Write, then re-read so the displayed value reflects the canonical stored one.
+    suspend fun setEmail(email: String): WriteResult =
+        extra.setEmail(email).also { if (it is WriteResult.Ok) load() }
+
+    suspend fun setHealthNotes(notes: String?): WriteResult =
+        extra.setHealthNotes(notes).also { if (it is WriteResult.Ok) load() }
 }
 
 @Composable
@@ -85,10 +109,14 @@ fun ProfileScreen(
 ) {
     val vm: ProfileViewModel = hiltViewModel()
     val context = LocalContext.current
+    val email by vm.email.collectAsState()
+    val healthNotes by vm.healthNotes.collectAsState()
     var editEmail by remember { mutableStateOf(false) }
     var editNotes by remember { mutableStateOf(false) }
 
     val displayName = fullName?.ifBlank { null } ?: "Your profile"
+    val emailSubtitle = email?.takeIf { it.isNotBlank() } ?: "Add your email"
+    val notesSubtitle = healthNotes?.takeIf { it.isNotBlank() } ?: "Anything your care team should know"
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -110,8 +138,8 @@ fun ProfileScreen(
         }
 
         Spacer(Modifier.height(22.dp))
-        MenuRow(Icons.Outlined.MailOutline, "Email", "Add or update your email") { editEmail = true }
-        MenuRow(Icons.Outlined.Notes, "Health notes", "Anything your care team should know") { editNotes = true }
+        MenuRow(Icons.Outlined.MailOutline, "Email", emailSubtitle) { editEmail = true }
+        MenuRow(Icons.Outlined.Notes, "Health notes", notesSubtitle) { editNotes = true }
 
         Spacer(Modifier.height(8.dp))
         Box(Modifier.fillMaxWidth().height(1.dp).background(BorderHair))
@@ -126,8 +154,8 @@ fun ProfileScreen(
         Spacer(Modifier.height(24.dp))
     }
 
-    if (editEmail) EmailDialog(vm) { editEmail = false }
-    if (editNotes) HealthNotesDialog(vm) { editNotes = false }
+    if (editEmail) EmailDialog(vm, initial = email) { editEmail = false }
+    if (editNotes) HealthNotesDialog(vm, initial = healthNotes) { editNotes = false }
 }
 
 @Composable
@@ -142,16 +170,16 @@ private fun MenuRow(icon: ImageVector, title: String, subtitle: String?, onClick
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(title, color = InkPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-            if (subtitle != null) Text(subtitle, color = InkMute, fontSize = 12.sp)
+            if (subtitle != null) Text(subtitle, color = InkMute, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = InkMute, modifier = Modifier.size(20.dp))
     }
 }
 
 @Composable
-private fun EmailDialog(vm: ProfileViewModel, onClose: () -> Unit) {
+private fun EmailDialog(vm: ProfileViewModel, initial: String?, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
-    var email by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf(initial.orEmpty()) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     FormDialog(
@@ -172,9 +200,9 @@ private fun EmailDialog(vm: ProfileViewModel, onClose: () -> Unit) {
 }
 
 @Composable
-private fun HealthNotesDialog(vm: ProfileViewModel, onClose: () -> Unit) {
+private fun HealthNotesDialog(vm: ProfileViewModel, initial: String?, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
-    var notes by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf(initial.orEmpty()) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     FormDialog(

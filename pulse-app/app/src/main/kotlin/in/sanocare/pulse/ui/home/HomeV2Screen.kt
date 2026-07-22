@@ -70,11 +70,15 @@ import java.util.Calendar
 
 private data class Service(val title: String, val price: String, val icon: ImageVector, val gradient: List<Color>)
 
+// v2.1 — all four cards in the Sanocare blue family (calm + branded, not a
+// fintech rainbow). Tonal steps around the #2B81FF primary give quiet depth;
+// icons stay white monoline. Coral remains emergency-ribbon-only. Founder can
+// fine-tune the exact shades after.
 private val SERVICES = listOf(
     Service("Talk to a doctor", "from ₹199", Icons.Outlined.Videocam, listOf(Color(0xFF2B81FF), Color(0xFF1E63D6))),
-    Service("Get tested at home", "from ₹499", Icons.Outlined.Science, listOf(Color(0xFF12B39B), Color(0xFF0E9E88))),
-    Service("Care at Home", "from ₹299", Icons.Outlined.HealthAndSafety, listOf(Color(0xFF7C6BF0), Color(0xFF6455E0))),
-    Service("Book a medic", "from ₹199", Icons.Outlined.MedicalServices, listOf(Color(0xFF3E8BFF), Color(0xFF1E63D6))),
+    Service("Get tested at home", "from ₹499", Icons.Outlined.Science, listOf(Color(0xFF4E97FF), Color(0xFF2B81FF))),
+    Service("Care at Home", "from ₹299", Icons.Outlined.HealthAndSafety, listOf(Color(0xFF1E63D6), Color(0xFF1647A1))),
+    Service("Book a medic", "from ₹199", Icons.Outlined.MedicalServices, listOf(Color(0xFF3E8BFF), Color(0xFF2B6FE0))),
 )
 
 @Composable
