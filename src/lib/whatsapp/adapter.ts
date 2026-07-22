@@ -111,6 +111,7 @@ import {
   mapServiceCategory,
 } from "@/lib/agent/bookings";
 import { log, maskPhone } from "@/lib/whatsapp/log";
+import { enqueueTurn, type AarogyaTurnRow } from "@/lib/whatsapp/turnQueue";
 import {
   extractInboundMessages,
   type NormalizedInbound,
@@ -357,9 +358,23 @@ async function executeLogComplaint(
 // ---------------------------------------------------------------------------
 // Main per-message handler.
 // ---------------------------------------------------------------------------
+/**
+ * How this message is being handled:
+ *  - 'inline'  — the whole turn runs in the request (default; today's path when
+ *                AAROGYA_ASYNC_PROCESSING is off).
+ *  - 'sync'    — the decoupled webhook: run only the fast, must-not-lose
+ *                prechecks (persist + emergency + opt-out), then enqueue the
+ *                LLM/media turn and return.
+ *  - 'worker'  — the drain/kick replaying an enqueued turn: skip persist + the
+ *                already-done prechecks; run the media/compose/send pipeline.
+ */
+export type TurnMode = "inline" | "sync" | "worker";
+
 export async function handleInboundMessage(
   inbound: NormalizedInbound,
+  opts: { mode?: TurnMode; existingMessageId?: string | null } = {},
 ): Promise<void> {
+  const mode = opts.mode ?? "inline";
   const { conversation } = await findOrCreateConversation(inbound.phone);
 
   // C2 — location pin: don't drop it. Synthesise a structured note so the agent
@@ -382,22 +397,33 @@ export async function handleInboundMessage(
   const optOut =
     inbound.type === "text" ? detectOptOut(text) : { matched: false as const };
 
-  const { inserted, messageId } = await recordInboundMessage({
-    conversationId: conversation.id,
-    inbound,
-    safetyFlags: {
-      emergency_detected: emergency.matched,
-      opt_out_detected: optOut.matched,
-      button_reply: isButtonReply,
-    },
-  });
-  if (!inserted) return; // idempotent: Meta retry
+  // Persist inbound (bumps last_user_msg_at — the reconciliation watchdog's
+  // signal). In 'worker' mode the sync pass already persisted, so we reuse the
+  // message id and never re-insert (a re-insert would be an idempotent no-op
+  // that then returns early and drops the whole turn).
+  let messageId: string | null;
+  if (mode === "worker") {
+    messageId = opts.existingMessageId ?? null;
+  } else {
+    const persisted = await recordInboundMessage({
+      conversationId: conversation.id,
+      inbound,
+      safetyFlags: {
+        emergency_detected: emergency.matched,
+        opt_out_detected: optOut.matched,
+        button_reply: isButtonReply,
+      },
+    });
+    if (!persisted.inserted) return; // idempotent: Meta retry
+    messageId = persisted.messageId;
+  }
 
   // Lead Engine P1 — a genuine inbound from an ENGAGED marketing lead flips it to
   // opted_in (+ v0 qualify → ops forward). No-op unless an engaged lead exists
   // for this phone, so it's safe on every inbound. Skip on STOP (handled below).
-  // Best-effort — must never break the patient turn.
-  if (!optOut.matched) {
+  // Best-effort — must never break the patient turn. Skipped in 'worker' mode
+  // (the sync pass already ran it).
+  if (mode !== "worker" && !optOut.matched) {
     handleLeadReplied(inbound.phone).catch((err) =>
       log.error("handleLeadReplied threw", maskPhone(inbound.phone), err),
     );
@@ -428,13 +454,15 @@ export async function handleInboundMessage(
       identity: auditIdentity,
     });
 
-  await audit(AuditEvent.MESSAGE_RECEIVED, {
-    type: inbound.type,
-    provider_message_id: inbound.providerMessageId,
-  });
+  if (mode !== "worker") {
+    await audit(AuditEvent.MESSAGE_RECEIVED, {
+      type: inbound.type,
+      provider_message_id: inbound.providerMessageId,
+    });
+  }
 
   // ---- "Mark as Attended" button reply (from the ops number) -------------
-  if (isButtonReply && inbound.contextId) {
+  if (mode !== "worker" && isButtonReply && inbound.contextId) {
     const escId = await markEscalationAttended(inbound.contextId, inbound.phone);
     log.info(
       escId ? "escalation marked attended" : "button reply matched no open escalation",
@@ -444,6 +472,71 @@ export async function handleInboundMessage(
       escalation_id: escId,
       context_id: inbound.contextId,
       matched: Boolean(escId),
+    });
+    return;
+  }
+
+  // ---- Pre-check a: EMERGENCY (deterministic, highest priority) ----------
+  // Runs BEFORE the media/compose pipeline so the synchronous pass ('sync'/
+  // 'inline') always handles a life-critical message itself and NEVER enqueues
+  // it (a queue hiccup must never delay a 112 reply). Text-only detection, so a
+  // 'worker' replay of a non-emergency turn simply falls through.
+  if (emergency.matched) {
+    log.warn("emergency detected", maskPhone(inbound.phone), emergency.keyword);
+    await dispatchTextMessage({
+      conversationId: conversation.id,
+      phone: inbound.phone,
+      body: EMERGENCY_RESPONSE,
+      safetyFlags: { emergency_response: true, keyword: emergency.keyword },
+    });
+    const escalationId = await createEscalation({
+      conversationId: conversation.id,
+      escalationType: "emergency",
+      priority: "p1",
+    });
+    await sendOpsHandoff({
+      conversationId: conversation.id,
+      escalationId,
+      patientName: inbound.contactName ?? "Unknown",
+      patientAge: "—",
+      serviceDisplay: "🚨 EMERGENCY",
+      location: "—",
+      context: `EMERGENCY: ${text.slice(0, 60)}`,
+      patientMobile: inbound.phone,
+    });
+    await audit(AuditEvent.EMERGENCY_DETECTED, {
+      keyword: emergency.keyword,
+      category: emergency.category,
+    });
+    return;
+  }
+
+  // ---- Pre-check b: OPT-OUT (deterministic) ------------------------------
+  if (optOut.matched) {
+    log.info("opt-out detected", maskPhone(inbound.phone), optOut.keyword);
+    await dispatchTextMessage({
+      conversationId: conversation.id,
+      phone: inbound.phone,
+      body: OPT_OUT_CONFIRMATION,
+      safetyFlags: { opt_out_confirmation: true },
+    });
+    await setOptOut({ conversationId: conversation.id, leadId: conversation.lead_id });
+    await markLeadOptedOut(inbound.phone).catch((err) =>
+      log.error("markLeadOptedOut threw", maskPhone(inbound.phone), err),
+    );
+    await audit(AuditEvent.OPT_OUT_SET, { keyword: optOut.keyword });
+    return;
+  }
+
+  // ---- Decoupled bail: fast, must-not-lose prechecks are done. Hand the
+  // slow LLM/media turn to the durable queue and return so the webhook 200s
+  // fast. The worker replays from here via mode:'worker'. ('inline' + 'worker'
+  // fall through to run the pipeline in-process.)
+  if (mode === "sync") {
+    await enqueueTurn({
+      conversationId: conversation.id,
+      messageId,
+      inbound,
     });
     return;
   }
@@ -561,55 +654,8 @@ export async function handleInboundMessage(
     return;
   }
 
-  // ---- Pre-check a: EMERGENCY (deterministic, highest priority) ----------
-  if (emergency.matched) {
-    log.warn("emergency detected", maskPhone(inbound.phone), emergency.keyword);
-    await dispatchTextMessage({
-      conversationId: conversation.id,
-      phone: inbound.phone,
-      body: EMERGENCY_RESPONSE,
-      safetyFlags: { emergency_response: true, keyword: emergency.keyword },
-    });
-    const escalationId = await createEscalation({
-      conversationId: conversation.id,
-      escalationType: "emergency",
-      priority: "p1",
-    });
-    await sendOpsHandoff({
-      conversationId: conversation.id,
-      escalationId,
-      patientName: inbound.contactName ?? "Unknown",
-      patientAge: "—",
-      serviceDisplay: "🚨 EMERGENCY",
-      location: "—",
-      context: `EMERGENCY: ${text.slice(0, 60)}`,
-      patientMobile: inbound.phone,
-    });
-    await audit(AuditEvent.EMERGENCY_DETECTED, {
-      keyword: emergency.keyword,
-      category: emergency.category,
-    });
-    return;
-  }
-
-  // ---- Pre-check b: OPT-OUT (deterministic) ------------------------------
-  if (optOut.matched) {
-    log.info("opt-out detected", maskPhone(inbound.phone), optOut.keyword);
-    await dispatchTextMessage({
-      conversationId: conversation.id,
-      phone: inbound.phone,
-      body: OPT_OUT_CONFIRMATION,
-      safetyFlags: { opt_out_confirmation: true },
-    });
-    await setOptOut({ conversationId: conversation.id, leadId: conversation.lead_id });
-    // Lead Engine P1 — also flag any marketing lead for this phone opted_out
-    // (never re-contact). Best-effort.
-    await markLeadOptedOut(inbound.phone).catch((err) =>
-      log.error("markLeadOptedOut threw", maskPhone(inbound.phone), err),
-    );
-    await audit(AuditEvent.OPT_OUT_SET, { keyword: optOut.keyword });
-    return;
-  }
+  // (Emergency + opt-out prechecks moved above the media branch so the
+  // synchronous pass handles them inline and never enqueues them.)
 
   // ---- Patient doc save confirmation (consented vault filing) -------------
   // If a medical doc is awaiting the patient's YES/NO, resolve it here before
@@ -940,6 +986,9 @@ export async function handleInboundMessage(
         phone: inbound.phone,
         body: reply,
         safetyFlags: { agent: true, model },
+        // Telemetry (item 6): stamp model + token counts on the outbound row so
+        // drop-rate + latency are measurable. Were NULL on all 741 rows before.
+        telemetry: { model, tokensIn, tokensOut },
       });
     }
   }
@@ -1006,4 +1055,40 @@ export async function processWebhook(envelope: WebhookEnvelope): Promise<void> {
       log.error("message handling failed", maskPhone(msg.phone), err);
     }
   }
+}
+
+/**
+ * Decoupled webhook entry (used when AAROGYA_ASYNC_PROCESSING === "true"). Runs
+ * ONLY the fast, must-not-lose prechecks synchronously — persist inbound (bumps
+ * last_user_msg_at), emergency, opt-out — then enqueues the slow LLM/media turn
+ * and returns. A per-message failure is logged, never sinks the batch (Meta
+ * still 200s; the inbound is persisted so the reconciliation watchdog can
+ * re-enqueue even if the enqueue itself failed).
+ */
+export async function processWebhookDecoupled(
+  envelope: WebhookEnvelope,
+): Promise<void> {
+  const inbound = extractInboundMessages(envelope);
+  for (const msg of inbound) {
+    try {
+      await handleInboundMessage(msg, { mode: "sync" });
+    } catch (err) {
+      log.error("sync handling failed", maskPhone(msg.phone), err);
+    }
+  }
+}
+
+/**
+ * Worker entry — replay an enqueued turn (drain cron / immediate kick).
+ * Reconstructs the NormalizedInbound from the queue payload and runs the
+ * media/compose/send pipeline. 'worker' mode skips persist + the already-done
+ * prechecks. Lets unexpected errors propagate so the caller can retry the turn
+ * (fail_aarogya_turn); the agent-turn error path still sends its graceful
+ * fallback in-line, exactly as the inline path does.
+ */
+export async function processQueuedTurn(row: AarogyaTurnRow): Promise<void> {
+  await handleInboundMessage(row.payload, {
+    mode: "worker",
+    existingMessageId: row.message_id,
+  });
 }
