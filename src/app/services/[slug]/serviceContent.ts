@@ -144,7 +144,7 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
       },
       {
         q: "Do I get the doctor's advice in writing?",
-        a: "Yes. The doctor issues a signed digital e-prescription under MoHFW Telemedicine 2020, saved to your Sanocare Pulse account.",
+        a: "Yes. The doctor issues the doctor's written advice under MoHFW Telemedicine 2020, as a signed digital record, saved to your Sanocare Pulse account.",
       },
       {
         q: "Which areas in Delhi do you serve?",
@@ -348,7 +348,7 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
       },
       {
         heading: "What the consultation covers",
-        body: "A focused 15-minute video consult: the doctor discusses your symptoms or question, advises on management, and where appropriate issues a signed digital e-prescription under MoHFW Telemedicine Practice Guidelines 2020. Follow-up support continues until your case closes, so you're not left with unanswered questions.",
+        body: "A focused 15-minute video consult: the doctor discusses your symptoms or question, advises on management, and where appropriate shares the doctor's written advice under MoHFW Telemedicine Practice Guidelines 2020, as a signed digital record. Follow-up support continues until your case closes, so you're not left with unanswered questions.",
       },
       {
         heading: "Coverage & timing",
@@ -403,7 +403,7 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
       },
       {
         q: "Will I get the doctor's advice in writing?",
-        a: "Where clinically appropriate the doctor issues a signed digital e-prescription under MoHFW Telemedicine 2020, saved to your Sanocare Pulse account.",
+        a: "Where clinically appropriate the doctor shares written advice under MoHFW Telemedicine 2020, as a signed digital record, saved to your Sanocare Pulse account.",
       },
       {
         q: "Is online consultation available outside Delhi?",

@@ -23,7 +23,7 @@ export const HOME_CONTENT = {
     backgroundImageSrc:
       "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?q=80&w=2906&auto=format&fit=crop",
     description:
-      "GNM / B.Sc Nursing-qualified medics arrive, capture vitals, and execute treatment — supervised in real time by a dedicated MBBS doctor on live video, who diagnoses the case and issues a signed e-prescription under MoHFW 2020. Starting from ₹499 per visit.",
+      "GNM / B.Sc Nursing-qualified medics arrive, capture vitals, and execute treatment — supervised in real time by a dedicated MBBS doctor on live video, who diagnoses the case and issues the doctor's written advice under MoHFW 2020. Starting from ₹499 per visit.",
     stats: [
       { value: "<30 min", label: "Median time-to-medic" },
       { value: "★ 5.0", label: "Rating on Google" },
