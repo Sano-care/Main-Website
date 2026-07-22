@@ -41,11 +41,12 @@ class PulseAuthStore @Inject constructor(
     fun isSignedIn(): Boolean = !token.isNullOrBlank()
 
     /** Persist the session after a successful verify-otp. */
-    fun saveSession(token: String, customerId: String?, fullName: String?) {
+    fun saveSession(token: String, customerId: String?, fullName: String?, phone: String?) {
         prefs.edit()
             .putString(KEY_TOKEN, token)
             .putString(KEY_CUSTOMER_ID, customerId)
             .putString(KEY_FULL_NAME, fullName)
+            .putString(KEY_PHONE, phone)
             .apply()
     }
 
@@ -55,6 +56,11 @@ class PulseAuthStore @Inject constructor(
 
     val customerId: String? get() = prefs.getString(KEY_CUSTOMER_ID, null)
     val fullName: String? get() = prefs.getString(KEY_FULL_NAME, null)
+
+    // The login phone (normalised, e.g. +9198…). Cached at verify-otp so Profile
+    // can show it without a network call — the /api/pulse/account GET is gated by
+    // the web OTP cookie, not the bearer, so it is NOT reachable from the app.
+    val phone: String? get() = prefs.getString(KEY_PHONE, null)
 
     /** Whether the first-run onboarding has been completed on this device. */
     var onboardingDone: Boolean
@@ -71,6 +77,7 @@ class PulseAuthStore @Inject constructor(
         const val KEY_TOKEN = "bearer_token"
         const val KEY_CUSTOMER_ID = "customer_id"
         const val KEY_FULL_NAME = "full_name"
+        const val KEY_PHONE = "phone"
         const val KEY_ONBOARDING_DONE = "onboarding_done"
     }
 }

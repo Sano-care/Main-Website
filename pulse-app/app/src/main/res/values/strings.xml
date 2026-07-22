@@ -91,6 +91,7 @@
     <string name="records_error">Couldn\'t load your records. Check your connection and try again.</string>
 
     <string name="bookings_empty">No bookings yet — visits you book with Sanocare will appear here.</string>
+    <string name="book_now">Book Now</string>
     <string name="prescriptions_empty">No prescriptions yet — they\'ll appear here after a consult.</string>
     <string name="reports_empty">No lab reports yet — they\'ll appear here once your tests are ready.</string>
     <string name="invoices_empty">No invoices yet — receipts for your visits and tests will appear here.</string>

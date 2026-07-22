@@ -75,4 +75,8 @@ object NetworkModule {
     @Provides
     @Singleton
     fun providePulseWriteApi(retrofit: Retrofit): PulseWriteApi = retrofit.create(PulseWriteApi::class.java)
+
+    @Provides
+    @Singleton
+    fun providePulseExtraApi(retrofit: Retrofit): PulseExtraApi = retrofit.create(PulseExtraApi::class.java)
 }

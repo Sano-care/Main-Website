@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Description
@@ -176,10 +177,29 @@ private fun RecordsHub(state: RecordsUiState, onRetry: () -> Unit, onOpen: (Stri
 // ── Lists ───────────────────────────────────────────────────────────────────
 
 @Composable
-private fun BookingsList(state: RecordsUiState, onRetry: () -> Unit, onBack: () -> Unit, onDetail: (String) -> Unit) {
-    RecordsScaffold(stringResource(R.string.records_bookings), onBack, state, onRetry) { p ->
-        if (p.bookings.isEmpty()) EmptyState(stringResource(R.string.bookings_empty))
-        else LazyColumn(Modifier.fillMaxSize()) {
+internal fun BookingsList(
+    state: RecordsUiState,
+    onRetry: () -> Unit,
+    onBack: (() -> Unit)?,
+    onStartBooking: (() -> Unit)? = null,
+    onDetail: (String) -> Unit,
+) {
+    // v2.1 — "Book Now" is always reachable from the Bookings tab: a prominent
+    // primary button on the empty state, and a persistent header button once the
+    // list has items. Both route to the Home service tiles (onStartBooking). The
+    // Records-hub nested bookings view passes onStartBooking = null (unchanged).
+    val hasBookings = (state as? RecordsUiState.Ready)?.payload?.bookings?.isNotEmpty() == true
+    RecordsScaffold(
+        stringResource(R.string.records_bookings),
+        onBack,
+        state,
+        onRetry,
+        action = { if (onStartBooking != null && hasBookings) BookNowHeaderButton(onStartBooking) },
+    ) { p ->
+        if (p.bookings.isEmpty()) {
+            if (onStartBooking != null) BookingsEmptyCta(onStartBooking)
+            else EmptyState(stringResource(R.string.bookings_empty))
+        } else LazyColumn(Modifier.fillMaxSize()) {
             items(p.bookings, key = { it.id }) { b ->
                 val pill = bookingPill(b.status)
                 ListRow(
@@ -194,7 +214,39 @@ private fun BookingsList(state: RecordsUiState, onRetry: () -> Unit, onBack: () 
 }
 
 @Composable
-private fun BookingDetail(state: RecordsUiState, id: String, onBack: () -> Unit) {
+private fun BookNowHeaderButton(onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clickable { onClick() }
+            .background(SanocareBlue, RoundedCornerShape(20.dp))
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+    ) {
+        Icon(Icons.Filled.Add, contentDescription = null, tint = Paper, modifier = Modifier.size(15.dp))
+        Spacer(Modifier.width(5.dp))
+        Text(stringResource(R.string.book_now), color = Paper, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun BookingsEmptyCta(onBook: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            stringResource(R.string.bookings_empty),
+            color = InkMute,
+            fontSize = 14.sp,
+        )
+        Spacer(Modifier.height(18.dp))
+        PrimaryButton(text = stringResource(R.string.book_now), onClick = onBook)
+    }
+}
+
+@Composable
+internal fun BookingDetail(state: RecordsUiState, id: String, onBack: () -> Unit) {
     RecordsScaffold(stringResource(R.string.records_bookings), onBack, state, {}) { p ->
         val b = p.bookings.firstOrNull { it.id == id } ?: return@RecordsScaffold EmptyState("Not found.")
         val amount = p.invoices.firstOrNull { it.bookingId == b.id }?.let { formatInr(it.amountPaise) } ?: "—"
@@ -318,7 +370,7 @@ private fun InvoiceDetail(state: RecordsUiState, vm: RecordsViewModel, id: Strin
 @Composable
 internal fun RecordsScaffold(
     title: String,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     state: RecordsUiState,
     onRetry: () -> Unit,
     action: @Composable () -> Unit = {},
@@ -329,11 +381,15 @@ internal fun RecordsScaffold(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp),
         ) {
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = InkSecondary,
-                modifier = Modifier.size(40.dp).clickable { onBack() }.padding(8.dp),
-            )
-            Spacer(Modifier.width(4.dp))
+            if (onBack != null) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = InkSecondary,
+                    modifier = Modifier.size(40.dp).clickable { onBack() }.padding(8.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+            } else {
+                Spacer(Modifier.width(8.dp))
+            }
             Text(title, color = InkPrimary, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
             Spacer(Modifier.weight(1f))
             action()

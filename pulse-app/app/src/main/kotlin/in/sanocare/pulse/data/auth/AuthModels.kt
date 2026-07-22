@@ -19,8 +19,9 @@ sealed interface VerifyOutcome {
     data class Error(val message: String) : VerifyOutcome
 }
 
-/** Cached identity for the shell top bar on cold start. */
+/** Cached identity for the shell top bar + Profile on cold start. */
 data class CachedCustomer(
     val customerId: String?,
     val fullName: String?,
+    val phone: String?,
 )

@@ -21,7 +21,7 @@ class AuthRepository @Inject constructor(
 
     fun isSignedIn(): Boolean = authStore.isSignedIn()
 
-    fun cached(): CachedCustomer = CachedCustomer(authStore.customerId, authStore.fullName)
+    fun cached(): CachedCustomer = CachedCustomer(authStore.customerId, authStore.fullName, authStore.phone)
 
     suspend fun sendOtp(phone: String): AuthResult<Unit> = runCatching {
         val res = authApi.sendOtp(SendOtpRequest(phone = normalisePhone(phone)))
@@ -60,6 +60,7 @@ class AuthRepository @Inject constructor(
             token = token,
             customerId = body.customerId,
             fullName = body.fullName,
+            phone = normalisePhone(phone),
         )
         VerifyOutcome.Customer(isNewCustomer = body.isNewCustomer, fullName = body.fullName)
     }.getOrElse { VerifyOutcome.Error(it.message ?: "Network error") }
