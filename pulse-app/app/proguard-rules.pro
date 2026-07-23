@@ -36,3 +36,18 @@
 
 # ── Retrofit service interfaces ─────────────────────────────────────────────────
 -keep,allowobfuscation interface in.sanocare.pulse.data.network.**
+
+# ── Razorpay Checkout SDK (PB4a) — official keep-rules ──────────────────────────
+# The Checkout WebView bridge + the Activity payment callbacks must survive R8.
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+-keepattributes JavascriptInterface
+-dontwarn com.razorpay.**
+-keep class com.razorpay.** { *; }
+-optimizations !method/inlining/*
+-keepclasseswithmembers class * {
+    public void onPayment*(...);
+}
+-keep class proguard.annotation.Keep
+-keep class proguard.annotation.KeepClassMembers

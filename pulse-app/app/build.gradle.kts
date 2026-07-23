@@ -17,8 +17,8 @@ android {
         applicationId = "in.sanocare.pulse"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 2
-        versionName = "0.2.1"
+        versionCode = 3
+        versionName = "0.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -118,4 +118,10 @@ dependencies {
     implementation(libs.okhttp.logging.interceptor)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.retrofit.kotlinx.serialization.converter)
+
+    // PB4a — Razorpay Android Checkout SDK (native in-app payment sheet). The
+    // app uses only the PUBLISHABLE key (fetched from /api/razorpay/create-order);
+    // the secret + signature verification stay server-side. Pinned (not `+`) so
+    // builds are reproducible.
+    implementation("com.razorpay:checkout:1.6.41")
 }

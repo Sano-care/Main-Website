@@ -3,6 +3,7 @@ package `in`.sanocare.pulse.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import `in`.sanocare.pulse.data.booking.TeleconsultRepository
 import `in`.sanocare.pulse.data.network.BookingDto
 import `in`.sanocare.pulse.data.records.MemberScopeStore
 import `in`.sanocare.pulse.data.records.PulseExtraRepository
@@ -24,11 +25,17 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     private val records: RecordsRepository,
     private val extra: PulseExtraRepository,
+    private val teleconsult: TeleconsultRepository,
     scope: MemberScopeStore,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<HomeUiState>(HomeUiState.Loading)
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
+
+    // PB4a — server-driven "from ₹399" label for the teleconsult card (the app
+    // hardcodes no price). Null until the config GET resolves.
+    private val _teleconsultFrom = MutableStateFlow<String?>(null)
+    val teleconsultFrom: StateFlow<String?> = _teleconsultFrom.asStateFlow()
 
     // Pull-to-refresh flag — distinct from the initial Loading state so the mark
     // spins over existing content rather than clearing it.
@@ -43,6 +50,9 @@ class HomeViewModel @Inject constructor(
             scope.selected.collect {
                 if (loaded) refresh(showLoading = false) else { loaded = true; refresh(showLoading = true) }
             }
+        }
+        viewModelScope.launch {
+            teleconsult.config()?.let { _teleconsultFrom.value = "from ₹${it.displayInr}" }
         }
     }
 
