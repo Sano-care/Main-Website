@@ -106,7 +106,7 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
       },
       {
         heading: "What happens during the visit",
-        body: "The medic records vitals, performs the hands-on parts of the examination, and relays findings to the doctor on video. The MBBS doctor takes the history, interprets the vitals, reaches a diagnosis, and issues the doctor's written advice under MoHFW Telemedicine Practice Guidelines 2020. If medicines or lab tests are needed, those are arranged on the spot.",
+        body: "The medic records vitals, performs the hands-on parts of the examination, and relays findings to the doctor on video. The MBBS doctor takes the history, interprets the vitals, reaches a diagnosis, and issues the doctor's written advice under MoHFW Telemedicine Practice Guidelines 2020. If further care or lab tests are needed, we help you arrange them.",
       },
       {
         heading: "Service area & timing",
