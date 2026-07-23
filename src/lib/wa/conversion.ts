@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 import { createHash } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { buildWaRefSuffix, mintWaClickToken } from "@/lib/wa/clickToken";
 
 const SANOCARE_WA = "919711977782";
 
@@ -113,7 +114,20 @@ export async function buildWaResponse(
 ): Promise<NextResponse> {
   const params = req.nextUrl.searchParams;
   const service = normalizeService(serviceOverride ?? params.get("service"));
-  const message = SERVICE_MESSAGES[service];
+
+  // Offline-conversion attribution: /wa IS the paid-click entry point, so mint
+  // the short ref token here (server-side, no client round-trip) and carry it in
+  // the prefill. The Aarogya inbound handler resolves it back to this gclid, and
+  // a booking that later gets paid uploads to `whatsapp_click_paid`. Organic
+  // visitors (no gclid) keep the plain service message — no token fabricated.
+  const gclid = params.get("gclid");
+  const wbraid = params.get("wbraid") ?? params.get("gbraid");
+  let message = SERVICE_MESSAGES[service];
+  if (gclid) {
+    const token = await mintWaClickToken({ gclid, wbraid });
+    if (token) message += buildWaRefSuffix(token);
+  }
+
   const waUrl = `https://wa.me/${SANOCARE_WA}?text=${encodeURIComponent(message)}`;
 
   const utm = {

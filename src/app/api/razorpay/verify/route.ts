@@ -23,6 +23,11 @@ import {
   getServiceHalfRoundedUp,
   getServiceRemainingAfterHalf,
 } from "@/constants/pricing";
+import {
+  findClickIdsForPhone,
+  stampBookingClickIds,
+} from "@/lib/wa/attribution";
+import { uploadWhatsappConversion } from "@/lib/wa/uploadConversion";
 import type { ServiceSlug } from "@/lib/services/catalog";
 
 const VALID_T85_SLUGS: ServiceSlug[] = [
@@ -391,6 +396,38 @@ export async function POST(req: NextRequest) {
           amountPaise:
             typeof booking.amount === "number" ? Math.round(booking.amount * 100) : null,
         });
+      }
+
+      // WhatsApp → Google Ads offline conversion. ~70% of bookings close over
+      // WhatsApp, and `whatsapp_click_paid` is an UPLOAD_CLICKS action that has
+      // never been fed. If this phone's WhatsApp thread carries a gclid (captured
+      // at the ad click, carried through the `[ref: SC-…]` handoff and stamped by
+      // the inbound handler), stamp it on the booking and upload the paid
+      // conversion. Best-effort + env-flagged, exactly like the lead alert above:
+      // a failure here must never break the booking/payment response.
+      if (data?.id) {
+        try {
+          const clickIds = await findClickIdsForPhone(insertPayload.phone);
+          if (clickIds.gclid) {
+            await stampBookingClickIds({
+              bookingId: data.id as string,
+              gclid: clickIds.gclid,
+              wbraid: clickIds.wbraid,
+            });
+            // Upload the FULL order value (not just the 50% advance) — the
+            // bidder should optimise toward booking worth, not cash collected now.
+            const conv = await uploadWhatsappConversion({
+              gclid: clickIds.gclid,
+              valueInr: totalInr,
+              occurredAt: new Date(insertPayload.payment_captured_at),
+            });
+            console.log(
+              `[razorpay/verify] wa_conv_upload uploaded=${conv.uploaded}${conv.reason ? ` reason=${conv.reason}` : ""} booking=${bookingRef}`,
+            );
+          }
+        } catch (convErr) {
+          console.error(`WA_CONV_UPLOAD_FAILED booking=${bookingRef}`, convErr);
+        }
       }
     }
 
