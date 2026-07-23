@@ -10,6 +10,7 @@
 //   * messages / audit_log are append-only.
 
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { stampConversationClickAttribution } from "@/lib/wa/attribution";
 import {
   persistOutbound,
   sendHardenedTemplate,
@@ -150,6 +151,16 @@ export async function recordInboundMessage(args: {
       updated_at: new Date().toISOString(),
     })
     .eq("id", conversationId);
+
+  // Offline-conversion attribution — if this message carries a `[ref: SC-XXXXXX]`
+  // token from a paid WhatsApp click, resolve it and stamp the gclid onto the
+  // conversation (first click wins). Tolerant + best-effort: the vast majority of
+  // messages carry no token, an unknown token is ignored, and nothing here can
+  // block the reply path.
+  await stampConversationClickAttribution({
+    conversationId,
+    text: inbound.text,
+  });
 
   return { inserted: true, messageId: (data as { id: string }).id };
 }

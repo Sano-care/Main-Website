@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { CmsPreloadProvider } from "@/components/providers/CmsPreloadProvider";
 import { getCmsPreloadSnapshot } from "@/services/cms/CmsContentServerService";
 import { ConsentDefaultScript } from "@/components/consent/ConsentDefaultScript";
+import { GclidCapture } from "@/components/marketing/GclidCapture";
 import { ConsentRoot } from "@/components/consent/ConsentRoot";
 import { PHONE_TEL, SUPPORT_EMAIL } from "@/lib/contact";
 import "./globals.css";
@@ -240,6 +241,11 @@ export default async function RootLayout({
         className={`${inter.variable} ${ibmPlexMono.variable} font-sans antialiased`}
       >
         <CmsPreloadProvider snapshot={cmsSnapshot}>{children}</CmsPreloadProvider>
+        {/* Capture the Google Ads click id first-party on ANY inbound landing
+            and mint the short WhatsApp ref token once. Renders nothing; the
+            token is what carries ad attribution across the WhatsApp handoff so
+            paid bookings can be uploaded to `whatsapp_click_paid`. */}
+        <GclidCapture />
         {/* DPDP cookie consent flow. Mounts globally so the footer-link
             reopen event listener is always armed, but the banner's
             auto-show is suppressed on /c/, /doctor/, /ops/, /rx/,
