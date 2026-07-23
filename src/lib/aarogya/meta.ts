@@ -83,6 +83,15 @@ export interface BookingConfirmedInput {
   serviceSlug: ServiceSlug;
   bookingCode: string;
   patientPhone: string;
+  /**
+   * PB4a — optional replacement for the canned `{{4}}` next-step line. The
+   * native teleconsult booking passes the scheduled slot + link-timing note
+   * ("Scheduled for <date, time>. Your video link arrives ~10 min before.").
+   * Existing callers omit it and keep the per-service `getBookingNextStep`.
+   * Only affects the 4-var `sanocare_booking_confirmed` path — the 2-var
+   * engagement opener (when WHATSAPP_BOOKING_ENGAGEMENT_ENABLED) has no {{4}}.
+   */
+  nextStepOverride?: string;
 }
 
 export async function sendBookingConfirmed(
@@ -111,7 +120,7 @@ export async function sendBookingConfirmed(
       firstName(input.patientName),
       getBookingLabel(input.serviceSlug),
       input.bookingCode?.trim() || "—",
-      getBookingNextStep(input.serviceSlug),
+      input.nextStepOverride?.trim() || getBookingNextStep(input.serviceSlug),
     ],
   });
 }

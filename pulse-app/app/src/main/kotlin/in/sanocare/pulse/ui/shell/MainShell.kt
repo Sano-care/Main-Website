@@ -53,6 +53,7 @@ import `in`.sanocare.pulse.theme.SanocareBlue
 import `in`.sanocare.pulse.theme.SanocareBlueSoft
 import `in`.sanocare.pulse.ui.components.SanocareLockup
 import `in`.sanocare.pulse.ui.family.FamilyScreen
+import `in`.sanocare.pulse.ui.booking.TeleconsultBookingScreen
 import `in`.sanocare.pulse.ui.home.HomeV2Screen
 import `in`.sanocare.pulse.ui.profile.ProfileScreen
 import `in`.sanocare.pulse.ui.records.BookingsTab
@@ -81,6 +82,9 @@ fun MainShell(
     // Family is a sub-screen of Profile — it takes over the content area while the
     // bottom nav stays put, and Back returns to the Profile tab.
     var showFamily by remember { mutableStateOf(false) }
+    // PB4a — native teleconsult booking, launched from the Home "Talk to a doctor"
+    // card. Takes over the content area (bottom nav stays); Done → Bookings tab.
+    var showTeleconsult by remember { mutableStateOf(false) }
 
     val firstName = customer.fullName?.trim()?.split(" ")?.firstOrNull()
 
@@ -101,8 +105,8 @@ fun MainShell(
             NavigationBar(containerColor = Paper) {
                 Tab.entries.forEach { t ->
                     NavigationBarItem(
-                        selected = tab == t && !showFamily,
-                        onClick = { showFamily = false; tab = t },
+                        selected = tab == t && !showFamily && !showTeleconsult,
+                        onClick = { showFamily = false; showTeleconsult = false; tab = t },
                         icon = { Icon(t.icon, contentDescription = t.label) },
                         label = { Text(t.label, fontSize = 11.sp) },
                         colors = NavigationBarItemDefaults.colors(
@@ -118,13 +122,22 @@ fun MainShell(
         },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            if (showFamily) {
+            if (showTeleconsult) {
+                TeleconsultBookingScreen(
+                    prefillPhone = customer.phone,
+                    onClose = { showTeleconsult = false },
+                    onDone = { showTeleconsult = false; tab = Tab.BOOKINGS },
+                )
+            } else if (showFamily) {
                 FamilyScreen(onBack = { showFamily = false })
             } else {
                 // Cross-fade between tabs (v2 motion spec — bottom-nav cross-fade).
                 Crossfade(targetState = tab, animationSpec = tween(200), label = "tab") { current ->
                     when (current) {
-                        Tab.HOME -> HomeV2Screen(firstName = firstName)
+                        Tab.HOME -> HomeV2Screen(
+                            firstName = firstName,
+                            onBookTeleconsult = { showTeleconsult = true },
+                        )
                         Tab.BOOKINGS -> BookingsTab(
                             onUnauthorized = onSignOut,
                             onStartBooking = { showFamily = false; tab = Tab.HOME },

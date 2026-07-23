@@ -75,17 +75,21 @@ private data class Service(val title: String, val price: String, val icon: Image
 // icons stay white monoline. Coral remains emergency-ribbon-only. Founder can
 // fine-tune the exact shades after.
 private val SERVICES = listOf(
-    Service("Talk to a doctor", "from ₹199", Icons.Outlined.Videocam, listOf(Color(0xFF2B81FF), Color(0xFF1E63D6))),
+    // PB4a — teleconsult price is server-driven (config GET), so the string is
+    // empty here and filled at render time from HomeViewModel.teleconsultFrom
+    // ("from ₹399"). No hardcoded price. The stale "from ₹199" is gone.
+    Service("Talk to a doctor", "", Icons.Outlined.Videocam, listOf(Color(0xFF2B81FF), Color(0xFF1E63D6))),
     Service("Get tested at home", "from ₹499", Icons.Outlined.Science, listOf(Color(0xFF4E97FF), Color(0xFF2B81FF))),
     Service("Care at Home", "from ₹299", Icons.Outlined.HealthAndSafety, listOf(Color(0xFF1E63D6), Color(0xFF1647A1))),
     Service("Book a medic", "from ₹199", Icons.Outlined.MedicalServices, listOf(Color(0xFF3E8BFF), Color(0xFF2B6FE0))),
 )
 
 @Composable
-fun HomeV2Screen(firstName: String?) {
+fun HomeV2Screen(firstName: String?, onBookTeleconsult: () -> Unit) {
     val vm: HomeViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
     val refreshing by vm.refreshing.collectAsState()
+    val teleconsultFrom by vm.teleconsultFrom.collectAsState()
 
     PulseRefreshBox(refreshing = refreshing, onRefresh = vm::pullRefresh, modifier = Modifier.fillMaxSize()) {
         Column(
@@ -103,7 +107,7 @@ fun HomeV2Screen(firstName: String?) {
 
             Spacer(Modifier.height(18.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                ServiceCard(SERVICES[0], Modifier.weight(1f))
+                ServiceCard(SERVICES[0], Modifier.weight(1f), priceOverride = teleconsultFrom, onClick = onBookTeleconsult)
                 ServiceCard(SERVICES[1], Modifier.weight(1f))
             }
             Spacer(Modifier.height(12.dp))
@@ -182,20 +186,28 @@ private fun Hero(firstName: String?) {
 }
 
 @Composable
-private fun ServiceCard(s: Service, modifier: Modifier) {
+private fun ServiceCard(
+    s: Service,
+    modifier: Modifier,
+    priceOverride: String? = null,
+    onClick: (() -> Unit)? = null,
+) {
     // Interim branded gradient tile — image slot swappable for real photography later.
+    val price = priceOverride ?: s.price
     Column(
         modifier = modifier.height(128.dp)
             .background(Brush.linearGradient(s.gradient), RoundedCornerShape(16.dp))
-            .pressScaleClickable { /* PB4 booking destination */ }
+            .pressScaleClickable { onClick?.invoke() /* other cards: PB4b+ destinations */ }
             .padding(14.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Icon(s.icon, contentDescription = null, tint = Paper, modifier = Modifier.size(26.dp))
         Column {
             Text(s.title, color = Paper, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 17.sp)
-            Spacer(Modifier.height(2.dp))
-            Text(s.price, color = Paper.copy(alpha = 0.92f), fontSize = 12.sp)
+            if (price.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(price, color = Paper.copy(alpha = 0.92f), fontSize = 12.sp)
+            }
         }
     }
 }

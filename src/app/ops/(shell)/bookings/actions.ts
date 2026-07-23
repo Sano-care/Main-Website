@@ -10,10 +10,7 @@ import {
   SERVICE_CATEGORIES,
   type BookingStatus,
 } from "../../_lib/bookingStatus";
-import {
-  generateConsultJoinToken,
-  defaultJoinTokenExpiry,
-} from "@/lib/consult/tokens";
+import { createTeleconsultSession } from "@/lib/consult/createSession";
 import { sendConsultJoinLink } from "@/lib/consult/meta";
 import {
   sendVisitComplete,
@@ -1300,42 +1297,24 @@ export async function createBooking(formData: FormData) {
   if (teleconsultDoctor) {
     const scheduledAtIso = scheduled_for ?? new Date().toISOString();
 
-    const { data: session, error: sessionErr } = await supabase
-      .from("consultation_sessions")
-      .insert({
-        booking_id: inserted.id,
-        doctor_id: teleconsultDoctor.id,
-        modality: "teleconsultation",
-        status: "scheduled",
-        // Snapshot the doctor's Duty Room URL at create time. May be
-        // NULL (doctor not yet provisioned); the /c/[token] page
-        // surfaces a fallback in that case.
-        duty_room_url_snapshot: teleconsultDoctor.duty_room_join_url,
-        scheduled_at: scheduledAtIso,
-        created_by: opsUser.id,
-      })
-      .select("id")
-      .single();
-    if (sessionErr || !session) {
-      throw new Error(
-        `Booking ${inserted.id} was created but the consultation session insert failed: ${sessionErr?.message ?? "unknown"}. Clean up via SQL and re-create.`,
-      );
-    }
-
-    const joinToken = generateConsultJoinToken();
-    const tokenExpiry = defaultJoinTokenExpiry(scheduledAtIso);
-    const { error: partErr } = await supabase
-      .from("consultation_participants")
-      .insert({
-        session_id: session.id,
-        role: "patient",
-        customer_id: customerId,
-        join_token: joinToken,
-        join_token_expires_at: tokenExpiry.toISOString(),
+    // PB4a — shared with the native/bearer teleconsult path via
+    // createTeleconsultSession(). Throws on either insert failure.
+    let joinToken: string;
+    let sessionId: string;
+    try {
+      const created = await createTeleconsultSession(supabase, {
+        bookingId: inserted.id,
+        doctorId: teleconsultDoctor.id,
+        dutyRoomUrl: teleconsultDoctor.duty_room_join_url,
+        scheduledAtIso,
+        customerId,
+        createdBy: opsUser.id,
       });
-    if (partErr) {
+      joinToken = created.joinToken;
+      sessionId = created.sessionId;
+    } catch (e) {
       throw new Error(
-        `Booking ${inserted.id} + session ${session.id} created, but the patient participant insert failed: ${partErr.message}. The link cannot be delivered.`,
+        `Booking ${inserted.id} was created but the consultation session/participant insert failed: ${e instanceof Error ? e.message : "unknown"}. Clean up via SQL and re-create.`,
       );
     }
 
@@ -1352,7 +1331,7 @@ export async function createBooking(formData: FormData) {
       });
       console.log("[createBooking] consult join-link delivered", {
         booking_id: inserted.id,
-        session_id: session.id,
+        session_id: sessionId,
       });
     } catch (err) {
       console.error(
