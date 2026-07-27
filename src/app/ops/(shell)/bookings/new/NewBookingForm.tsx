@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { AlertCircle, CheckCircle2, MapPin, Search, X, Loader2, Tag, Video } from "lucide-react";
 import { LabTestSearch } from "@/components/lab/LabTestSearch";
@@ -337,12 +338,12 @@ export function NewBookingForm({
       <input type="hidden" name="customer_mode" value={mode} />
 
       {/* ============================== Patient ============================== */}
-      <fieldset className="bg-white border border-slate-200 rounded-2xl p-6">
+      <fieldset className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6">
         <legend className="px-2 text-[11px] font-mono uppercase tracking-wider text-slate-500">
           Patient
         </legend>
 
-        <div className="flex gap-2 mb-5">
+        <div className="grid grid-cols-2 gap-2 mb-5">
           <ModeButton
             label="Existing patient"
             active={mode === "existing"}
@@ -375,7 +376,7 @@ export function NewBookingForm({
       </fieldset>
 
       {/* ============================== Service ============================== */}
-      <fieldset className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+      <fieldset className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-4">
         <legend className="px-2 text-[11px] font-mono uppercase tracking-wider text-slate-500">
           Service
         </legend>
@@ -388,7 +389,7 @@ export function NewBookingForm({
             required
             value={service}
             onChange={(e) => setService(e.target.value)}
-            className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+            className="w-full bg-white border border-slate-300 rounded-lg px-3 min-h-[44px] py-2 text-base focus:outline-none focus:ring-2 focus:ring-[#2B81FF] focus:border-transparent"
           >
             <option value="" disabled>
               Select…
@@ -404,7 +405,7 @@ export function NewBookingForm({
 
       {/* ============================== Teleconsult-only fields (C2) ============================== */}
       {service === "teleconsult" && (
-        <fieldset className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+        <fieldset className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-4">
           <legend className="px-2 text-[11px] font-mono uppercase tracking-wider text-slate-500">
             Teleconsultation
           </legend>
@@ -424,7 +425,7 @@ export function NewBookingForm({
               value={doctorId}
               onChange={(e) => setDoctorId(e.target.value)}
               required
-              className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+              className="w-full bg-white border border-slate-300 rounded-lg px-3 min-h-[44px] py-2 text-base focus:outline-none focus:ring-2 focus:ring-[#2B81FF] focus:border-transparent"
             >
               <option value="" disabled>
                 Select a doctor…
@@ -459,7 +460,7 @@ export function NewBookingForm({
 
       {/* ============================== Diagnostics basket ============================== */}
       {service === "diagnostics" && (
-        <fieldset className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+        <fieldset className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-4">
           <legend className="px-2 text-[11px] font-mono uppercase tracking-wider text-slate-500">
             Lab tests
           </legend>
@@ -477,7 +478,7 @@ export function NewBookingForm({
       )}
 
       {/* ============================== Location ============================== */}
-      <fieldset className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+      <fieldset className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-4">
         <legend className="px-2 text-[11px] font-mono uppercase tracking-wider text-slate-500">
           Location
         </legend>
@@ -497,7 +498,7 @@ export function NewBookingForm({
             name="manual_address"
             rows={2}
             placeholder="E.g. Flat 302, A-Block, near the swimming pool"
-            className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+            className="w-full bg-white border border-slate-300 rounded-lg px-3 min-h-[44px] py-2 text-base focus:outline-none focus:ring-2 focus:ring-[#2B81FF] focus:border-transparent"
           />
           <span className="block text-[11px] text-slate-500 mt-1">
             Supplementary to the pin above — anything the paramedic needs to
@@ -507,7 +508,7 @@ export function NewBookingForm({
       </fieldset>
 
       {/* ============================== Booking details ============================== */}
-      <fieldset className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+      <fieldset className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-4">
         <legend className="px-2 text-[11px] font-mono uppercase tracking-wider text-slate-500">
           Booking details
         </legend>
@@ -522,6 +523,7 @@ export function NewBookingForm({
               label="Amount (₹)"
               name="amount"
               type="number"
+              inputMode="decimal"
               placeholder="Optional"
             />
           )}
@@ -553,20 +555,22 @@ export function NewBookingForm({
         </p>
       </fieldset>
 
-      <div className="flex items-center gap-3">
+      {/* Full-width primary on mobile; the row reverses so the primary sits at
+          the bottom (thumb reach) with Cancel above it. */}
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-3">
         <button
           type="submit"
           disabled={!canSubmit}
-          className="bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors"
+          className="w-full sm:w-auto min-h-[48px] bg-[#2B81FF] hover:bg-[#1E63D6] disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[15px] font-semibold px-5 rounded-xl transition-colors"
         >
           {isSubmitting ? "Creating…" : "Create booking"}
         </button>
-        <a
+        <Link
           href="/ops/bookings"
-          className="text-sm text-slate-500 hover:text-slate-900"
+          className="w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center text-sm text-slate-500 hover:text-slate-900"
         >
           Cancel
-        </a>
+        </Link>
       </div>
     </form>
   );
@@ -654,7 +658,7 @@ function ExistingPatientLookup({
           type="button"
           onClick={onLookup}
           disabled={isLookingUp || !query.trim()}
-          className="bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-2"
+          className="min-h-[44px] shrink-0 bg-[#2B81FF] hover:bg-[#1E63D6] disabled:bg-slate-300 text-white text-sm font-semibold px-4 rounded-xl transition-colors inline-flex items-center justify-center gap-2"
         >
           {isLookingUp ? (
             <>
@@ -693,11 +697,13 @@ function NewPatientFields() {
   return (
     <div className="space-y-4">
       <div className="grid sm:grid-cols-2 gap-4">
-        <Field label="Full name *" name="customer_full_name" required />
+        <Field label="Full name *" name="customer_full_name" required autoComplete="name" />
         <Field
           label="Phone *"
           name="customer_phone"
           type="tel"
+          inputMode="numeric"
+          autoComplete="tel"
           required
           placeholder="10-digit Indian mobile"
         />
@@ -714,7 +720,7 @@ function NewPatientFields() {
           <select
             name="customer_gender"
             defaultValue=""
-            className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+            className="w-full bg-white border border-slate-300 rounded-lg px-3 min-h-[44px] py-2 text-base focus:outline-none focus:ring-2 focus:ring-[#2B81FF] focus:border-transparent"
           >
             <option value="">—</option>
             <option value="female">Female</option>
@@ -723,7 +729,7 @@ function NewPatientFields() {
             <option value="prefer_not_to_say">Prefer not to say</option>
           </select>
         </label>
-        <Field label="Pincode" name="customer_pincode" />
+        <Field label="Pincode" name="customer_pincode" inputMode="numeric" autoComplete="postal-code" />
       </div>
       <Field
         label="Customer address (saved on the patient record)"
@@ -777,7 +783,7 @@ function LocationField({
             onBlur={onBlur}
             disabled={isResolving}
             placeholder="https://maps.app.goo.gl/...  or  https://maps.google.com/?q=lat,lng  or  28.5355, 77.2412"
-            className="w-full bg-white border border-slate-300 rounded-lg pl-9 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent disabled:bg-slate-50 disabled:text-slate-500"
+            className="w-full bg-white border border-slate-300 rounded-lg pl-9 pr-10 py-2 min-h-[44px] text-base focus:outline-none focus:ring-2 focus:ring-[#2B81FF] focus:border-transparent disabled:bg-slate-50 disabled:text-slate-500"
           />
           {isResolving && (
             <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 animate-spin" />
@@ -945,7 +951,7 @@ function OpsBasket() {
           <button
             type="submit"
             disabled={busy || !code.trim()}
-            className="bg-slate-700 hover:bg-slate-900 disabled:bg-slate-300 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+            className="min-h-[44px] shrink-0 bg-slate-700 hover:bg-slate-900 disabled:bg-slate-300 text-white text-sm font-semibold px-4 rounded-xl transition-colors"
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Apply"}
           </button>
@@ -1027,9 +1033,9 @@ function ModeButton({
       type="button"
       onClick={onClick}
       className={
-        "text-sm font-medium px-4 py-2 rounded-lg transition-colors " +
+        "w-full min-h-[44px] text-sm font-medium px-4 rounded-xl transition-colors " +
         (active
-          ? "bg-slate-900 text-white"
+          ? "bg-[#2B81FF] text-white"
           : "bg-slate-100 text-slate-700 hover:bg-slate-200")
       }
     >
@@ -1046,6 +1052,8 @@ function Field({
   multiline,
   placeholder,
   mono,
+  inputMode,
+  autoComplete,
 }: {
   label: string;
   name: string;
@@ -1054,10 +1062,12 @@ function Field({
   multiline?: boolean;
   placeholder?: string;
   mono?: boolean;
+  inputMode?: "text" | "numeric" | "decimal" | "tel" | "search" | "email" | "url" | "none";
+  autoComplete?: string;
 }) {
   const id = `f-${name}`;
   const inputCls =
-    "w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent" +
+    "w-full bg-white border border-slate-300 rounded-lg px-3 min-h-[44px] py-2 text-base focus:outline-none focus:ring-2 focus:ring-[#2B81FF] focus:border-transparent" +
     (mono ? " font-mono" : "");
   return (
     <label htmlFor={id} className="block">
@@ -1080,6 +1090,8 @@ function Field({
           type={type}
           required={required}
           placeholder={placeholder}
+          inputMode={inputMode}
+          autoComplete={autoComplete}
           className={inputCls}
         />
       )}
