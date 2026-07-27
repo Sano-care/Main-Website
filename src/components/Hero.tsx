@@ -32,6 +32,7 @@ import { useCmsSection } from "@/hooks/useCmsSection";
 import { HOME_CONTENT } from "@/constants/cms-content";
 import { tokens } from "@/lib/design/tokens";
 import { HeroCarousel } from "./HeroCarousel";
+import { HeroAppDownloadCta } from "./marketing/HeroAppDownloadCta";
 
 // 2026-06-09: replaced single static image (HERO_IMAGE_SRC at
 // /banner/optimized/1-experienced-team.jpg) with HeroCarousel (3
@@ -122,6 +123,16 @@ export function Hero() {
               <ShieldCheck className="h-4 w-4 text-primary" aria-hidden="true" />
               MoHFW 2020 compliant
             </span>
+          </motion.div>
+
+          {/* Secondary "Download App" CTA — platform-aware (Android APK /
+              iOS coming-soon / desktop QR). Additive to the T85 PR2
+              informational hero; it does not re-introduce a booking CTA, so
+              the booking funnel (4 ServiceSections CTAs + sticky bar) is
+              untouched. Placed last so its post-mount state resolution never
+              shifts the content above it. */}
+          <motion.div {...reveal(prefersReducedMotion ? 0 : 0.25)}>
+            <HeroAppDownloadCta />
           </motion.div>
         </div>
 
