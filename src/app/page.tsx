@@ -13,6 +13,7 @@ import { FloatingWhatsApp } from "@/components/marketing/FloatingWhatsApp";
 import { HomeStickyBar } from "@/components/marketing/HomeStickyBar";
 import { ServiceSection } from "@/components/marketing/ServiceSection";
 import { AboutBand } from "@/components/marketing/AboutBand";
+import { AppDownloadBand } from "@/components/marketing/AppDownloadBand";
 import { SERVICES } from "@/lib/services/catalog";
 import { PaidConversionFire } from "@/components/PaidConversionFire";
 
@@ -110,6 +111,17 @@ export default function Home() {
           <SectionReveal>
             <SanocareAdvantage />
           </SectionReveal>
+
+          {/* App companion band — dedicated "get the Pulse app" section, its
+              own section above the footer (moved out of the hero in PR #148's
+              iteration). Same width column as AboutBand/services; px-4 mobile
+              gutter keeps the bordered card off the screen edges and clear of
+              the WhatsApp FAB / sticky bar. */}
+          <div className="mx-auto w-full max-w-[420px] px-4 md:max-w-[680px] lg:max-w-[1100px] lg:px-6">
+            <SectionReveal>
+              <AppDownloadBand />
+            </SectionReveal>
+          </div>
         </main>
 
         <Footer />
