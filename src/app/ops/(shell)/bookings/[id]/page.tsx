@@ -139,28 +139,22 @@ type ActivePartner = {
   partner_type: string;
 };
 
-// M032 — Ops Framework Phase 1: maps service_category to which
-// resource pickers should render on the booking detail page. Two
-// non-canonical labels in the brief ("nursing", "pathology") are
-// mapped onto canonical SERVICE_CATEGORIES values: chronic and
-// diagnostics respectively.
-function pickersFor(serviceCategory: string | null): {
+// Which resource pickers render on the booking detail page.
+//
+// P0 (2026-07): previously this gated on service_category (the UI mirror
+// of the removed server-action allow-lists), so a 'medic-at-home' booking
+// — the most-sold service — fell to the default and rendered NO pickers,
+// leaving ops unable to assign a medic even after the action gate was
+// removed. Per the founder's model, staffing is decided per job by ops,
+// not derived from service category, so all three pickers render on every
+// booking. Kept as a function (not inlined) so the render sites are
+// unchanged and a future per-category rule has one place to live.
+function pickersFor(): {
   doctor: boolean;
   medic: boolean;
   partner: boolean;
 } {
-  switch (serviceCategory) {
-    case "teleconsult":
-      return { doctor: true, medic: false, partner: false };
-    case "homecare":
-      return { doctor: true, medic: true, partner: false };
-    case "chronic":
-      return { doctor: true, medic: true, partner: false };
-    case "diagnostics":
-      return { doctor: false, medic: false, partner: true };
-    default:
-      return { doctor: false, medic: false, partner: false };
-  }
+  return { doctor: true, medic: true, partner: true };
 }
 
 function rupeesFor(b: BookingDetail): number | null {
@@ -446,7 +440,7 @@ export default async function BookingDetailPage({
       (assignedByUserRow as BookingDetail["assigned_by_user"]) ?? null,
   };
 
-  const pickers = pickersFor(booking.service_category);
+  const pickers = pickersFor();
 
   const rupees = rupeesFor(booking);
   const isCancelled = booking.status === "CANCELLED";
@@ -698,9 +692,8 @@ export default async function BookingDetailPage({
 
       {/* Assigned doctor — added in M4. Any ops user can assign; the
           revenue_share / commission auto-post happens later when status
-          flips to COMPLETED via the M019 trigger.
-          M032: only rendered when service_category allows a doctor
-          (teleconsult / homecare / chronic). */}
+          flips to COMPLETED via the M019 trigger. Rendered on every
+          booking (staffing is decided per job by ops — see pickersFor). */}
       {pickers.doctor && (
       <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
         <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-3">
@@ -770,7 +763,8 @@ export default async function BookingDetailPage({
       )}
 
       {/* Assigned medic (T65 Phase 2 — medics table is canonical) —
-          shown for homecare + chronic. Mirrors the doctor block shape. */}
+          rendered on every booking (see pickersFor). Mirrors the doctor
+          block shape. */}
       {pickers.medic && (
       <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
         <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-3">
@@ -835,9 +829,9 @@ export default async function BookingDetailPage({
       </div>
       )}
 
-      {/* Assigned partner — for diagnostics only. Distinct from the
-          general-purpose "Link partner" block above which manages the
-          legacy bookings.partner_id column for any service. */}
+      {/* Assigned partner (fulfillment) — rendered on every booking (see
+          pickersFor). Distinct from the general-purpose "Link partner"
+          block above which manages the legacy bookings.partner_id column. */}
       {pickers.partner && (
       <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
         <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-3">
@@ -964,11 +958,9 @@ export default async function BookingDetailPage({
         </div>
       </div>
 
-      {/* Slice 2a — lab collection confirmation. Lab bookings don't flow
-          through the medic picker (that's gated to homecare/chronic), so
-          this is the affordance that records the phlebotomist + slot and
-          texts the patient (sanocare_lab_collection_scheduled). Only
-          shown for lab-test bookings. */}
+      {/* Slice 2a — lab collection confirmation: records the phlebotomist
+          + slot and texts the patient (sanocare_lab_collection_scheduled).
+          Only shown for lab-test bookings. */}
       {serviceCategoryToSlug(booking.service_category) === "lab-tests" && (
         <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
           <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-3">
