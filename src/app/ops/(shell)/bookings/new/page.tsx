@@ -41,7 +41,7 @@ export default async function NewBookingPage() {
   const activeDoctors = await fetchActiveDoctors();
 
   return (
-    <div className="px-8 py-8 max-w-3xl">
+    <div className="px-4 py-5 md:px-8 md:py-8 max-w-3xl">
       <Link
         href="/ops/bookings"
         className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 mb-4"
