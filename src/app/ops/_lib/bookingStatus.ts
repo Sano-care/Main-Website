@@ -51,6 +51,30 @@ export const PAYMENT_STATUS_STYLE: Record<string, string> = {
   LINK_SENT: "bg-blue-100 text-blue-800",
 };
 
-// Service categories — CHECK constraint added in migration 003.
-export const SERVICE_CATEGORIES = ["homecare", "teleconsult", "chronic", "diagnostics"] as const;
+// Service categories accepted when ops creates a booking.
+//
+// Two generations coexist (the DB CHECK was widened in M039 to accept
+// both, and existing rows use either):
+//   - legacy (migration 003): homecare, teleconsult, chronic, diagnostics
+//   - T85 slugs the website actually writes today (and the most-sold
+//     services): medic-at-home, home-visit, teleconsultation, lab-tests
+//
+// Both are listed so ops can create a booking for the current services
+// (27 of the last 30 days are 'medic-at-home') while legacy values stay
+// valid for historical rows. NOTE: createBooking's teleconsult/diagnostics
+// special-casing keys on the LEGACY values ('teleconsult'/'diagnostics'),
+// so picking the T85 'teleconsultation'/'lab-tests' slug creates a plain
+// PENDING booking without the session/lab-basket seeding — see the PR note.
+export const SERVICE_CATEGORIES = [
+  // legacy
+  "homecare",
+  "teleconsult",
+  "chronic",
+  "diagnostics",
+  // T85 slugs (website + most-sold)
+  "medic-at-home",
+  "home-visit",
+  "teleconsultation",
+  "lab-tests",
+] as const;
 export type ServiceCategory = (typeof SERVICE_CATEGORIES)[number];

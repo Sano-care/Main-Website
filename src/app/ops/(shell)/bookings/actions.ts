@@ -615,62 +615,25 @@ export async function linkPartner(formData: FormData) {
 // Ops Framework Phase 1 (M032) — resource assignment actions
 // =====================================================================
 //
-// Three actions share the same shape: read the booking, validate the
-// service_category allows this resource type, validate the target
-// resource exists + is active, UPDATE with both the resource id and the
-// (assigned_at, assigned_by) audit columns. Empty target unassigns.
+// Three actions share the same shape: validate the target resource
+// exists + is active, then UPDATE with the resource id and the
+// (assigned_at, assigned_by) audit columns. Empty target unassigns and
+// clears the audit columns.
 //
-// Service-category gating (founder brief table, mapped to canonical
-// SERVICE_CATEGORIES from bookingStatus.ts):
-//   - assignDoctor:     teleconsult, homecare, chronic
-//   - assignMedic:      homecare, chronic
-//   - assignPartner:    diagnostics
+// P0 (2026-07): the previous service_category allow-lists were REMOVED.
+// They encoded a wrong assumption — that staffing is derived from the
+// service category — and rejected every real booking: the website writes
+// T85 slugs (e.g. 'medic-at-home', the most-sold service), none of which
+// were in any allow-list, so assignMedic threw on every booking and
+// bookings.medic_id was never populated across 90 bookings. Per the
+// founder's model, every booking is staffed with a doctor, a medic, a
+// GDA, or a combination — decided per job by ops, never gated on the
+// service category.
 //
-// The brief used informal labels "nursing" (mapped to chronic) and
-// "pathology" (mapped to diagnostics) — those are not canonical
-// values. The constant maps below are the single source of truth; if
-// SERVICE_CATEGORIES is extended later, update them here.
-//
-// On the doctor side: Finding 4 from the M032 Step 0 — bookings.doctor_id
-// is pre-existing and is the doctor-assignment column (no
-// assigned_doctor_id was added). The (assigned_at, assigned_by) audit
-// columns ARE new from M032 and apply to all three assignment kinds.
-//
-// On the partner side: bookings.partner_id (pre-existing) carries the
-// legacy "linked organization" concept (used by linkCustomer/linkPartner
-// for lab bookings, etc.). bookings.assigned_partner_id (new in M032)
-// is the formal "ops assigned this partner for this booking's service"
-// concept. They are intentionally separate; assignPartner writes the
-// new column, linkPartner continues to write the legacy one.
-
-const ASSIGN_DOCTOR_ALLOWED_CATEGORIES = new Set([
-  "teleconsult",
-  "homecare",
-  "chronic",
-]);
-const ASSIGN_PARAMEDIC_ALLOWED_CATEGORIES = new Set([
-  "homecare",
-  "chronic",
-]);
-const ASSIGN_PARTNER_ALLOWED_CATEGORIES = new Set(["diagnostics"]);
-
-/**
- * Read the booking's service_category for the assignment validators.
- * Throws if booking missing — caller chains revalidate after success.
- */
-async function readServiceCategory(
-  supabase: Awaited<ReturnType<typeof createOpsRSCClient>>,
-  bookingId: string,
-): Promise<string> {
-  const { data, error } = await supabase
-    .from("bookings")
-    .select("service_category")
-    .eq("id", bookingId)
-    .maybeSingle();
-  if (error) throw new Error(`Could not read booking: ${error.message}`);
-  if (!data) throw new Error(`Booking not found: ${bookingId}`);
-  return (data as { service_category: string | null }).service_category ?? "";
-}
+// Columns: doctor_id (pre-existing) is the doctor-assignment column;
+// assignPartner writes the M032 assigned_partner_id (distinct from the
+// legacy partner_id that linkPartner manages); the (assigned_at,
+// assigned_by) audit columns are shared across all three kinds.
 
 /**
  * Assign a doctor to a booking. M032 wires the (assigned_at,
@@ -700,13 +663,6 @@ export async function assignDoctor(formData: FormData) {
   if (target) {
     if (!UUID_RE.test(target)) {
       throw new Error("Invalid doctor id.");
-    }
-    // M032 gate: service_category must allow a doctor.
-    const category = await readServiceCategory(supabase, bookingId);
-    if (!ASSIGN_DOCTOR_ALLOWED_CATEGORIES.has(category)) {
-      throw new Error(
-        `Can't assign a doctor to a ${category} booking. Doctors are for teleconsult / homecare / chronic only.`,
-      );
     }
     // Re-fetch the doctor to confirm active. RLS-readable to any ops user.
     const { data: doc } = await supabase
@@ -752,7 +708,8 @@ export async function assignDoctor(formData: FormData) {
  * populated. The old assigned_paramedic_id column dropped in M054;
  * medic_id (M053) replaces it. Empty target unassigns.
  *
- * Service category must allow a medic (homecare / chronic).
+ * No service-category gate — ops staffs any booking with a medic when
+ * the job calls for one (see the header note above).
  */
 export async function assignMedic(formData: FormData) {
   const opsUser = await getCurrentOpsUser();
@@ -765,12 +722,6 @@ export async function assignMedic(formData: FormData) {
   if (target) {
     if (!UUID_RE.test(target)) {
       throw new Error("Invalid medic id.");
-    }
-    const category = await readServiceCategory(supabase, bookingId);
-    if (!ASSIGN_PARAMEDIC_ALLOWED_CATEGORIES.has(category)) {
-      throw new Error(
-        `Can't assign a medic to a ${category} booking. Medics are for homecare / chronic only.`,
-      );
     }
     const { data: medic } = await supabase
       .from("medics")
@@ -829,7 +780,8 @@ export async function assignMedic(formData: FormData) {
  * the legacy bookings.partner_id which linkPartner continues to
  * manage. Empty target unassigns.
  *
- * Service category must allow a partner (diagnostics).
+ * No service-category gate — ops assigns a partner whenever a booking
+ * needs lab/diagnostic fulfilment (see the header note above).
  *
  * Why two partner columns: bookings.partner_id is the broader
  * "linked organization" concept (lab bookings created via /api/lab/
@@ -850,12 +802,6 @@ export async function assignPartner(formData: FormData) {
   if (target) {
     if (!UUID_RE.test(target)) {
       throw new Error("Invalid partner id.");
-    }
-    const category = await readServiceCategory(supabase, bookingId);
-    if (!ASSIGN_PARTNER_ALLOWED_CATEGORIES.has(category)) {
-      throw new Error(
-        `Can't assign a partner to a ${category} booking. Partners are for diagnostics only.`,
-      );
     }
     const { data: partner } = await supabase
       .from("partners")
