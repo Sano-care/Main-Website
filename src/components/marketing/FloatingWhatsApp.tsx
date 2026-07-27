@@ -30,7 +30,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useBookingStore } from "@/store/bookingStore";
 
-import { WHATSAPP_DEEPLINK } from "@/lib/contact";
+import { buildWaHref } from "@/lib/wa/clientRef";
 
 const PREFILL_MESSAGE = "Hi, I'd like to book a Sanocare visit";
 
@@ -56,7 +56,10 @@ export function FloatingWhatsApp({ hidden = false }: FloatingWhatsAppProps) {
 
   if (!mounted || hidden || bookingSurfaceOpen) return null;
 
-  const href = `${WHATSAPP_DEEPLINK}?text=${encodeURIComponent(PREFILL_MESSAGE)}`;
+  // Computed after mount (the `!mounted` guard above returns null on the server),
+  // so reading the client-side ref token can't cause a hydration mismatch. Adds
+  // `[ref: SC-XXXXXX]` for ad-sourced visitors; unchanged prefill otherwise.
+  const href = buildWaHref(PREFILL_MESSAGE);
 
   // Compose the static decoration on the anchor itself:
   //   - drop shadow (outer + tight inner-light)
