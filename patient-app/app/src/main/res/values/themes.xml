@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Splash + window background. The real Material 3 ColorScheme is
+         configured in Theme.kt via Compose; this XML theme is needed
+         only for the launcher / activity window before Compose attaches. -->
+    <style name="Theme.SanocarePulse" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#FF2B81FF</item>
+        <item name="android:windowBackground">#FFFFFFFF</item>
+    </style>
+</resources>

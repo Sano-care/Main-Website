@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">Sanocare Pulse</string>
+
+    <!-- Login flow (Phase 0 shell). Copy locked from the web Pulse v1 login
+         screen (founder-approved through T90). The Compose screens currently
+         use literals; these strings document the locked copy + back the
+         manifest's @string/app_name. -->
+    <string name="login_phone_title">Your health, in one place</string>
+    <string name="login_phone_subtitle">We\'ll send a 6-digit code by WhatsApp. Your mobile number is all we need — no password to remember.</string>
+    <string name="login_phone_input_label">Mobile number</string>
+    <string name="login_phone_cta">Send code on WhatsApp</string>
+    <string name="login_consent">I agree to receive a one-time verification code from Sanocare on this number, and to Sanocare processing my data per the Privacy Policy.</string>
+
+    <string name="login_otp_title">Enter verification code</string>
+    <string name="login_otp_input_label">6-digit code</string>
+    <string name="login_otp_cta">Verify</string>
+    <string name="login_otp_back">Use a different number</string>
+
+    <string name="login_help">Need help? Call us at +91 97119 77782.</string>
+</resources>
