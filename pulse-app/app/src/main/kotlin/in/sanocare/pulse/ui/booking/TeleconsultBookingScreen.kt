@@ -174,9 +174,9 @@ private fun BookingForm(
         }
 
         Spacer(Modifier.height(20.dp))
-        SectionLabel("Address")
+        SectionLabel("Address (optional)")
         Spacer(Modifier.height(8.dp))
-        FormField(vm.address, { vm.address = it }, "Address (for our medical records)", singleLine = false)
+        FormField(vm.address, { vm.address = it }, "Address — optional for a video consult", singleLine = false)
 
         Spacer(Modifier.height(20.dp))
         SectionLabel("When?")

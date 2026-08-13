@@ -36,7 +36,10 @@ data class TeleconsultConfigDto(
 
 @Serializable
 data class CreateOrderRequest(
-    @SerialName("t85Slug") val t85Slug: String = "teleconsultation",
+    // No default — the caller passes PulseService.TELECONSULT.t85Slug, so the
+    // identifier is always present and explicit (belt-and-suspenders with the
+    // NetworkModule encodeDefaults fix).
+    @SerialName("t85Slug") val t85Slug: String,
 )
 
 @Serializable

@@ -7,6 +7,7 @@ import `in`.sanocare.pulse.data.network.TeleconsultApi
 import `in`.sanocare.pulse.data.network.TeleconsultBookingInput
 import `in`.sanocare.pulse.data.network.TeleconsultConfigDto
 import `in`.sanocare.pulse.data.network.TeleconsultVerifyRequest
+import `in`.sanocare.pulse.data.services.PulseService
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,7 +35,7 @@ class TeleconsultRepository @Inject constructor(
     }
 
     suspend fun createOrder(): OrderResult = runCatching {
-        val res = api.createOrder(CreateOrderRequest())
+        val res = api.createOrder(CreateOrderRequest(t85Slug = PulseService.TELECONSULT.t85Slug))
         val b = res.body()
         if (res.isSuccessful && b?.orderId != null && !b.keyId.isNullOrBlank()) {
             OrderResult.Ok(b)

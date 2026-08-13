@@ -141,13 +141,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: nameValidation.error }, { status: 400 });
     }
 
-    const manualAddress = String(booking.manual_address ?? "").trim();
-    if (manualAddress.length < 4) {
-      return NextResponse.json(
-        { error: "Please enter an address (required for teleconsultation records)." },
-        { status: 400 },
-      );
-    }
+    // Address is OPTIONAL for teleconsultation — it's a video consult, so we
+    // don't block the booking on it (the app no longer requires it). Store null
+    // when absent rather than 400-ing.
+    const manualAddressRaw = String(booking.manual_address ?? "").trim();
+    const manualAddress: string | null =
+      manualAddressRaw.length >= 4 ? manualAddressRaw : null;
 
     // === Scheduling — clamp server-side to 09:00–21:00 Asia/Kolkata ===
     const now = new Date();
@@ -171,9 +170,10 @@ export async function POST(req: NextRequest) {
       service_category: "teleconsultation",
       manual_address: manualAddress,
       gps_location: null,
-      // Teleconsult needs no dispatch, but flag that address was manual (no GPS
-      // in the app) so ops has the MoHFW context. Schedule is a typed column now.
-      ops_notes: "📍 Pulse app teleconsult — address entered manually (no GPS capture).",
+      // Teleconsult is a video consult with no dispatch; address is optional.
+      ops_notes: manualAddress
+        ? "🎥 Pulse app teleconsult (video) — address provided (no GPS capture)."
+        : "🎥 Pulse app teleconsult (video) — no address (optional for video).",
       amount: getServiceHalfRoundedUp("teleconsult"), // advance in ₹ captured now
       scheduled_for: scheduledForIso,
       status: "CONFIRMED",
