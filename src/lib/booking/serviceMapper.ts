@@ -61,13 +61,16 @@ export function t85ServiceDisplayName(slug: ServiceSlug): string {
 }
 
 /**
- * Reverse map: a value read from `bookings.service_category` (either
- * legacy or T85) → the T85 slug we display to the user. Returns null
- * for `chronic` since that's a separate product line (CareHub
- * subscriptions, not in T85's homepage catalog).
+ * Reverse map: a value read from `bookings.service_category` (either a
+ * pre-migration legacy value or a T85 slug) → the T85 slug we display.
+ * Returns null only for genuinely unknown input so callers can fall back.
  *
- * Useful for /ops or /pulse surfaces that need to render older rows in
- * T85 vocabulary without writing back to the DB.
+ * The legacy cases mirror migration `20260725150000`'s rename mapping so a
+ * row read AFTER the code deploys but BEFORE the migration runs still
+ * renders correctly. Once every row is a T85 slug the legacy arms are dead
+ * but harmless. `chronic` (discontinued) is intentionally NOT handled — it
+ * is gone from the vocabulary; an impossible stray value falls through to
+ * the null → `home-visit` fallback in normalizeServiceCategory.
  */
 export function dbToT85Slug(value: string): ServiceSlug | null {
   switch (value) {
@@ -77,21 +80,32 @@ export function dbToT85Slug(value: string): ServiceSlug | null {
     case "lab-tests":
     case "medic-at-home":
       return value;
-    // Legacy values map to their T85 equivalents. `homecare` is
-    // ambiguous (could be home-visit OR medic-at-home historically) —
-    // we default to home-visit since that's the more common service.
-    // Ops surfaces that need finer granularity should read ancillary
-    // columns (e.g. presence of `selected_tests`) to disambiguate.
+    // Legacy → T85 (matches the migration rename).
     case "homecare":
+    case "Home visit":
       return "home-visit";
     case "teleconsult":
       return "teleconsultation";
     case "diagnostics":
+    case "lab":
       return "lab-tests";
-    // Out of T85 scope — return null so callers can render a fallback.
-    case "chronic":
-      return null;
+    case "nursing":
+      return "medic-at-home";
     default:
       return null;
   }
+}
+
+/**
+ * Write-boundary normalizer: coerce ANY inbound `service_category` — a legacy
+ * value from the still-live @deprecated BookingModal, a T85 slug, empty, or
+ * junk — to one of the 4 canonical T85 slugs. NEVER returns null, so no
+ * insert can write a value the tightened CHECK (migration 20260725150000)
+ * would reject. EVERY write path to `bookings.service_category` runs through
+ * this before the insert.
+ */
+export function normalizeServiceCategory(
+  raw: string | null | undefined,
+): ServiceSlug {
+  return dbToT85Slug((raw ?? "").trim()) ?? "home-visit";
 }

@@ -202,7 +202,7 @@ describe("ensureBookingForCapturedOrder", () => {
     expect(sendOpsAlertFn).not.toHaveBeenCalled();
   });
 
-  it("service falls back to 'unknown' when order notes are empty", async () => {
+  it("service falls back to a valid slug (not 'unknown') when order notes are empty", async () => {
     const { client, rows } = makeDb([]);
     const r = await ensureBookingForCapturedOrder(captureArgs(), {
       supabase: client,
@@ -211,7 +211,11 @@ describe("ensureBookingForCapturedOrder", () => {
       now: NOW,
     });
     expect(r.action).toBe("reconciliation_created");
-    expect(rows[0].service_category).toBe("unknown");
+    // normalizeServiceCategory("") → 'home-visit' so the stub insert can't
+    // violate the tightened CHECK (migration 20260725150000). Never 'unknown'.
+    expect(rows[0].service_category).toBe("home-visit");
+    expect(["home-visit", "teleconsultation", "lab-tests", "medic-at-home"])
+      .toContain(rows[0].service_category);
   });
 
   it("unique-index race (23505 on insert) → swallowed as success, no alert", async () => {

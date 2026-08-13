@@ -27,6 +27,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { sendOpsAlert } from "@/lib/whatsapp/opsAlert";
+import { normalizeServiceCategory } from "@/lib/booking/serviceMapper";
 
 /**
  * Marker prefixing `ops_notes` on any booking created by the webhook backstop
@@ -119,8 +120,13 @@ export async function ensureBookingForCapturedOrder(
   const notes = await deps
     .fetchOrderNotes(args.orderId)
     .catch((): Record<string, string> => ({}));
-  const service =
-    (notes.t85_slug || notes.service_category || "").trim() || "unknown";
+  // Normalize to a canonical T85 slug: the order notes may carry a T85 slug
+  // (service-led/lab orders) or a legacy service_category (hero-booking
+  // orders), or nothing. Must be a valid slug so the reconciliation insert
+  // passes the tightened CHECK (migration 20260725150000) — no 'unknown'.
+  const service = normalizeServiceCategory(
+    notes.t85_slug || notes.service_category || "",
+  );
   const phone = (args.contact ?? "").trim() || "unknown";
   const amountRupees = Math.round(args.amountPaise) / 100;
 

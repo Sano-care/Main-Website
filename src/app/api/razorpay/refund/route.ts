@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { issueRefund, RefundError, type PaymentKind } from "@/lib/razorpay-refund";
+import { serviceCategoryToSlug } from "@/lib/aarogya/labels";
 
 export const runtime = "nodejs";
 
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
     }
 
     let paymentKind: PaymentKind;
-    if (booking.service_category === "diagnostics") {
+    if (serviceCategoryToSlug(booking.service_category) === "lab-tests") {
       if (
         booking.report_payment_status === "CAPTURED" &&
         booking.report_razorpay_payment_id

@@ -61,10 +61,11 @@ export function getBookingNextStep(slug: ServiceSlug): string {
 }
 
 /**
- * Normalize a raw `bookings.service_category` (legacy OR T85) to a
- * `ServiceSlug`. Falls back to `home-visit` for unmappable values
- * (`chronic`, unknown) so a patient-facing send never throws on a legacy
- * row — the patient still gets a coherent message and ops has the row.
+ * Normalize a raw `bookings.service_category` (a T85 slug, or a legacy
+ * value on a row read before migration 20260725150000 runs) to a
+ * `ServiceSlug`. Falls back to `home-visit` for any unmappable value so a
+ * patient-facing send never throws — the patient still gets a coherent
+ * message and ops has the row.
  */
 export function serviceCategoryToSlug(raw: string | null | undefined): ServiceSlug {
   return dbToT85Slug((raw ?? "").trim()) ?? "home-visit";

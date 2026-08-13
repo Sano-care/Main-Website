@@ -81,7 +81,8 @@ describe("label helpers", () => {
     expect(serviceCategoryToSlug("diagnostics")).toBe("lab-tests");
     expect(serviceCategoryToSlug("homecare")).toBe("home-visit");
     expect(serviceCategoryToSlug("teleconsult")).toBe("teleconsultation");
-    expect(serviceCategoryToSlug("chronic")).toBe("home-visit"); // fallback
+    expect(serviceCategoryToSlug("nursing")).toBe("medic-at-home");
+    expect(serviceCategoryToSlug("an-unknown-value")).toBe("home-visit"); // fallback
     expect(serviceCategoryToSlug(null)).toBe("home-visit"); // fallback
   });
 

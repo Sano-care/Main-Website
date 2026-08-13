@@ -16,6 +16,7 @@ import {
 } from "@/lib/booking/customerLink";
 import {
   dbToT85Slug,
+  normalizeServiceCategory,
   t85ServiceDisplayName,
   t85ToPricingKey,
 } from "@/lib/booking/serviceMapper";
@@ -152,9 +153,12 @@ export async function POST(req: NextRequest) {
     const t85Slug = (VALID_T85_SLUGS as string[]).includes(t85SlugRaw)
       ? (t85SlugRaw as ServiceSlug)
       : null;
-    const persistedServiceCategory = t85Slug
-      ? t85Slug
-      : String(booking.service_category || "").trim();
+    // The T85 modal sends a t85Slug; the still-live @deprecated BookingModal
+    // sends only a legacy service_category (homecare / nursing / teleconsult).
+    // Normalize either to a canonical T85 slug so the tightened CHECK
+    // (migration 20260725150000) can never reject the insert.
+    const persistedServiceCategory: string =
+      t85Slug ?? normalizeServiceCategory(booking.service_category);
     const persistedFeePaise = t85Slug
       ? getServiceHalfRoundedUp(t85ToPricingKey(t85Slug)) * 100
       : 24_900; // Legacy ₹249 flat — unchanged for existing callers.

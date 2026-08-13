@@ -57,8 +57,8 @@ type SessionLogRow = {
 function SignalCell({ value }: { value: boolean | null }) {
   // Tri-state: true → green check, false → grey dash circle, null → red X.
   // The view emits null when the joined session simply doesn't exist
-  // (non-teleconsult bookings — homecare / chronic / diagnostics rows
-  // appear here because the FROM is bookings).
+  // (non-teleconsultation bookings — home-visit / lab-tests / medic-at-home
+  // rows appear here because the FROM is bookings).
   if (value === true) {
     return <CheckCircle2 className="w-4 h-4 text-emerald-600 inline" />;
   }

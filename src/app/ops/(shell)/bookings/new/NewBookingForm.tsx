@@ -11,7 +11,10 @@ import {
   resolveShortMapsLink,
   type CustomerLookupResult,
 } from "../actions";
-import { SERVICE_CATEGORIES } from "../../../_lib/bookingStatus";
+import {
+  SERVICE_CATEGORIES,
+  SERVICE_CATEGORY_LABELS,
+} from "../../../_lib/bookingStatus";
 
 type Mode = "existing" | "new";
 
@@ -199,12 +202,12 @@ export function NewBookingForm({
     mode === "existing" ? matched !== null : true; // for "new", server validates fields
   const locationReady = parsedLocation !== null;
   const diagnosticsBasketReady =
-    service !== "diagnostics" || selectedTests.length > 0;
+    service !== "lab-tests" || selectedTests.length > 0;
   // Teleconsult: doctor selection required. The DB and server action also
   // enforce this — the consultation_session FK requires a doctor — but
   // we gate at the form level too so ops sees an explicit "pick a
   // doctor" before submit.
-  const teleconsultReady = service !== "teleconsult" || doctorId !== "";
+  const teleconsultReady = service !== "teleconsultation" || doctorId !== "";
   const selectedDoctor = useMemo(
     () => activeDoctors.find((d) => d.id === doctorId) ?? null,
     [activeDoctors, doctorId],
@@ -296,7 +299,7 @@ export function NewBookingForm({
     if (mode === "existing" && matched) {
       formData.set("customer_id", matched.id);
     }
-    if (service === "diagnostics") {
+    if (service === "lab-tests") {
       formData.set("selected_tests", JSON.stringify(selectedTests));
       if (appliedCoupon) {
         formData.set(
@@ -311,7 +314,7 @@ export function NewBookingForm({
     }
     // C2: teleconsult-only — inject the picked doctor id. The action
     // validates doctor_id presence + active state + duty_room_join_url.
-    if (service === "teleconsult" && doctorId) {
+    if (service === "teleconsultation" && doctorId) {
       formData.set("doctor_id", doctorId);
     }
 
@@ -395,7 +398,7 @@ export function NewBookingForm({
             </option>
             {SERVICE_CATEGORIES.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {SERVICE_CATEGORY_LABELS[s]}
               </option>
             ))}
           </select>
@@ -403,7 +406,7 @@ export function NewBookingForm({
       </fieldset>
 
       {/* ============================== Teleconsult-only fields (C2) ============================== */}
-      {service === "teleconsult" && (
+      {service === "teleconsultation" && (
         <fieldset className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
           <legend className="px-2 text-[11px] font-mono uppercase tracking-wider text-slate-500">
             Teleconsultation
@@ -458,7 +461,7 @@ export function NewBookingForm({
       )}
 
       {/* ============================== Diagnostics basket ============================== */}
-      {service === "diagnostics" && (
+      {service === "lab-tests" && (
         <fieldset className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
           <legend className="px-2 text-[11px] font-mono uppercase tracking-wider text-slate-500">
             Lab tests
@@ -517,7 +520,7 @@ export function NewBookingForm({
             name="scheduled_for"
             type="datetime-local"
           />
-          {service !== "diagnostics" && (
+          {service !== "lab-tests" && (
             <Field
               label="Amount (₹)"
               name="amount"
@@ -541,10 +544,10 @@ export function NewBookingForm({
         <p className="text-xs text-slate-500 pt-1">
           Status starts at{" "}
           <span className="font-mono">
-            {service === "diagnostics" ? "PENDING_COLLECTION" : "PENDING"}
+            {service === "lab-tests" ? "PENDING_COLLECTION" : "PENDING"}
           </span>
           .
-          {service === "teleconsult" && (
+          {service === "teleconsultation" && (
             <>
               {" "}A consultation session + tokened WhatsApp join link are
               created automatically.

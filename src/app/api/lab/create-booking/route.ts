@@ -114,7 +114,9 @@ export async function POST(req: NextRequest) {
     .insert({
       patient_name: patientName,
       phone: submittedPhone,
-      service_category: "diagnostics",
+      // Canonical T85 slug — the legacy value was 'diagnostics' (retired by
+      // migration 20260725150000).
+      service_category: "lab-tests",
       manual_address: address,
       gps_location: body.gps_location ?? null,
       ops_notes: opsNotesMarker,
