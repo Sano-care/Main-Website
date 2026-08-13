@@ -54,6 +54,7 @@ import `in`.sanocare.pulse.theme.SanocareBlueSoft
 import `in`.sanocare.pulse.ui.components.SanocareLockup
 import `in`.sanocare.pulse.ui.family.FamilyScreen
 import `in`.sanocare.pulse.ui.booking.TeleconsultBookingScreen
+import `in`.sanocare.pulse.ui.booking.MedicCartScreen
 import `in`.sanocare.pulse.ui.home.HomeV2Screen
 import `in`.sanocare.pulse.ui.profile.ProfileScreen
 import `in`.sanocare.pulse.ui.records.BookingsTab
@@ -85,6 +86,9 @@ fun MainShell(
     // PB4a — native teleconsult booking, launched from the Home "Talk to a doctor"
     // card. Takes over the content area (bottom nav stays); Done → Bookings tab.
     var showTeleconsult by remember { mutableStateOf(false) }
+    // PB5b — native medic-at-home cart, launched from the Home "Book a medic"
+    // card. Same takeover pattern; Done → Bookings tab.
+    var showMedicCart by remember { mutableStateOf(false) }
 
     val firstName = customer.fullName?.trim()?.split(" ")?.firstOrNull()
 
@@ -105,8 +109,8 @@ fun MainShell(
             NavigationBar(containerColor = Paper) {
                 Tab.entries.forEach { t ->
                     NavigationBarItem(
-                        selected = tab == t && !showFamily && !showTeleconsult,
-                        onClick = { showFamily = false; showTeleconsult = false; tab = t },
+                        selected = tab == t && !showFamily && !showTeleconsult && !showMedicCart,
+                        onClick = { showFamily = false; showTeleconsult = false; showMedicCart = false; tab = t },
                         icon = { Icon(t.icon, contentDescription = t.label) },
                         label = { Text(t.label, fontSize = 11.sp) },
                         colors = NavigationBarItemDefaults.colors(
@@ -128,6 +132,12 @@ fun MainShell(
                     onClose = { showTeleconsult = false },
                     onDone = { showTeleconsult = false; tab = Tab.BOOKINGS },
                 )
+            } else if (showMedicCart) {
+                MedicCartScreen(
+                    prefillPhone = customer.phone,
+                    onClose = { showMedicCart = false },
+                    onDone = { showMedicCart = false; tab = Tab.BOOKINGS },
+                )
             } else if (showFamily) {
                 FamilyScreen(onBack = { showFamily = false })
             } else {
@@ -137,6 +147,7 @@ fun MainShell(
                         Tab.HOME -> HomeV2Screen(
                             firstName = firstName,
                             onBookTeleconsult = { showTeleconsult = true },
+                            onBookMedic = { showMedicCart = true },
                         )
                         Tab.BOOKINGS -> BookingsTab(
                             onUnauthorized = onSignOut,

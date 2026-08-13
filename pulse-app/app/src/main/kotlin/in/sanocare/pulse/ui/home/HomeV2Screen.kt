@@ -85,7 +85,7 @@ private val SERVICES = listOf(
 )
 
 @Composable
-fun HomeV2Screen(firstName: String?, onBookTeleconsult: () -> Unit) {
+fun HomeV2Screen(firstName: String?, onBookTeleconsult: () -> Unit, onBookMedic: () -> Unit) {
     val vm: HomeViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
     val refreshing by vm.refreshing.collectAsState()
@@ -113,7 +113,7 @@ fun HomeV2Screen(firstName: String?, onBookTeleconsult: () -> Unit) {
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 ServiceCard(SERVICES[2], Modifier.weight(1f))
-                ServiceCard(SERVICES[3], Modifier.weight(1f))
+                ServiceCard(SERVICES[3], Modifier.weight(1f), onClick = onBookMedic)
             }
 
             Spacer(Modifier.height(20.dp))
