@@ -57,7 +57,10 @@ async function fetchLabBookings(): Promise<LabBookingRow[] | null> {
     .select(
       "id, created_at, patient_name, phone, manual_address, status, selected_tests, test_total_paise, report_payment_status, lab_partner_order_id"
     )
-    .eq("service_category", "diagnostics")
+    // 'lab-tests' is canonical; the legacy 'diagnostics'/'lab' values are
+    // still matched so the dashboard isn't empty in the window between this
+    // deploy and migration 20260725150000 running.
+    .in("service_category", ["lab-tests", "diagnostics", "lab"])
     .order("created_at", { ascending: false })
     .limit(200);
 

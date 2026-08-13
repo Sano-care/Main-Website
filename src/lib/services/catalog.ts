@@ -9,11 +9,9 @@
 //
 // Service slugs (`home-visit`, `teleconsultation`, `lab-tests`,
 // `medic-at-home`) are the T85 public identifiers used by the booking
-// modal (PR4). The DB column `bookings.service_category` still uses
-// the legacy enum `homecare | teleconsult | chronic | diagnostics`
-// from migration 003. PR4 will map the T85 slug → legacy slug at the
-// boundary (no DB migration in T85 unless founder picks option (b)
-// at the PR4 plan-gate).
+// modal. Migration 20260725150000 made these the ONLY values allowed in
+// `bookings.service_category` (every legacy value renamed + CHECK tightened),
+// so the slug is now written straight through — no boundary mapping.
 //
 // PR2.5 stopgap (between PR2 and PR4): ServiceSection's coral CTA
 // no longer routes to `/book?service={slug}` — that route never

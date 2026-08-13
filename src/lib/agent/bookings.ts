@@ -2,9 +2,10 @@
 // Channel-agnostic (no WhatsApp specifics) so future adapters reuse it.
 //
 // bookings.phone is dirty in prod (mix of +91…, 91…, spaces/dashes), so all
-// matching is on the LAST 10 DIGITS. service_category is also dirty
-// (homecare / home-visit / "Home visit" / nursing / chronic / diagnostics /
-// lab / lab-tests / teleconsult) → fuzzy-mapped to the tool service enum.
+// matching is on the LAST 10 DIGITS. service_category is now one of the 4
+// T85 slugs (home-visit / teleconsultation / lab-tests / medic-at-home;
+// migration 20260725150000) → fuzzy-mapped to the tool service enum. The
+// fuzzy match also tolerates any legacy row read before the migration runs.
 
 import { supabaseAdmin } from "@/lib/supabase-server";
 
@@ -47,8 +48,10 @@ export function mapServiceCategory(raw: string | null | undefined): ToolService 
   const s = (raw ?? "").toLowerCase();
   if (s.includes("tele")) return "teleconsult";
   if (s.includes("lab") || s.includes("diagn")) return "lab";
-  if (s.includes("nurs")) return "home_nursing";
-  return "home_visit"; // homecare / home-visit / chronic / default
+  // medic-at-home (single procedure, no doctor) is nursing-like; legacy
+  // 'nursing' also lands here.
+  if (s.includes("nurs") || s.includes("medic")) return "home_nursing";
+  return "home_visit"; // home-visit / default
 }
 
 export interface BookingLookup {

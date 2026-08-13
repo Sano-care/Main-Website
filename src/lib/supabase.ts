@@ -64,15 +64,12 @@ export type Medic = {
 // Status types
 export type BookingStatus = 'PENDING' | 'DISPATCHED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
-// Service label mapping - supports both new and legacy service categories
+// Service label mapping — the 4 canonical T85 slugs (migration
+// 20260725150000). Every legacy key (homecare / teleconsult / chronic /
+// nursing / diagnostics / lab) is retired.
 export const SERVICE_LABELS: Record<string, string> = {
-  // New service categories (Sanocare NOW)
-  'homecare': 'Homecare',
-  'teleconsult': 'Teleconsultation',
-  'chronic': 'Chronic Disease Management',
-  'diagnostics': 'Early Risk Diagnostics',
-  // Legacy categories (backward compatibility)
-  'home-visit': 'Doctor Home Visit',
-  'nursing': 'Nursing & Paramedic',
-  'lab': 'Lab Sample Collection',
+  'home-visit': 'Home Visit',
+  'teleconsultation': 'Teleconsultation',
+  'lab-tests': 'Lab Tests',
+  'medic-at-home': 'Medic at Home',
 };

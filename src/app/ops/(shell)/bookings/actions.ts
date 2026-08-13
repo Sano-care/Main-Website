@@ -935,7 +935,7 @@ export async function createBooking(formData: FormData) {
     full_name: string;
     duty_room_join_url: string | null;
   } | null = null;
-  if (service_category === "teleconsult") {
+  if (service_category === "teleconsultation") {
     const doctor_id = getString(formData, "doctor_id");
     if (!doctor_id || !UUID_RE.test(doctor_id)) {
       throw new Error(
@@ -999,7 +999,7 @@ export async function createBooking(formData: FormData) {
   // ---- Diagnostics-only fields ----
   let selectedTests: SelectedTest[] = [];
   let appliedCoupon: AppliedCouponPayload | null = null;
-  if (service_category === "diagnostics") {
+  if (service_category === "lab-tests") {
     const parsedTests = getJSON<SelectedTest[]>(formData, "selected_tests");
     if (!parsedTests || !Array.isArray(parsedTests) || parsedTests.length === 0) {
       throw new Error("Pick at least one lab test for a diagnostics booking.");
@@ -1146,7 +1146,7 @@ export async function createBooking(formData: FormData) {
   // ---- Build the row to insert ----
   // For diagnostics we mirror /api/lab/create-booking: status starts at
   // PENDING_COLLECTION, lab_partner / report_payment_status seeded.
-  const isDiagnostics = service_category === "diagnostics";
+  const isDiagnostics = service_category === "lab-tests";
   const initialStatus: BookingStatus = isDiagnostics ? "PENDING_COLLECTION" : "PENDING";
 
   type BookingInsert = {

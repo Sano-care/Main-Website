@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getRazorpayClient } from "@/lib/razorpay";
 import { generateReportUnlockToken } from "@/lib/lab-tokens";
+import { serviceCategoryToSlug } from "@/lib/aarogya/labels";
 
 export const runtime = "nodejs";
 
@@ -82,9 +83,9 @@ export async function POST(req: NextRequest) {
     if (fetchError || !booking) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
-    if (booking.service_category !== "diagnostics") {
+    if (serviceCategoryToSlug(booking.service_category) !== "lab-tests") {
       return NextResponse.json(
-        { error: "Not a lab/diagnostics booking" },
+        { error: "Not a lab-tests booking" },
         { status: 400 }
       );
     }

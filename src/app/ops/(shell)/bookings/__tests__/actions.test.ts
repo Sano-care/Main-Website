@@ -8,7 +8,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
-vi.mock("@/lib/consult/createSession", () => ({ createTeleconsultSession: vi.fn() }));
+vi.mock("@/lib/consult/createSession", () => ({
+  createTeleconsultSession: vi.fn(async () => ({
+    joinToken: "join-tok",
+    sessionId: "sess-1",
+  })),
+}));
 vi.mock("@/lib/consult/meta", () => ({ sendConsultJoinLink: vi.fn() }));
 vi.mock("@/lib/aarogya/meta", () => ({
   sendVisitComplete: vi.fn(),
@@ -29,8 +34,9 @@ vi.mock("@/lib/supabase-rsc", () => ({
   createOpsRSCClient: vi.fn(async () => clientForTest),
 }));
 
-import { assignDoctor, assignMedic } from "../actions";
+import { assignDoctor, assignMedic, createBooking } from "../actions";
 import { SERVICE_CATEGORIES } from "../../../_lib/bookingStatus";
+import { createTeleconsultSession } from "@/lib/consult/createSession";
 
 type Resources = Record<string, Record<string, unknown> | null>;
 
@@ -127,15 +133,130 @@ describe("assignDoctor + assignMedic on the SAME booking", () => {
   });
 });
 
-describe("SERVICE_CATEGORIES — ops can create a 'medic-at-home' booking", () => {
-  it("accepts the T85 slugs the website writes", () => {
-    for (const slug of ["medic-at-home", "home-visit", "teleconsultation", "lab-tests"]) {
-      expect(SERVICE_CATEGORIES as readonly string[]).toContain(slug);
+describe("SERVICE_CATEGORIES — exactly the 4 T85 slugs, no legacy", () => {
+  it("is exactly the 4 canonical slugs", () => {
+    expect([...SERVICE_CATEGORIES].sort()).toEqual(
+      ["home-visit", "lab-tests", "medic-at-home", "teleconsultation"],
+    );
+  });
+  it("no longer contains any retired value (migration 20260725150000)", () => {
+    for (const legacy of ["homecare", "teleconsult", "chronic", "nursing", "diagnostics", "lab"]) {
+      expect(SERVICE_CATEGORIES as readonly string[]).not.toContain(legacy);
     }
   });
-  it("keeps the legacy values valid for existing rows", () => {
-    for (const legacy of ["homecare", "teleconsult", "chronic", "diagnostics"]) {
-      expect(SERVICE_CATEGORIES as readonly string[]).toContain(legacy);
+});
+
+// Richer fake supabase for createBooking: reads (doctors/customers) +
+// bookings insert (payload captured) + next_code rpc.
+function makeCreateSupabase(over: Resources = {}) {
+  const inserts: { table: string; payload: Record<string, unknown> }[] = [];
+  const resources: Resources = {
+    doctors: {
+      id: UUID,
+      full_name: "Dr A",
+      duty_room_join_url: "https://duty.example/x",
+      is_active: true,
+    },
+    customers: { id: UUID, full_name: "Pat", phone: "+919812345678" },
+    ...over,
+  };
+  const client = {
+    from(table: string) {
+      const node = {
+        select() {
+          return node;
+        },
+        eq() {
+          return node;
+        },
+        maybeSingle: async () => ({ data: resources[table] ?? null, error: null }),
+        insert(payload: Record<string, unknown>) {
+          inserts.push({ table, payload });
+          return {
+            select: () => ({
+              single: async () => ({ data: { id: "booking-1" }, error: null }),
+            }),
+          };
+        },
+      };
+      return node;
+    },
+    rpc: async () => ({ data: "SAN-C-999", error: null }),
+  };
+  return { client, inserts };
+}
+
+const GPS = JSON.stringify({ lat: 28.5, lng: 77.2, accuracy: 10 });
+
+describe("createBooking — T85 special-casing (item 4 bug)", () => {
+  it("teleconsultation creates a consultation_session", async () => {
+    const sb = makeCreateSupabase();
+    clientForTest = sb.client;
+    await createBooking(
+      fd({
+        customer_mode: "existing",
+        customer_id: UUID,
+        service_category: "teleconsultation",
+        doctor_id: UUID,
+        gps_location: GPS,
+      }),
+    );
+    // The real bug: picking teleconsultation must build the video session.
+    expect(createTeleconsultSession).toHaveBeenCalledTimes(1);
+    const bk = sb.inserts.find((i) => i.table === "bookings")!.payload;
+    expect(bk.service_category).toBe("teleconsultation");
+    expect(bk.doctor_id).toBe(UUID);
+  });
+
+  it("lab-tests seeds lab_partner + PENDING_COLLECTION, no session", async () => {
+    const sb = makeCreateSupabase();
+    clientForTest = sb.client;
+    await createBooking(
+      fd({
+        customer_mode: "existing",
+        customer_id: UUID,
+        service_category: "lab-tests",
+        gps_location: GPS,
+        selected_tests: JSON.stringify([{ code: "CBC", name: "CBC", price: 300 }]),
+      }),
+    );
+    const bk = sb.inserts.find((i) => i.table === "bookings")!.payload;
+    expect(bk.service_category).toBe("lab-tests");
+    expect(bk.lab_partner).toBe("pathcore");
+    expect(bk.status).toBe("PENDING_COLLECTION");
+    expect(bk.report_payment_status).toBe("NOT_DUE");
+    expect(createTeleconsultSession).not.toHaveBeenCalled();
+  });
+
+  it("home-visit + medic-at-home create a plain PENDING booking", async () => {
+    for (const slug of ["home-visit", "medic-at-home"]) {
+      const sb = makeCreateSupabase();
+      clientForTest = sb.client;
+      await createBooking(
+        fd({
+          customer_mode: "existing",
+          customer_id: UUID,
+          service_category: slug,
+          gps_location: GPS,
+        }),
+      );
+      const bk = sb.inserts.find((i) => i.table === "bookings")!.payload;
+      expect(bk.service_category).toBe(slug);
+      expect(bk.status).toBe("PENDING");
     }
+  });
+
+  it("rejects a retired service_category (can't create a legacy booking)", async () => {
+    clientForTest = makeCreateSupabase().client;
+    await expect(
+      createBooking(
+        fd({
+          customer_mode: "existing",
+          customer_id: UUID,
+          service_category: "homecare",
+          gps_location: GPS,
+        }),
+      ),
+    ).rejects.toThrow(/Invalid service/);
   });
 });

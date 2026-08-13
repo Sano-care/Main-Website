@@ -61,7 +61,7 @@ describe("isLabServiceCategory (C1 mirror)", () => {
   });
 
   it("does not flag clinical medic categories", () => {
-    for (const c of ["home-visit", "homecare", "nursing", "medic-at-home", "chronic"]) {
+    for (const c of ["home-visit", "medic-at-home", "teleconsultation"]) {
       expect(isLabServiceCategory(c)).toBe(false);
     }
   });
