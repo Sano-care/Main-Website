@@ -83,4 +83,8 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideTeleconsultApi(retrofit: Retrofit): TeleconsultApi = retrofit.create(TeleconsultApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideMedicApi(retrofit: Retrofit): MedicApi = retrofit.create(MedicApi::class.java)
 }
