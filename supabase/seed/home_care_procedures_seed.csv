@@ -1,0 +1,55 @@
+display_order,code,name,category,tier,rx_required,is_base_included,absolute_price_paise,delta_paise,price_type,per_unit_addon_paise,hourly_addon_paise,consumables_borne_by,consumables_note,duration_min,description
+1,intramuscular_im_injection,Intramuscular (IM) injection,Injections & Infusions,base,case_by_case,true,19900,0,fixed,,,patient,Either,15,"Administer IM medication; site selection, aseptic technique"
+2,subcutaneous_sc_injection,Subcutaneous (SC) injection,Injections & Infusions,base,case_by_case,true,19900,0,fixed,,,patient,Either,10,"SC drug e.g. insulin, LMWH; rotate sites"
+3,iv_injection,IV Injection,Injections & Infusions,standard,case_by_case,false,29900,10000,fixed,,,patient,Patient,Variable,Fixed Cost plus hourly charges
+4,iv_drip,IV Drip,Injections / IV therapy,standard,case_by_case,false,39900,20000,per_drip_hourly,,15000,patient,Patient (IV set/fluid) unless medic carries,60,IV fluid/drip administration. Priced per drip; medic bills additional hours at visit.
+5,basic_dressing_minor_cut_bruise_abrasion,Basic dressing (minor cut/bruise/abrasion),Wound & Skin Care,standard,no,false,29900,10000,fixed,,,patient,Either,15,Clean & dress a minor wound
+6,simple_wound_dressing,Simple wound dressing,Wound & Skin Care,standard,case_by_case,false,39900,20000,fixed,,,patient,Either,20,Clean & redress uncomplicated wound
+7,complex_large_wound_dressing,Complex / large wound dressing,Wound & Skin Care,advanced,yes,false,59900,40000,fixed,,,patient,Sanocare,45,Multi-layer dressing of large/complex wound
+8,post_operative_surgical_wound_dressing,Post-operative surgical wound dressing,Wound & Skin Care,advanced,yes,false,59900,40000,fixed,,,patient,Sanocare,30,Aseptic post-op dressing; wound assessment
+9,suture_removal,Suture removal,Wound & Skin Care,advanced,yes,false,39900,20000,per_unit_addon,10000,,patient,Sanocare,30,Remove sutures; assess healing
+10,staple_removal,Staple removal,Wound & Skin Care,advanced,yes,false,39900,20000,per_unit_addon,10000,,patient,Sanocare,20,Remove surgical staples with remover
+11,surgical_drain_care_output_monitoring,Surgical drain care & output monitoring,Wound & Skin Care,advanced,yes,false,79900,60000,fixed,,,patient,Sanocare,20,"Empty/measure drain, secure, chart output"
+12,surgical_drain_removal,Surgical drain removal,Wound & Skin Care,advanced,yes,false,79900,60000,fixed,,,patient,Sanocare,20,Remove drain per order; dress site
+13,pressure_ulcer_bedsore_assessment_dressing,Pressure ulcer / bedsore assessment & dressing,Wound & Skin Care,advanced,case_by_case,false,59900,40000,fixed,,,patient,Sanocare,45,"Stage, clean & dress pressure ulcer"
+14,diabetic_foot_ulcer_dressing,Diabetic foot ulcer dressing,Wound & Skin Care,expert,yes,false,99900,80000,from,,,patient,Sanocare,45,Assess & dress diabetic foot ulcer
+15,wound_irrigation_cleaning,Wound irrigation / cleaning,Wound & Skin Care,advanced,case_by_case,false,49900,30000,fixed,,,patient,Sanocare,20,"Irrigate wound bed, remove debris"
+16,urinary_catheterization_male_foley,Urinary catheterization - Male (Foley),"Catheter, Elimination & Ostomy",advanced,yes,false,99900,80000,fixed,,,patient,Sanocare,30,Insert Foley (male); aseptic
+17,urinary_catheterization_female_foley,Urinary catheterization - Female (Foley),"Catheter, Elimination & Ostomy",advanced,yes,false,79900,60000,fixed,,,patient,Sanocare,20,Insert Foley (female); aseptic
+18,foley_catheter_change_replacement,Foley catheter change / replacement,"Catheter, Elimination & Ostomy",advanced,yes,false,79900,60000,fixed,,,patient,Sanocare,20,Remove & replace indwelling catheter
+19,urinary_catheter_care_hygiene_in_situ,Urinary catheter care / hygiene (in situ),"Catheter, Elimination & Ostomy",advanced,no,false,79900,60000,fixed,,,patient,Either,15,"Meatal care, drainage-bag hygiene"
+20,urinary_catheter_removal,Urinary catheter removal,"Catheter, Elimination & Ostomy",advanced,case_by_case,false,79900,60000,fixed,,,patient,Sanocare,10,Deflate balloon & remove catheter
+21,bladder_irrigation_washout,Bladder irrigation / washout,"Catheter, Elimination & Ostomy",advanced,yes,false,99900,80000,fixed,,,patient,Sanocare,30,Manual/continuous bladder irrigation
+22,suprapubic_catheter_care_change,Suprapubic catheter care & change,"Catheter, Elimination & Ostomy",expert,yes,false,99900,80000,from,,,patient,Sanocare,30,SPC dressing & change
+23,enema_administration,Enema administration,"Catheter, Elimination & Ostomy",advanced,case_by_case,false,79900,60000,fixed,,,patient,Either,30,Administer evacuant/retention enema
+24,bowel_wash_colonic_irrigation,Bowel wash / colonic irrigation,"Catheter, Elimination & Ostomy",advanced,yes,false,99900,80000,fixed,,,patient,Sanocare,45,Colonic washout per order
+25,manual_evacuation_of_impacted_stool,Manual evacuation of impacted stool,"Catheter, Elimination & Ostomy",expert,yes,false,99900,80000,from,,,patient,Sanocare,30,Digital removal of faecal impaction
+26,colostomy_ileostomy_bag_change_care,Colostomy / Ileostomy bag change & care,"Catheter, Elimination & Ostomy",expert,no,false,139900,120000,from,,,patient,Either,30,Change stoma appliance; peristomal skin care
+27,oxygen_therapy_setup_monitoring,Oxygen therapy setup & monitoring,Respiratory Care,advanced,case_by_case,false,99900,80000,fixed,,,patient,Patient,15,"Set up O2 source, titrate to SpO2, monitor"
+28,nebulization,Nebulization,Respiratory Care,base,case_by_case,true,19900,0,fixed,,,patient,Patient,15,Administer nebulised medication
+29,pulse_oximetry_spo2_monitoring,Pulse oximetry (SpO2) monitoring,Respiratory Care,base,no,true,19900,0,fixed,,,patient,Sanocare,5,Measure & record oxygen saturation
+30,cpap_bipap_setup_monitoring_assist,CPAP / BiPAP setup & monitoring assist,Respiratory Care,advanced,case_by_case,false,49900,30000,fixed,,,patient,Patient,20,"Assist non-invasive ventilation setup, mask fit"
+31,chest_physiotherapy_postural_drainage,Chest physiotherapy / postural drainage,Respiratory Care,standard,case_by_case,false,49900,30000,fixed,,,patient,-,30,"Percussion, positioning, secretion clearance"
+32,tracheostomy_care_suctioning,Tracheostomy care & suctioning,Respiratory Care,expert,yes,false,119900,100000,from,,,patient,Sanocare,30,"Stoma care, inner-cannula clean, suction"
+33,tracheostomy_tube_change,Tracheostomy tube change,Respiratory Care,expert,yes,false,119900,100000,from,,,patient,Sanocare,30,Change tracheostomy tube
+34,home_ventilator_care_monitoring,Home ventilator care & monitoring,Respiratory Care,expert,yes,false,119900,100000,from,,,patient,Patient,,"Monitor ventilated patient, circuit care"
+35,ryles_nasogastric_ng_tube_insertion,Ryles / Nasogastric (NG) tube insertion,Feeding & Nutrition,advanced,yes,false,99900,80000,fixed,,,patient,Sanocare,30,Insert NG tube; confirm position
+36,ng_tube_removal,NG tube removal,Feeding & Nutrition,standard,case_by_case,false,49900,30000,fixed,,,patient,Sanocare,10,Remove NG tube
+37,total_parenteral_nutrition_tpn_administration,Total parenteral nutrition (TPN) administration,Feeding & Nutrition,expert,yes,false,149900,130000,fixed,,,patient,Either,60,Administer & monitor TPN via central access
+38,vital_signs_monitoring_bp_pulse_temp_rr,"Vital signs monitoring (BP, pulse, temp, RR)","Monitoring, Diagnostics & Samples",base,no,true,19900,0,fixed,,,patient,Sanocare,10,Measure & record full vitals
+39,blood_pressure_monitoring,Blood pressure monitoring,"Monitoring, Diagnostics & Samples",base,no,true,19900,0,fixed,,,patient,Sanocare,5,Measure & record BP
+40,capillary_blood_glucose_glucometer,Capillary blood glucose (glucometer),"Monitoring, Diagnostics & Samples",base,no,true,19900,0,fixed,,,patient,Either,5,Fingerstick glucose measurement
+41,patient_observation_monitoring_per_hour,Patient observation & monitoring (per hour),"Monitoring, Diagnostics & Samples",base,no,true,19900,0,fixed,,,patient,Sanocare,60,"Bedside observation, charting, escalation"
+42,weight_anthropometric_measurement,Weight & anthropometric measurement,"Monitoring, Diagnostics & Samples",base,no,true,19900,0,fixed,,,patient,Sanocare,10,"Weight, height, MUAC as needed"
+43,12_lead_ecg_at_home,12-lead ECG at home,"Monitoring, Diagnostics & Samples",standard,case_by_case,false,59900,40000,fixed,,,patient,Sanocare,15,Record 12-lead ECG (device)
+44,intake_output_fluid_balance_charting,Intake/Output (fluid balance) charting,"Monitoring, Diagnostics & Samples",standard,no,false,49900,30000,fixed,,,patient,Sanocare,,Measure & chart fluid balance
+45,antenatal_vitals_wellbeing_check,Antenatal vitals & wellbeing check,"Maternal, Newborn & Paediatric",standard,no,false,49900,30000,fixed,,,patient,Sanocare,20,"BP, weight, fundal/wellbeing check"
+46,subcutaneous_syringe_driver_palliative_setup,Subcutaneous syringe driver (palliative) setup,"Elderly, Palliative & Chronic Care",expert,yes,false,119900,100000,fixed,,,patient,Sanocare,30,Set up & monitor syringe driver
+47,fall_risk_home_safety_assessment,Fall-risk & home-safety assessment,"Elderly, Palliative & Chronic Care",standard,no,false,59900,40000,fixed,,,patient,-,30,Assess fall risk & advise modifications
+48,peritoneal_dialysis_capd_exchange_assist,Peritoneal dialysis (CAPD) exchange assist,Specialised / Expert,expert,yes,false,99900,80000,from,,,patient,Patient,45,Assist/perform CAPD exchange aseptically
+49,home_chemotherapy_administration,Home chemotherapy administration,Specialised / Expert,expert,yes,false,99900,80000,from,,,patient,Sanocare,180,Administer chemo at home (oncology)
+50,ascitic_pleural_tap_nurse_assistance,Ascitic / pleural tap - nurse assistance,Specialised / Expert,expert,yes,false,99900,80000,from,,,patient,Sanocare,45,Assist doctor with tap; specimen & dressing
+51,lumbar_puncture_nurse_assistance,Lumbar puncture - nurse assistance,Specialised / Expert,expert,yes,false,99900,80000,from,,,patient,Sanocare,30,Assist doctor with LP; positioning & asepsis
+52,high_alert_med_titration_e_g_insulin_drip,High-alert med titration (e.g. insulin drip),Specialised / Expert,expert,yes,false,99900,80000,from,,,patient,Either,,Titrate high-alert infusion per protocol
+53,diabetic_insulin_self_care_teaching,Diabetic / insulin self-care teaching,Patient & Family Education,standard,no,false,49900,30000,fixed,,,patient,-,30,"Teach glucose, injection, hypo management"
+54,wound_care_caregiver_training,Wound care caregiver training,Patient & Family Education,standard,no,false,59900,40000,fixed,,,patient,-,30,Train caregiver on dressing technique
