@@ -33,6 +33,13 @@ object NetworkModule {
     fun provideJson(): Json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
+        // Request bodies MUST include fields even when they equal their default.
+        // Without this, kotlinx.serialization OMITS default-valued fields — which
+        // dropped `t85Slug` from the teleconsult create-order body (its default is
+        // "teleconsultation"), producing an empty {} body and the server's
+        // "Either kind/t85Slug/serviceCategory is required" error. Encoding
+        // defaults keeps every request DTO's identifier fields on the wire.
+        encodeDefaults = true
     }
 
     @Provides

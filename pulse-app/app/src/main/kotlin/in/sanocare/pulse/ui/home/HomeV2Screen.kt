@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import `in`.sanocare.pulse.data.network.BookingDto
+import `in`.sanocare.pulse.data.services.PulseService
 import `in`.sanocare.pulse.theme.BorderHair
 import `in`.sanocare.pulse.theme.InkMute
 import `in`.sanocare.pulse.theme.InkPrimary
@@ -68,20 +69,17 @@ import java.util.Calendar
 // book-again rail, and the coral emergency ribbon (the one accent). Service
 // taps are PB4 destinations (stubs for now).
 
-private data class Service(val title: String, val price: String, val icon: ImageVector, val gradient: List<Color>)
+// Label + price come from the single PulseService config (no per-tile hardcoded
+// price/slug); only the presentation (icon + gradient) lives here. Tonal blues
+// around #2B81FF; coral stays emergency-ribbon-only. The tile shows the FULL
+// "starting from" price; checkout charges the server-computed amount.
+private data class ServiceTile(val service: PulseService, val icon: ImageVector, val gradient: List<Color>)
 
-// v2.1 — all four cards in the Sanocare blue family (calm + branded, not a
-// fintech rainbow). Tonal steps around the #2B81FF primary give quiet depth;
-// icons stay white monoline. Coral remains emergency-ribbon-only. Founder can
-// fine-tune the exact shades after.
-private val SERVICES = listOf(
-    // PB4a — teleconsult price is server-driven (config GET), so the string is
-    // empty here and filled at render time from HomeViewModel.teleconsultFrom
-    // ("from ₹399"). No hardcoded price. The stale "from ₹199" is gone.
-    Service("Talk to a doctor", "", Icons.Outlined.Videocam, listOf(Color(0xFF2B81FF), Color(0xFF1E63D6))),
-    Service("Get tested at home", "from ₹499", Icons.Outlined.Science, listOf(Color(0xFF4E97FF), Color(0xFF2B81FF))),
-    Service("Care at Home", "from ₹299", Icons.Outlined.HealthAndSafety, listOf(Color(0xFF1E63D6), Color(0xFF1647A1))),
-    Service("Book a medic", "from ₹199", Icons.Outlined.MedicalServices, listOf(Color(0xFF3E8BFF), Color(0xFF2B6FE0))),
+private val SERVICE_TILES = listOf(
+    ServiceTile(PulseService.TELECONSULT, Icons.Outlined.Videocam, listOf(Color(0xFF2B81FF), Color(0xFF1E63D6))),
+    ServiceTile(PulseService.LAB, Icons.Outlined.Science, listOf(Color(0xFF4E97FF), Color(0xFF2B81FF))),
+    ServiceTile(PulseService.HOME_VISIT, Icons.Outlined.HealthAndSafety, listOf(Color(0xFF1E63D6), Color(0xFF1647A1))),
+    ServiceTile(PulseService.MEDIC, Icons.Outlined.MedicalServices, listOf(Color(0xFF3E8BFF), Color(0xFF2B6FE0))),
 )
 
 @Composable
@@ -89,7 +87,6 @@ fun HomeV2Screen(firstName: String?, onBookTeleconsult: () -> Unit) {
     val vm: HomeViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
     val refreshing by vm.refreshing.collectAsState()
-    val teleconsultFrom by vm.teleconsultFrom.collectAsState()
 
     PulseRefreshBox(refreshing = refreshing, onRefresh = vm::pullRefresh, modifier = Modifier.fillMaxSize()) {
         Column(
@@ -107,13 +104,13 @@ fun HomeV2Screen(firstName: String?, onBookTeleconsult: () -> Unit) {
 
             Spacer(Modifier.height(18.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                ServiceCard(SERVICES[0], Modifier.weight(1f), priceOverride = teleconsultFrom, onClick = onBookTeleconsult)
-                ServiceCard(SERVICES[1], Modifier.weight(1f))
+                ServiceCard(SERVICE_TILES[0], Modifier.weight(1f), onClick = onBookTeleconsult)
+                ServiceCard(SERVICE_TILES[1], Modifier.weight(1f))
             }
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                ServiceCard(SERVICES[2], Modifier.weight(1f))
-                ServiceCard(SERVICES[3], Modifier.weight(1f))
+                ServiceCard(SERVICE_TILES[2], Modifier.weight(1f))
+                ServiceCard(SERVICE_TILES[3], Modifier.weight(1f))
             }
 
             Spacer(Modifier.height(20.dp))
@@ -187,27 +184,24 @@ private fun Hero(firstName: String?) {
 
 @Composable
 private fun ServiceCard(
-    s: Service,
+    tile: ServiceTile,
     modifier: Modifier,
-    priceOverride: String? = null,
     onClick: (() -> Unit)? = null,
 ) {
     // Interim branded gradient tile — image slot swappable for real photography later.
-    val price = priceOverride ?: s.price
+    // Label + price come from the single PulseService config (no hardcoding here).
     Column(
         modifier = modifier.height(128.dp)
-            .background(Brush.linearGradient(s.gradient), RoundedCornerShape(16.dp))
+            .background(Brush.linearGradient(tile.gradient), RoundedCornerShape(16.dp))
             .pressScaleClickable { onClick?.invoke() /* other cards: PB4b+ destinations */ }
             .padding(14.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        Icon(s.icon, contentDescription = null, tint = Paper, modifier = Modifier.size(26.dp))
+        Icon(tile.icon, contentDescription = null, tint = Paper, modifier = Modifier.size(26.dp))
         Column {
-            Text(s.title, color = Paper, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 17.sp)
-            if (price.isNotBlank()) {
-                Spacer(Modifier.height(2.dp))
-                Text(price, color = Paper.copy(alpha = 0.92f), fontSize = 12.sp)
-            }
+            Text(tile.service.label, color = Paper, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 17.sp)
+            Spacer(Modifier.height(2.dp))
+            Text(tile.service.priceLabel, color = Paper.copy(alpha = 0.92f), fontSize = 12.sp)
         }
     }
 }
