@@ -62,68 +62,71 @@ export function Hero() {
 
   return (
     <section className="bg-background-light">
-      <div className="mx-auto w-full max-w-[900px] px-4 sm:px-6 lg:px-8 pt-4 pb-10 lg:py-14">
-        <div className="flex flex-col gap-5">
-          {/* Badge */}
-          <motion.div
-            {...reveal(0)}
-            className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-white/70 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-primary shadow-sm"
-          >
-            <span className="size-2 rounded-full bg-primary animate-pulse" />
-            {heroCopy.badgeText}
-          </motion.div>
+      <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8 pt-4 pb-10 lg:py-14">
+        {/* Widened to the site's 1400px + two columns: copy left, the doctors
+            banner (carousel) right. Mobile stacks — copy, then carousel, then
+            trust — preserving T91's "H1/sub above the carousel" order. */}
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-12 lg:items-center">
+          {/* Left column — copy */}
+          <div className="flex flex-col gap-5">
+            {/* Badge */}
+            <motion.div
+              {...reveal(0)}
+              className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-white/70 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-primary shadow-sm"
+            >
+              <span className="size-2 rounded-full bg-primary animate-pulse" />
+              {heroCopy.badgeText}
+            </motion.div>
 
-          {/* Heading */}
-          <motion.h1
-            {...reveal(prefersReducedMotion ? 0 : 0.05)}
-            className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold leading-[1.1] tracking-tight text-text-main"
-          >
-            {heroCopy.headingPrefix}{" "}
-            <span className="italic font-light text-transparent bg-clip-text bg-gradient-to-r from-primary via-primary-dark to-primary-700">
-              {heroCopy.headingHighlight}
-            </span>
-          </motion.h1>
+            {/* Heading */}
+            <motion.h1
+              {...reveal(prefersReducedMotion ? 0 : 0.05)}
+              className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold leading-[1.1] tracking-tight text-text-main"
+            >
+              {heroCopy.headingPrefix}{" "}
+              <span className="italic font-light text-transparent bg-clip-text bg-gradient-to-r from-primary via-primary-dark to-primary-700">
+                {heroCopy.headingHighlight}
+              </span>
+            </motion.h1>
 
-          {/* Sub-headline */}
-          <motion.p
-            {...reveal(prefersReducedMotion ? 0 : 0.1)}
-            className="text-base sm:text-lg leading-relaxed text-text-secondary max-w-2xl"
-          >
-            {heroCopy.description}
-          </motion.p>
+            {/* Sub-headline */}
+            <motion.p
+              {...reveal(prefersReducedMotion ? 0 : 0.1)}
+              className="text-base sm:text-lg leading-relaxed text-text-secondary max-w-2xl"
+            >
+              {heroCopy.description}
+            </motion.p>
+          </div>
 
-          {/* Hero carousel — 3 brand-aligned slides, replaces the static
-              hero image. 2.4:1 aspect keeps the total Hero (badge + H1 +
-              sub + carousel + trust strip) above-the-fold on 375px
-              mobile viewports. */}
+          {/* Right column — doctors banner (3-slide brand carousel). */}
           <motion.div {...reveal(prefersReducedMotion ? 0 : 0.15)}>
             <HeroCarousel />
           </motion.div>
-
-          {/* T85 PR2 — CTAs removed. Hero is informational only.
-              Booking entry points: 4 coral CTAs inside ServiceSections,
-              HomeStickyBar, FloatingWhatsApp pill, Navbar button. */}
-
-          {/* Static micro-trust strip (per locked decision: no count-up here). */}
-          <motion.div
-            {...reveal(prefersReducedMotion ? 0 : 0.2)}
-            className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-2 text-sm text-text-secondary"
-          >
-            <span className="inline-flex items-center gap-1.5 font-semibold text-text-main">
-              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" aria-hidden="true" />
-              5.0
-              <span className="font-normal text-text-secondary">on Google</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
-              &lt;30 min response
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <ShieldCheck className="h-4 w-4 text-primary" aria-hidden="true" />
-              MoHFW 2020 compliant
-            </span>
-          </motion.div>
         </div>
+
+        {/* T85 PR2 — CTAs removed. Hero is informational only.
+            Booking entry points: 4 coral CTAs inside ServiceSections,
+            HomeStickyBar, FloatingWhatsApp pill, Navbar button. */}
+
+        {/* Static micro-trust strip — full width below the hero grid. */}
+        <motion.div
+          {...reveal(prefersReducedMotion ? 0 : 0.2)}
+          className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 pt-2 text-sm text-text-secondary"
+        >
+          <span className="inline-flex items-center gap-1.5 font-semibold text-text-main">
+            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" aria-hidden="true" />
+            5.0
+            <span className="font-normal text-text-secondary">on Google</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
+            &lt;30 min response
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <ShieldCheck className="h-4 w-4 text-primary" aria-hidden="true" />
+            MoHFW 2020 compliant
+          </span>
+        </motion.div>
 
         {/* T85 PR2 — QuickBookCard mount removed. PR5 prep note: three
             CMS-side surfaces still link to `#hero-booking-form`
