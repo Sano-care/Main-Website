@@ -19,9 +19,15 @@
 
 import Image from "next/image";
 import { useSyncExternalStore } from "react";
-import { Download } from "lucide-react";
+import { Download, Lock } from "lucide-react";
 
 import { detectClientPlatform, type ClientPlatform } from "@/lib/platform/detectPlatform";
+import {
+  LAUNCH_TARGET_MS,
+  remainingSecondsAt,
+  countdownParts,
+  pad2,
+} from "@/lib/launch/countdown";
 
 const DOWNLOAD_HREF = "/download/pulse";
 const QR_SRC = "/qr/pulse-download.svg";
@@ -34,6 +40,17 @@ const getClientPlatform = (): ClientPlatform =>
     userAgent: navigator.userAgent,
     maxTouchPoints: navigator.maxTouchPoints,
   });
+
+// Countdown tick store (useSyncExternalStore, so no setState-in-effect). Server
+// snapshot is null → the download link is NEVER in the SSR HTML; it only mounts
+// client-side after launch. getSnapshot returns an integer that's stable within
+// a second, so React re-renders exactly once per tick.
+const subscribeTick = (onChange: () => void) => {
+  const id = setInterval(onChange, 1000);
+  return () => clearInterval(id);
+};
+const getRemaining = (): number => remainingSecondsAt(LAUNCH_TARGET_MS, Date.now());
+const getServerRemaining = (): number | null => null;
 
 function fireDownloadEvent(platform: "android" | "desktop_qr") {
   if (typeof window === "undefined") return;
@@ -122,8 +139,33 @@ function CtaSlot({ platform }: { platform: ClientPlatform | null }) {
   );
 }
 
+// Pre-launch state — live Hrs:Min:Sec countdown + a locked chip. Renders NO
+// /download/pulse link (no QR, no APK, no store). `remaining` is null on SSR +
+// the first client render (placeholder digits), then ticks live.
+function CountdownSlot({ remaining }: { remaining: number | null }) {
+  const parts = remaining === null ? null : countdownParts(remaining);
+  return (
+    <div className="flex flex-col gap-2 sm:items-end" data-testid="app-band-countdown">
+      <p className="text-sm text-text-secondary">Sanocare Pulse goes live at 4:30 PM</p>
+      <div
+        className="font-mono text-3xl font-bold tabular-nums tracking-tight text-text-main"
+        aria-label="Time until Sanocare Pulse launches"
+      >
+        {parts ? `${pad2(parts.hh)}:${pad2(parts.mm)}:${pad2(parts.ss)}` : "‒‒:‒‒:‒‒"}
+      </div>
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-text-secondary">
+        <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+        Available at launch
+      </span>
+    </div>
+  );
+}
+
 export function AppDownloadBand() {
   const platform = useSyncExternalStore(subscribe, getClientPlatform, getServerPlatform);
+  // remaining: null (SSR/pre-mount) | >0 (counting down) | 0 (launched).
+  const remaining = useSyncExternalStore(subscribeTick, getRemaining, getServerRemaining);
+  const launched = remaining === 0;
 
   return (
     <section aria-labelledby="app-download-heading" className="mt-4 mb-8 lg:my-6">
@@ -164,9 +206,15 @@ export function AppDownloadBand() {
             </div>
           </div>
 
-          {/* CTA slot — platform-aware */}
+          {/* CTA slot — a launch countdown until 4:30 PM IST, then the
+              platform-aware download. Before launch NO /download/pulse link is
+              rendered anywhere (no QR, no APK). */}
           <div className="lg:shrink-0">
-            <CtaSlot platform={platform} />
+            {launched ? (
+              <CtaSlot platform={platform} />
+            ) : (
+              <CountdownSlot remaining={remaining} />
+            )}
           </div>
         </div>
       </div>
