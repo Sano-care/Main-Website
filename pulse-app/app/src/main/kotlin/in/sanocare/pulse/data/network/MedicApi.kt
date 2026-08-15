@@ -23,11 +23,18 @@ interface MedicApi {
     suspend fun quote(@Body req: MedicCartRequest): Response<MedicQuoteDto>
 
     @POST("api/pulse/medic/create-order")
-    suspend fun createOrder(@Body req: MedicCartRequest): Response<MedicCreateOrderDto>
+    suspend fun createOrder(@Body req: MedicCreateOrderRequest): Response<MedicCreateOrderDto>
 
     @POST("api/pulse/medic/verify")
     suspend fun verify(@Body req: MedicVerifyRequest): Response<MedicVerifyDto>
 }
+
+/** payment_mode: "booking_fee" (flat ₹100 now, balance at visit) | "full". */
+@Serializable
+data class MedicCreateOrderRequest(
+    val items: List<CartItemDto>,
+    @SerialName("payment_mode") val paymentMode: String,
+)
 
 @Serializable
 data class MedicCatalogDto(
@@ -129,7 +136,10 @@ data class MedicVerifyDto(
     val ok: Boolean = false,
     val bookingId: String? = null,
     val bookingCode: String? = null,
+    val paymentMode: String? = null,
+    val chargedPaise: Long = 0,
     val prepayPaise: Long = 0,
     val atVisitPaise: Long = 0,
+    val balancePaise: Long = 0,
     val error: String? = null,
 )

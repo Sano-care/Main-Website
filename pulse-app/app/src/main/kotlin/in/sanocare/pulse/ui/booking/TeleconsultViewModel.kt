@@ -72,10 +72,8 @@ class TeleconsultViewModel @Inject constructor(
 
     fun submit(prefillContact: String?) {
         formError = null
-        if (address.trim().length < 4) {
-            formError = "Please enter an address (required for teleconsultation)."
-            return
-        }
+        // Address is OPTIONAL for teleconsultation — it's a video consult, so we
+        // don't block checkout on it (server also treats it as optional).
         if (!earliest && laterMillis == null) {
             formError = "Pick a date and time, or choose Earliest."
             return

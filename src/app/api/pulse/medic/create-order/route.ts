@@ -7,6 +7,8 @@ import {
   loadAndQuoteCart,
   normalizeCartItems,
   cartHash,
+  normalizePaymentMode,
+  MEDIC_BOOKING_FEE_PAISE,
 } from "@/lib/medic/serverCart";
 
 export const runtime = "nodejs";
@@ -54,10 +56,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Dual payment (mirrors lab): "booking_fee" charges a flat ₹100 confirmation
+    // fee now (balance at visit); "full" charges the whole computed prepay.
+    // booking_fee only applies when it's below the prepay (always true — the base
+    // visit alone is ₹199); otherwise fall back to full.
+    const paymentMode = normalizePaymentMode(body?.payment_mode);
+    const chargePaise =
+      paymentMode === "booking_fee" && quote.prepay_paise > MEDIC_BOOKING_FEE_PAISE
+        ? MEDIC_BOOKING_FEE_PAISE
+        : quote.prepay_paise;
+
     const razorpay = getRazorpayClient();
     const receipt = `snc_medic_${Date.now().toString(36).slice(-8)}`;
     const order = await razorpay.orders.create({
-      amount: quote.prepay_paise, // paise; the amount actually captured now
+      amount: chargePaise, // paise; the amount actually captured now
       currency: "INR",
       receipt,
       notes: {
@@ -66,6 +78,8 @@ export async function POST(req: NextRequest) {
         customer_id: customer.id,
         // Binds the paid cart to the order — re-checked in /verify.
         cart_hash: cartHash(items),
+        payment_mode: paymentMode,
+        charge_paise: String(chargePaise),
         prepay_paise: String(quote.prepay_paise),
         at_visit_paise: String(quote.at_visit_paise),
         item_count: String(items.length),
