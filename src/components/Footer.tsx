@@ -7,6 +7,7 @@ import { useCmsSection } from "@/hooks/useCmsSection";
 import { useCmsSiteGlobals } from "@/hooks/useCmsSiteGlobals";
 import { SHARED_CONTENT } from "@/constants/cms-content";
 import { isReactComponent } from "@/services/cms/snapshot";
+import { PAGE_CONTAINER } from "@/lib/layout/pageContainer";
 
 // Nursing-only corporate bio for the Google-Ads classifier-safe footer
 // variant — strips "doctor / MBBS / diagnose / prescribe / telemedicine".
@@ -22,6 +23,7 @@ const CLASSIFIER_SAFE_EXCLUDED_LINKS = new Set([
 
 export function Footer({
   variant = "default",
+  wide = false,
 }: {
   /**
    * "classifier-safe" swaps the doctor-led bio for a nursing-only one and
@@ -31,6 +33,12 @@ export function Footer({
    * other page renders the default footer unchanged.
    */
   variant?: "default" | "classifier-safe";
+  /**
+   * Footer is shared across ~13 marketing pages. `wide` opts a single page
+   * into the near-full-bleed PAGE_CONTAINER (used by the full-width homepage)
+   * without changing the default 1400px footer everyone else renders.
+   */
+  wide?: boolean;
 } = {}) {
   const defaultSocialIcon = SHARED_CONTENT.footer.socialLinks[0].icon;
   const defaultTrustIcon = SHARED_CONTENT.footer.trustBadges[0].icon;
@@ -123,7 +131,7 @@ export function Footer({
 
   return (
     <footer className="bg-surface-light border-t border-slate-200 pt-20 pb-12 relative z-10">
-      <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
+      <div className={wide ? PAGE_CONTAINER : "mx-auto max-w-[1400px] px-6 lg:px-12"}>
         <div className="grid gap-12 sm:grid-cols-2 lg:grid-cols-4">
           {/* Brand Column — single-word wordmark + coral tagline strip */}
           <div className="flex flex-col gap-6">

@@ -8,6 +8,7 @@ import {
 import Link from "next/link";
 import { useCmsSection } from "@/hooks/useCmsSection";
 import { SANOCARE_ADVANTAGE_CONTENT } from "@/constants/cms-content";
+import { PAGE_CONTAINER } from "@/lib/layout/pageContainer";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -78,7 +79,7 @@ export function SanocareAdvantage() {
       {/* Background decoration */}
       <div className="absolute top-0 right-0 w-1/3 h-full bg-gradient-to-l from-primary/5 to-transparent pointer-events-none" />
       
-      <div className="mx-auto max-w-[1400px] px-6 lg:px-12 relative z-10">
+      <div className={`${PAGE_CONTAINER} relative z-10`}>
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

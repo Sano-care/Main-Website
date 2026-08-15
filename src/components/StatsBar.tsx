@@ -26,6 +26,7 @@
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 import { AnimatedCounter } from "@/components/marketing/AnimatedCounter";
+import { PAGE_CONTAINER } from "@/lib/layout/pageContainer";
 
 interface Stat {
   /** Numeric portion (may include "<" prefix, commas). */
@@ -102,7 +103,7 @@ export function StatsBar() {
         }}
       />
 
-      <div className="mx-auto max-w-[1400px] px-6 lg:px-12 relative z-10">
+      <div className={`${PAGE_CONTAINER} relative z-10`}>
         {/* Header — eyebrow + H2 */}
         <motion.div
           className="mb-12 max-w-2xl"
