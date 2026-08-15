@@ -31,15 +31,19 @@ import { Star, Clock, ShieldCheck } from "lucide-react";
 import { useCmsSection } from "@/hooks/useCmsSection";
 import { HOME_CONTENT } from "@/constants/cms-content";
 import { tokens } from "@/lib/design/tokens";
+import { PAGE_CONTAINER } from "@/lib/layout/pageContainer";
 import { HeroCarousel } from "./HeroCarousel";
 
 // 2026-06-09: replaced single static image (HERO_IMAGE_SRC at
 // /banner/optimized/1-experienced-team.jpg) with HeroCarousel (3
-// brand-aligned slides). Per founder Option B: H1 + sub-headline stay
-// above the carousel so the brand promise persists regardless of
-// which slide is showing. Trust strip stays below. Layout collapsed
-// from 2-col grid (image-right on desktop) to single column on all
-// viewports so the "above the carousel" ordering reads correctly.
+// brand-aligned slides).
+//
+// 2026-08-15 (full-width restack): the desktop 2-column grid (copy left,
+// carousel right, capped at 1400px) was replaced by full-width stacked
+// blocks inside the shared PAGE_CONTAINER (≈92vw / 1720px). Order on every
+// viewport: hero line (badge + H1 + sub + trust strip) on top, then the
+// carousel full-width directly below. About Sanocare follows in page.tsx.
+// Copy is untouched — this is layout/width only.
 
 export function Hero() {
   const { data: heroCopy } = useCmsSection("home", "hero", HOME_CONTENT.hero);
@@ -62,77 +66,77 @@ export function Hero() {
 
   return (
     <section className="bg-background-light">
-      <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8 pt-4 pb-10 lg:py-14">
-        {/* Widened to the site's 1400px + two columns: copy left, the doctors
-            banner (carousel) right. Mobile stacks — copy, then carousel, then
-            trust — preserving T91's "H1/sub above the carousel" order. */}
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-12 lg:items-center">
-          {/* Left column — copy */}
-          <div className="flex flex-col gap-5">
-            {/* Badge */}
-            <motion.div
-              {...reveal(0)}
-              className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-white/70 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-primary shadow-sm"
-            >
-              <span className="size-2 rounded-full bg-primary animate-pulse" />
-              {heroCopy.badgeText}
-            </motion.div>
+      <div className={`${PAGE_CONTAINER} pt-4 pb-10 lg:py-14`}>
+        {/* Hero line — full-width stacked block: badge + H1 + sub + trust
+            strip. Text is left-aligned and width-capped for readability while
+            the block itself spans the full container. */}
+        <div className="flex flex-col gap-5">
+          {/* Badge */}
+          <motion.div
+            {...reveal(0)}
+            className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-white/70 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-primary shadow-sm"
+          >
+            <span className="size-2 rounded-full bg-primary animate-pulse" />
+            {heroCopy.badgeText}
+          </motion.div>
 
-            {/* Heading */}
-            <motion.h1
-              {...reveal(prefersReducedMotion ? 0 : 0.05)}
-              className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold leading-[1.1] tracking-tight text-text-main"
-            >
-              {heroCopy.headingPrefix}{" "}
-              <span className="italic font-light text-transparent bg-clip-text bg-gradient-to-r from-primary via-primary-dark to-primary-700">
-                {heroCopy.headingHighlight}
-              </span>
-            </motion.h1>
+          {/* Heading */}
+          <motion.h1
+            {...reveal(prefersReducedMotion ? 0 : 0.05)}
+            className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold leading-[1.1] tracking-tight text-text-main max-w-4xl"
+          >
+            {heroCopy.headingPrefix}{" "}
+            <span className="italic font-light text-transparent bg-clip-text bg-gradient-to-r from-primary via-primary-dark to-primary-700">
+              {heroCopy.headingHighlight}
+            </span>
+          </motion.h1>
 
-            {/* Sub-headline */}
-            <motion.p
-              {...reveal(prefersReducedMotion ? 0 : 0.1)}
-              className="text-base sm:text-lg leading-relaxed text-text-secondary max-w-2xl"
-            >
-              {heroCopy.description}
-            </motion.p>
-          </div>
+          {/* Sub-headline */}
+          <motion.p
+            {...reveal(prefersReducedMotion ? 0 : 0.1)}
+            className="text-base sm:text-lg leading-relaxed text-text-secondary max-w-2xl"
+          >
+            {heroCopy.description}
+          </motion.p>
 
-          {/* Right column — doctors banner (3-slide brand carousel). */}
-          <motion.div {...reveal(prefersReducedMotion ? 0 : 0.15)}>
-            <HeroCarousel />
+          {/* Static micro-trust strip. */}
+          <motion.div
+            {...reveal(prefersReducedMotion ? 0 : 0.15)}
+            className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-sm text-text-secondary"
+          >
+            <span className="inline-flex items-center gap-1.5 font-semibold text-text-main">
+              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" aria-hidden="true" />
+              5.0
+              <span className="font-normal text-text-secondary">on Google</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
+              &lt;30 min response
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <ShieldCheck className="h-4 w-4 text-primary" aria-hidden="true" />
+              MoHFW 2020 compliant
+            </span>
           </motion.div>
         </div>
 
-        {/* T85 PR2 — CTAs removed. Hero is informational only.
-            Booking entry points: 4 coral CTAs inside ServiceSections,
-            HomeStickyBar, FloatingWhatsApp pill, Navbar button. */}
-
-        {/* Static micro-trust strip — full width below the hero grid. */}
+        {/* Carousel — full-width, directly under the hero line. Slide 0 is the
+            frozen app/countdown lead; the service images follow as a peek
+            carousel (see HeroCarousel). */}
         <motion.div
           {...reveal(prefersReducedMotion ? 0 : 0.2)}
-          className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 pt-2 text-sm text-text-secondary"
+          className="mt-8 lg:mt-10"
         >
-          <span className="inline-flex items-center gap-1.5 font-semibold text-text-main">
-            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" aria-hidden="true" />
-            5.0
-            <span className="font-normal text-text-secondary">on Google</span>
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
-            &lt;30 min response
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <ShieldCheck className="h-4 w-4 text-primary" aria-hidden="true" />
-            MoHFW 2020 compliant
-          </span>
+          <HeroCarousel />
         </motion.div>
 
-        {/* T85 PR2 — QuickBookCard mount removed. PR5 prep note: three
-            CMS-side surfaces still link to `#hero-booking-form`
+        {/* T85 PR2 — CTAs + QuickBookCard removed. Hero is informational only.
+            Booking entry points: 4 coral CTAs inside ServiceSections,
+            HomeStickyBar, FloatingWhatsApp pill, Navbar button. PR5 prep note:
+            three CMS-side surfaces still link to `#hero-booking-form`
             (`src/constants/cms/legal.ts`, `src/constants/cms/pages.ts`,
-            `src/constants/cms/home.ts`). PR5 audits + updates those
-            anchor targets. Anchor lands at top of hero in the interim. */}
+            `src/constants/cms/home.ts`); the anchor lands at top of hero in
+            the interim. */}
       </div>
     </section>
   );
