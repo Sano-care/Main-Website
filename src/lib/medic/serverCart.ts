@@ -15,6 +15,18 @@ import {
 // feeds it authoritative rows and binds a cart to a Razorpay order so /verify
 // can never be tricked into snapshotting a cart the customer didn't pay for.
 
+/** Flat ₹100 booking-confirmation fee — the "pay ₹100 to confirm" option. Flat
+ *  regardless of cart size; the rest of the prepay + any at-visit variable is
+ *  collected at/after the visit. Always < prepay (base visit alone is ₹199). */
+export const MEDIC_BOOKING_FEE_PAISE = 10_000;
+
+export type MedicPaymentMode = "booking_fee" | "full";
+
+/** Parse an untrusted payment_mode; defaults to "full" (back-compat). */
+export function normalizePaymentMode(raw: unknown): MedicPaymentMode {
+  return raw === "booking_fee" ? "booking_fee" : "full";
+}
+
 export interface CatalogRow extends ProcedureRow {
   rx_required: string | null;
 }

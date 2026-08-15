@@ -9,6 +9,8 @@ import {
   loadAndQuoteCart,
   normalizeCartItems,
   cartHash,
+  normalizePaymentMode,
+  MEDIC_BOOKING_FEE_PAISE,
 } from "@/lib/medic/serverCart";
 
 export const runtime = "nodejs";
@@ -95,13 +97,22 @@ export async function POST(req: NextRequest) {
       console.error("[pulse/medic/verify] order fetch failed", razorpay_order_id, e);
       return NextResponse.json({ error: "Could not verify the order." }, { status: 400 });
     }
+    // Dual payment: the order was for either the flat ₹100 booking fee or the
+    // full prepay. Re-derive the expected charge server-side from the recomputed
+    // prepay + the mode stored in notes, and require the captured amount to match
+    // it exactly (never trust the client for the amount).
+    const paymentMode = normalizePaymentMode(notes.payment_mode);
+    const expectedCharge =
+      paymentMode === "booking_fee" && quote.prepay_paise > MEDIC_BOOKING_FEE_PAISE
+        ? MEDIC_BOOKING_FEE_PAISE
+        : quote.prepay_paise;
     const cartMatches = String(notes.cart_hash ?? "") === cartHash(items);
-    const amountMatches = quote.prepay_paise === orderAmount;
+    const amountMatches = expectedCharge === orderAmount;
     if (notes.flow !== "pb5_medic_cart" || !cartMatches || !amountMatches) {
       console.error(
         `[pulse/medic/verify] integrity check failed order=${razorpay_order_id} flow=${String(
           notes.flow,
-        )} amountMatches=${amountMatches} cartMatches=${cartMatches}`,
+        )} mode=${paymentMode} amountMatches=${amountMatches} cartMatches=${cartMatches}`,
       );
       return NextResponse.json(
         { error: "Payment could not be reconciled with the cart. Please contact support." },
@@ -148,17 +159,25 @@ export async function POST(req: NextRequest) {
     // === Persist booking (service-role; payment just verified) ===
     const prepayPaise = quote.prepay_paise;
     const atVisitPaise = quote.at_visit_paise;
+    const chargedPaise = orderAmount; // what Razorpay actually captured now
+    // Known balance = the rest of the computed prepay not captured now (0 in full
+    // mode; prepay − ₹100 in booking-fee mode). The at-visit variable is on top.
+    const knownBalancePaise = Math.max(0, prepayPaise - chargedPaise);
     const summary = quote.line_items
       .filter((l) => l.code !== "__base_visit__")
       .map((l) => `${l.name ?? l.code}×${l.qty}`)
       .join(", ");
+    const modeLabel = paymentMode === "booking_fee" ? "₹100 booking fee" : "full prepay";
     const opsNotes =
       `🏠 Pulse medic-at-home cart. ${summary || "base visit"}. ` +
-      `Prepaid ₹${(prepayPaise / 100).toFixed(0)}.` +
-      (atVisitPaise > 0
-        ? ` +₹${(atVisitPaise / 100).toFixed(0)} variable settled at visit.`
+      `Paid ₹${(chargedPaise / 100).toFixed(0)} now (${modeLabel}).` +
+      (knownBalancePaise > 0
+        ? ` Balance ₹${(knownBalancePaise / 100).toFixed(0)} due at/after the visit.`
         : "") +
-      " Scheduled on the coordination call. Address entered manually (no GPS).";
+      (atVisitPaise > 0
+        ? ` Plus ₹${(atVisitPaise / 100).toFixed(0)} variable settled at visit.`
+        : "") +
+      " Scheduled on the coordination call.";
 
     const insertPayload = {
       patient_name: nameValidation.name,
@@ -169,14 +188,14 @@ export async function POST(req: NextRequest) {
       manual_address: manualAddress,
       gps_location: null,
       ops_notes: opsNotes,
-      amount: Math.round(prepayPaise / 100), // rupees captured now
+      amount: Math.round(chargedPaise / 100), // rupees captured now
       scheduled_for: null, // set on the coordination call
       status: "CONFIRMED",
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
       payment_status: "CAPTURED",
-      booking_fee_paid_paise: prepayPaise,
+      booking_fee_paid_paise: chargedPaise,
       payment_captured_at: new Date().toISOString(),
       otp_verified_at: new Date().toISOString(), // bearer session ⇒ prior OTP verify
     };
@@ -256,9 +275,11 @@ export async function POST(req: NextRequest) {
         serviceDisplay: "Medic at Home",
         location: manualAddress,
         context:
-          `${bookingCode ?? bookingId}: ${summary || "base visit"} · prepaid ₹${(
-            prepayPaise / 100
-          ).toFixed(0)}` + (atVisitPaise > 0 ? ` (+₹${(atVisitPaise / 100).toFixed(0)} at visit)` : ""),
+          `${bookingCode ?? bookingId}: ${summary || "base visit"} · paid ₹${(
+            chargedPaise / 100
+          ).toFixed(0)} (${modeLabel})` +
+          (knownBalancePaise > 0 ? ` · bal ₹${(knownBalancePaise / 100).toFixed(0)}` : "") +
+          (atVisitPaise > 0 ? ` (+₹${(atVisitPaise / 100).toFixed(0)} at visit)` : ""),
         patientMobile: customer.phone,
       });
     } catch (alertErr) {
@@ -269,8 +290,11 @@ export async function POST(req: NextRequest) {
       ok: true,
       bookingId,
       bookingCode,
+      paymentMode,
+      chargedPaise,
       prepayPaise,
       atVisitPaise,
+      balancePaise: knownBalancePaise,
     });
   } catch (err) {
     console.error("[pulse/medic/verify] error:", err);

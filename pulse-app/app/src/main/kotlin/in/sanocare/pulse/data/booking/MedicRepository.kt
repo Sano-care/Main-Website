@@ -7,6 +7,7 @@ import `in`.sanocare.pulse.data.network.MedicBookingInput
 import `in`.sanocare.pulse.data.network.MedicCartRequest
 import `in`.sanocare.pulse.data.network.MedicCatalogDto
 import `in`.sanocare.pulse.data.network.MedicCreateOrderDto
+import `in`.sanocare.pulse.data.network.MedicCreateOrderRequest
 import `in`.sanocare.pulse.data.network.MedicQuoteDto
 import `in`.sanocare.pulse.data.network.MedicVerifyRequest
 import javax.inject.Inject
@@ -42,8 +43,8 @@ class MedicRepository @Inject constructor(
         data class Err(val message: String) : OrderResult
     }
 
-    suspend fun createOrder(items: List<CartItemDto>): OrderResult = runCatching {
-        val res = api.createOrder(MedicCartRequest(items))
+    suspend fun createOrder(items: List<CartItemDto>, paymentMode: String): OrderResult = runCatching {
+        val res = api.createOrder(MedicCreateOrderRequest(items = items, paymentMode = paymentMode))
         if (res.code() == 401) {
             authStore.clear()
             return@runCatching OrderResult.Err("Please sign in again.")
@@ -57,7 +58,12 @@ class MedicRepository @Inject constructor(
     }.getOrElse { OrderResult.Err(it.message ?: "Network error") }
 
     sealed interface VerifyResult {
-        data class Ok(val bookingCode: String?, val prepayPaise: Long, val atVisitPaise: Long) : VerifyResult
+        data class Ok(
+            val bookingCode: String?,
+            val chargedPaise: Long,
+            val balancePaise: Long,
+            val atVisitPaise: Long,
+        ) : VerifyResult
         data class Err(val message: String) : VerifyResult
     }
 
@@ -84,7 +90,7 @@ class MedicRepository @Inject constructor(
         }
         val b = res.body()
         if (res.isSuccessful && b?.ok == true) {
-            VerifyResult.Ok(b.bookingCode, b.prepayPaise, b.atVisitPaise)
+            VerifyResult.Ok(b.bookingCode, b.chargedPaise, b.balancePaise, b.atVisitPaise)
         } else {
             VerifyResult.Err(b?.error ?: parseError(res.errorBody()?.string()))
         }

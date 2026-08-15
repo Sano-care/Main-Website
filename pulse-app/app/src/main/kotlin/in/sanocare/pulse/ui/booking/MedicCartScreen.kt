@@ -143,7 +143,7 @@ fun MedicCartScreen(
                         atVisitInr = ((quote?.atVisitPaise ?: 0) / 100).toInt(),
                         working = phase is MedicPhase.Working,
                         failedMessage = (phase as? MedicPhase.Failed)?.message ?: vm.formError,
-                        onPay = { vm.checkout(prefillPhone) },
+                        onPay = { mode -> vm.checkout(prefillPhone, mode) },
                     )
                 } else {
                     CartBrowse(
@@ -342,7 +342,7 @@ private fun CheckoutStep(
     atVisitInr: Int,
     working: Boolean,
     failedMessage: String?,
-    onPay: () -> Unit,
+    onPay: (String) -> Unit,
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text("Who is this for?", color = InkMute, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
@@ -393,12 +393,15 @@ private fun CheckoutStep(
             )
         }
 
+        val bookingFeeInr = MEDIC_BOOKING_FEE_INR
+        val balanceAfterFeeInr = (prepayInr - bookingFeeInr).coerceAtLeast(0)
+
         Spacer(Modifier.height(18.dp))
         Column(
             Modifier.fillMaxWidth().background(PaperMute, RoundedCornerShape(14.dp)).padding(14.dp),
         ) {
             Row {
-                Text("Pay now", color = InkSecondary, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Text("Full cart total", color = InkSecondary, fontSize = 13.sp, modifier = Modifier.weight(1f))
                 Text("₹$prepayInr", color = InkPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp, fontFamily = SanocareMonoFamily)
             }
             if (atVisitInr > 0) {
@@ -419,16 +422,40 @@ private fun CheckoutStep(
             Text(failedMessage, color = SanocareBlue, fontSize = 13.sp)
         }
 
+        val canPay = !working && !vm.rxBlocking && vm.address.trim().length >= 4
+
+        // Two payment options (mirrors lab): a flat ₹100 booking-confirmation fee,
+        // or the full cart total now. Server re-derives + charges the amount.
         Spacer(Modifier.height(20.dp))
         PrimaryButton(
-            text = "Pay ₹$prepayInr & confirm",
-            onClick = onPay,
-            enabled = !working && !vm.rxBlocking && vm.address.trim().length >= 4,
+            text = "Pay ₹$bookingFeeInr to confirm",
+            onClick = { onPay("booking_fee") },
+            enabled = canPay,
             loading = working,
         )
+        Text(
+            "Pay ₹$bookingFeeInr now to confirm; balance ₹$balanceAfterFeeInr" +
+                (if (atVisitInr > 0) "+" else "") + " collected at/after the visit.",
+            color = InkMute, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp),
+        )
+        Spacer(Modifier.height(12.dp))
+        Box(
+            Modifier.fillMaxWidth().height(48.dp)
+                .border(1.dp, if (canPay) SanocareBlue else BorderHair, RoundedCornerShape(12.dp))
+                .clickable(enabled = canPay) { onPay("full") },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "Pay ₹$prepayInr now",
+                color = if (canPay) SanocareBlue else InkMute,
+                fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
+            )
+        }
         Spacer(Modifier.height(24.dp))
     }
 }
+
+private const val MEDIC_BOOKING_FEE_INR = 100
 
 @Composable
 private fun ConfirmedView(p: MedicPhase.Confirmed, onDone: () -> Unit) {
@@ -448,7 +475,8 @@ private fun ConfirmedView(p: MedicPhase.Confirmed, onDone: () -> Unit) {
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            "Paid ₹${p.prepayInr} now." +
+            "Paid ₹${p.chargedInr} now." +
+                (if (p.balanceInr > 0) " Balance ₹${p.balanceInr} is collected at/after the visit." else "") +
                 (if (p.atVisitInr > 0) " Variable extras (about ₹${p.atVisitInr}) are settled with the medic at the visit." else "") +
                 " We'll call to confirm the time and details.",
             color = InkMute, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 8.dp),

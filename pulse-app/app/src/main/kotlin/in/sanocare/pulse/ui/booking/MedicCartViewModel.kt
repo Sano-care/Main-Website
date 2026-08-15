@@ -31,7 +31,12 @@ import javax.inject.Inject
 sealed interface MedicPhase {
     data object Browsing : MedicPhase
     data object Working : MedicPhase
-    data class Confirmed(val bookingCode: String?, val prepayInr: Int, val atVisitInr: Int) : MedicPhase
+    data class Confirmed(
+        val bookingCode: String?,
+        val chargedInr: Int,
+        val balanceInr: Int,
+        val atVisitInr: Int,
+    ) : MedicPhase
     data class Failed(val message: String) : MedicPhase
 }
 
@@ -112,7 +117,8 @@ class MedicCartViewModel @Inject constructor(
     /** True when an rx_required='yes' item is in the cart but not acknowledged. */
     val rxBlocking: Boolean get() = _rx.value.required.isNotEmpty() && !rxAcknowledged
 
-    fun checkout(prefillContact: String?) {
+    /** paymentMode: "booking_fee" (flat ₹100 now) or "full" (whole prepay). */
+    fun checkout(prefillContact: String?, paymentMode: String) {
         formError = null
         val items = toItems()
         if (items.isEmpty()) { formError = "Add at least one procedure."; return }
@@ -123,7 +129,7 @@ class MedicCartViewModel @Inject constructor(
         }
         _phase.value = MedicPhase.Working
         viewModelScope.launch {
-            when (val r = repo.createOrder(items)) {
+            when (val r = repo.createOrder(items, paymentMode)) {
                 is MedicRepository.OrderResult.Ok ->
                     _openCheckout.emit(
                         OpenCheckout(
@@ -158,7 +164,8 @@ class MedicCartViewModel @Inject constructor(
                 is MedicRepository.VerifyResult.Ok ->
                     _phase.value = MedicPhase.Confirmed(
                         bookingCode = r.bookingCode,
-                        prepayInr = (r.prepayPaise / 100).toInt(),
+                        chargedInr = (r.chargedPaise / 100).toInt(),
+                        balanceInr = (r.balancePaise / 100).toInt(),
                         atVisitInr = (r.atVisitPaise / 100).toInt(),
                     )
                 is MedicRepository.VerifyResult.Err ->
