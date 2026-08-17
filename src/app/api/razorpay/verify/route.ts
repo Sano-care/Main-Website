@@ -28,6 +28,8 @@ import {
   stampBookingClickIds,
 } from "@/lib/wa/attribution";
 import { uploadWhatsappConversion } from "@/lib/wa/uploadConversion";
+import { persistBookingIdempotent } from "@/lib/booking/paymentSafetyNet";
+import { sendOpsAlert } from "@/lib/whatsapp/opsAlert";
 import type { ServiceSlug } from "@/lib/services/catalog";
 
 const VALID_T85_SLUGS: ServiceSlug[] = [
@@ -46,6 +48,22 @@ export const runtime = "nodejs";
  * - Verifies the signature server-side (so we trust the payment).
  * - If valid, persists the booking to Supabase with payment fields set.
  *
+ * P0 revenue-leak fix (2026-08-17): a valid Razorpay signature is cryptographic
+ * proof that the money was captured through our account, so once it verifies a
+ * booking MUST be persisted — unconditionally. Two earlier hard gates used to
+ * drop proven-paid bookings AFTER capture (returning 401/400 with the money
+ * already taken and NO booking row + NO ops alert):
+ *   1. The OTP-verify cookie was re-checked here and 401'd when missing/expired.
+ *      That cookie is a *session* cookie (no Max-Age) + 30-min token, so it is
+ *      routinely gone by post-checkout verify (in-app browsers, tab eviction,
+ *      long checkouts) — the dominant cause of the 38 captured-no-booking
+ *      orphans. It is now a SOFT attestation: recorded + flagged, never a block.
+ *   2. An invalid patient_name returned 400. It now falls back to a flagged
+ *      placeholder so the paid booking still lands.
+ * Any genuine persistence failure now fires a LOUD ops alert before surfacing
+ * an error, and the write is idempotent on razorpay_order_id. A captured
+ * payment can no longer yield a silent no-booking.
+ *
  * Body:
  *   {
  *     razorpay_order_id, razorpay_payment_id, razorpay_signature,
@@ -56,7 +74,7 @@ export const runtime = "nodejs";
  * Returns:
  *   200 { ok: true, bookingId }
  *   400 { error } — signature invalid or input malformed
- *   500 { error } — Supabase or env issue
+ *   500 { error } — Supabase or env issue (ops alerted)
  */
 export async function POST(req: NextRequest) {
   try {
@@ -78,31 +96,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing booking" }, { status: 400 });
     }
 
-    // === OTP verification gate ===
-    // The booking-insert path is gated by the signed cookie minted at
-    // /api/auth/verify-otp. The cookie's payload must match the phone the
-    // patient is booking with. This blocks server-side bypasses where a
-    // client could fabricate a booking insert without going through the gate.
-    const verifyCookie = req.cookies.get(VERIFY_COOKIE_NAME)?.value;
-    const verified = verifyToken(verifyCookie);
-    if (!verified) {
-      return NextResponse.json(
-        { error: "Phone verification required. Please request a code first." },
-        { status: 401 },
-      );
-    }
-    const submittedPhone = normaliseIndianPhone(String(booking.phone ?? ""));
-    if (!submittedPhone || submittedPhone !== verified.phone) {
-      return NextResponse.json(
-        {
-          error:
-            "Booking phone does not match the verified number. Please re-verify.",
-        },
-        { status: 401 },
-      );
-    }
-
-    // === Signature verification ===
+    // === Signature verification FIRST ===
+    // The signature is HMAC-SHA256(order_id|payment_id, key_secret) — only a
+    // real payment through our Razorpay account produces a valid one. It is the
+    // authority for whether a booking should exist, so we check it before any
+    // softer gate. An invalid signature means "not a proven payment" and is the
+    // only case where we refuse to write a booking on this path.
     const valid = verifyPaymentSignature({
       orderId: razorpay_order_id,
       paymentId: razorpay_payment_id,
@@ -120,21 +119,43 @@ export async function POST(req: NextRequest) {
     }
 
     // === Persist booking ===
-    // We use the service-role key so this insert bypasses RLS. Patient-facing
-    // bookings can also be inserted via the anon key + RLS policy; we use the
-    // service role here because the *payment* has just been verified server-side
-    // and we want to write the payment-status fields too.
+    // Service-role key so the insert bypasses RLS and can write payment-status
+    // fields the anon policy wouldn't allow. The payment is already proven above.
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
     if (!supabaseUrl || !serviceRoleKey) {
+      // Money captured, but we cannot write. LOUD, never silent.
+      await sendOpsAlert({
+        conversationId: null,
+        escalationId: null,
+        patientName: "⚠ PAID — SERVER MISCONFIGURED",
+        patientAge: "—",
+        serviceDisplay: String(
+          booking.t85Slug || booking.service_category || "unknown",
+        ),
+        location: "Supabase credentials missing on /api/razorpay/verify",
+        context: `Captured payment ${razorpay_payment_id} (order ${razorpay_order_id}) could NOT be saved — Supabase creds missing. Reconcile manually.`,
+        patientMobile: String(booking.phone || "unknown"),
+      });
       return NextResponse.json(
-        { error: "Supabase server credentials missing" },
+        { error: "Supabase server credentials missing", razorpay_payment_id },
         { status: 500 }
       );
     }
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false },
     });
+
+    // === OTP attestation — SOFT (never blocks a proven-paid booking) ===
+    // Record whether the booking phone was OTP-verified via the signed cookie,
+    // but NEVER 401 on a miss: the signature above already proves the payment.
+    // A missing/expired cookie only means we couldn't re-attest the phone here
+    // — ops is flagged (below) to confirm identity, and the booking still lands.
+    const verifyCookie = req.cookies.get(VERIFY_COOKIE_NAME)?.value;
+    const verified = verifyToken(verifyCookie);
+    const submittedPhone = normaliseIndianPhone(String(booking.phone ?? ""));
+    const otpAttested =
+      !!verified && !!submittedPhone && submittedPhone === verified.phone;
 
     // If the patient's browser couldn't (or wouldn't) share their location,
     // mark the booking so ops knows to collect address from them before
@@ -171,43 +192,47 @@ export async function POST(req: NextRequest) {
           : "🗓 ASAP"
         : "";
 
-    const composedOpsNotes = [opsNotesMarker, scheduledMarker]
+    // customer-link-hotpatch: validate patient_name server-side. The paid
+    // booking must still land even if the name is unusable, so a failed
+    // validation now falls back to a flagged placeholder instead of a 400
+    // that would drop the (already-captured) payment.
+    const nameValidation = validatePatientName(booking.patient_name);
+    const resolvedPatientName = nameValidation.ok
+      ? nameValidation.name
+      : "[Name pending — collect from patient]";
+
+    // Post-capture attestation flags for ops. Prepended to ops_notes so a
+    // partially-attested booking is obvious in the ops worklist.
+    const attestationFlags = [
+      otpAttested
+        ? null
+        : "⚠ UNVERIFIED PHONE — OTP attestation missing/expired at payment verify; confirm patient identity before dispatch.",
+      nameValidation.ok ? null : "⚠ NAME NOT CAPTURED — collect patient name.",
+    ]
       .filter(Boolean)
       .join("\n");
 
-    // customer-link-hotpatch: validate patient_name server-side. The
-    // client (LabBasketWindow / IdentifyStep) gates on the same rules,
-    // but server validation is the actual contract — silent corruption
-    // beats a 400, but a 400 beats writing "Patient" into the DB.
-    const nameValidation = validatePatientName(booking.patient_name);
-    if (!nameValidation.ok) {
-      return NextResponse.json(
-        { error: nameValidation.error, razorpay_payment_id },
-        { status: 400 },
-      );
-    }
+    const composedOpsNotes = [attestationFlags, opsNotesMarker, scheduledMarker]
+      .filter(Boolean)
+      .join("\n");
 
     // customer-link-hotpatch: look up existing customer by phone and link
-    // it. SAN-B-00058/00059 both had matching customers that this path
-    // was never querying. customer_id stays NULL when no match exists
-    // (T64 PR1 adds the auto-create path).
+    // it. customer_id stays NULL when no match exists (T64 PR1 adds the
+    // auto-create path).
     const insertCustomerId = await lookupCustomerIdByPhone(
       supabase,
       String(booking.phone || "").trim(),
     );
 
-    // T90 Slice 2 Step 12 — member_id from Pulse-side bookings. Set
-    // client-side by PaymentStep when entryPoint='pulse' AND
-    // pulseEntryMember.kind === 'member'. Null on marketing entries
-    // and on Pulse self-bookings. Column exists on bookings since
-    // M042; this is the first writer.
+    // T90 Slice 2 Step 12 — member_id from Pulse-side bookings. Null on
+    // marketing entries and Pulse self-bookings.
     const memberIdInput =
       typeof booking.member_id === "string" && booking.member_id.trim()
         ? booking.member_id.trim()
         : null;
 
     const insertPayload = {
-      patient_name: nameValidation.name,
+      patient_name: resolvedPatientName,
       phone: String(booking.phone || "").trim(),
       customer_id: insertCustomerId,
       member_id: memberIdInput,
@@ -224,63 +249,46 @@ export async function POST(req: NextRequest) {
       payment_status: "CAPTURED",
       booking_fee_paid_paise: persistedFeePaise,
       payment_captured_at: new Date().toISOString(),
-      // From migration 011 — stamps the OTP-verified moment so ops can
-      // audit which bookings went through the phone gate.
-      otp_verified_at: new Date(verified.verifiedAt * 1000).toISOString(),
+      // Soft OTP attestation — the verified moment when the phone was
+      // OTP-checked, or NULL when the cookie was absent/expired at verify.
+      otp_verified_at:
+        otpAttested && verified
+          ? new Date(verified.verifiedAt * 1000).toISOString()
+          : null,
     };
 
-    // Idempotent insert. The partial unique index on
-    // bookings(razorpay_order_id) (migration 20260720120000) guarantees one
-    // booking per order even if the /api/razorpay/webhook safety net already
-    // created a reconciliation stub for this capture, or the client
-    // double-submits. On a unique violation we UPGRADE the existing row with
-    // the real patient details captured here, and mark the booking as NOT
-    // newly inserted so the ops alert / patient confirmation / marketing link
-    // don't double-fire (the webhook already alerted ops for a stub).
-    const inserted = await supabase
-      .from("bookings")
-      .insert(insertPayload)
-      .select("id, booking_code")
-      .single();
-    let data = inserted.data;
-    let error = inserted.error;
-    let wasNewlyInserted = !error;
-
-    if (error && (error as { code?: string }).code === "23505") {
-      const upgraded = await supabase
-        .from("bookings")
-        .update(insertPayload)
-        .eq("razorpay_order_id", razorpay_order_id)
-        .select("id, booking_code")
-        .single();
-      data = upgraded.data;
-      error = upgraded.error;
-      wasNewlyInserted = false;
-      console.info(
-        "[razorpay/verify] order already had a booking — upgraded in place",
-        razorpay_order_id,
+    // Idempotent insert keyed by razorpay_order_id (partial unique index,
+    // migration 20260720120000). On a unique violation the existing row is
+    // upgraded in place (a webhook reconciliation stub, or a double-submit);
+    // on any genuine failure a LOUD ops alert fires before we surface the error
+    // so a captured payment can never yield a silent no-booking.
+    const persist = await persistBookingIdempotent(
+      insertPayload,
+      razorpay_order_id,
+      { supabase },
+    );
+    if (!persist.ok) {
+      console.error(
+        "[razorpay/verify] booking persist failed (ops alerted):",
+        persist.error,
       );
-    }
-
-    if (error) {
-      console.error("[razorpay/verify] supabase insert failed:", error);
       return NextResponse.json(
         {
           error:
             "Payment verified but booking could not be saved. Please call support.",
           razorpay_payment_id,
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
+    const data = { id: persist.bookingId, booking_code: persist.bookingCode };
+    const wasNewlyInserted = persist.wasNewlyInserted;
 
-    // T64: customer first-write-wins. Sets the customer's display name
-    // on their FIRST booking only. Subsequent bookings for family
-    // members or under different names don't overwrite (the
-    // `is('full_name', null)` filter is the gate). Patient can later
-    // update via Pulse profile editing (T70/T71). Soft-fail discipline
+    // T64: customer first-write-wins. Sets the customer's display name on
+    // their FIRST booking only, and only when we actually captured a real
+    // name (never the "[Name pending]" placeholder). Soft-fail discipline
     // matches the lead-alert pattern — logged + swallowed.
-    if (wasNewlyInserted && insertCustomerId) {
+    if (wasNewlyInserted && insertCustomerId && nameValidation.ok) {
       try {
         const { error: nameWriteErr } = await supabase
           .from("customers")
@@ -306,25 +314,14 @@ export async function POST(req: NextRequest) {
     // console.error) and never throws here, so the booking response
     // stays authoritative regardless of BSP hiccups.
     //
-    // We `await` (not `void`) deliberately: PR4a originally fired this
-    // promise-style on the theory that Netlify Functions would honor the
-    // pending fetch before container teardown. Prod smoke on Case
-    // #SAN-B-00058 (2026-06-08) confirmed that theory is wrong — the
-    // serverless function freezes immediately on response, and the
-    // pending Rampwin fetch never executes. OTPs work because their send
-    // is already awaited (the response depends on send success). Same
-    // BSP creds, same wire shape — only call pattern differs. The
-    // ~200–800ms latency hit is acceptable; ops needs the alert.
+    // We `await` (not `void`) deliberately: the serverless function freezes
+    // immediately on response, so a pending (un-awaited) Rampwin fetch never
+    // executes. The ~200–800ms latency hit is acceptable; ops needs the alert.
     const displaySlug =
       t85Slug ?? dbToT85Slug(persistedServiceCategory) ?? "home-visit";
 
-    // T85 PR4b v2 — `{{5}}` Context is now a standardized payment
-    // summary via formatLeadAlertContext (single source of truth in
-    // contextFormat.ts). Non-lab services use 'partial-advance-50':
-    // paid = half, total = full = half + remaining. The "notes" half
-    // of the format defaults to "—" since PR4a doesn't surface a
-    // notes input — when a future iteration adds one, pass it as the
-    // first arg.
+    // T85 PR4b v2 — `{{5}}` Context is a standardized payment summary via
+    // formatLeadAlertContext (single source of truth in contextFormat.ts).
     const totalInr = t85Slug
       ? getServiceHalfRoundedUp(t85ToPricingKey(t85Slug)) +
         getServiceRemainingAfterHalf(t85ToPricingKey(t85Slug))
@@ -337,22 +334,16 @@ export async function POST(req: NextRequest) {
 
     // Slice 2a — fire the ops lead alert AND the patient booking
     // confirmation concurrently. Both senders are best-effort (never
-    // throw); Promise.allSettled keeps one failure from blocking the
-    // other and parallelizes the two BSP round-trips so the patient
-    // template adds no extra sequential latency on top of the alert.
+    // throw); Promise.allSettled keeps one failure from blocking the other.
     const bookingRef = data?.booking_code ?? data?.id ?? "?";
     // Only fire on a genuinely new booking. On the idempotent-upgrade path
     // (a webhook reconciliation stub, or a double-submit) the webhook already
-    // alerted ops for this order, so re-sending here would double-notify both
-    // the patient and ops.
+    // alerted ops for this order, so re-sending here would double-notify.
     if (wasNewlyInserted) {
     try {
       await Promise.allSettled([
         sendAarogyaLeadAlert({
           patientName: insertPayload.patient_name,
-          // Age is not collected in PR4a Step 1 — defaults to "—y" in the
-          // sender. T64 (family-member picker) extends Step 1 with age
-          // and can pass `ageWithYearSuffix` here once it ships.
           serviceDisplayName: t85ServiceDisplayName(displaySlug),
           location: insertPayload.manual_address,
           context: contextText,

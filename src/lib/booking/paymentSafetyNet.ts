@@ -280,3 +280,203 @@ export async function runPaymentLeakMonitor(
     alertsSent,
   };
 }
+
+// ---------------------------------------------------------------------------
+// persistBookingIdempotent — the "capture → booking" write, made atomic +
+// idempotent + LOUD. Used by /api/razorpay/verify so a proven-paid booking can
+// never yield a silent no-booking:
+//   - insert keyed by razorpay_order_id;
+//   - a 23505 unique violation upgrades the existing row in place (webhook
+//     reconciliation stub, double-submit) and reports wasNewlyInserted=false so
+//     the caller doesn't double-fire confirmations;
+//   - ANY genuine write failure fires the hardened ops alert BEFORE returning,
+//     so money-in-no-booking is impossible to miss.
+// ---------------------------------------------------------------------------
+
+export interface PersistBookingResult {
+  ok: boolean;
+  bookingId?: string;
+  bookingCode?: string | null;
+  /** false on the 23505 upgrade path — caller must not re-fire confirmations. */
+  wasNewlyInserted: boolean;
+  error?: unknown;
+}
+
+export interface PersistBookingDeps {
+  supabase: SupabaseClient;
+  sendOpsAlertFn?: typeof sendOpsAlert;
+}
+
+export async function persistBookingIdempotent(
+  insertPayload: Record<string, unknown>,
+  orderId: string,
+  deps: PersistBookingDeps,
+): Promise<PersistBookingResult> {
+  const { supabase } = deps;
+  const sendOpsAlertFn = deps.sendOpsAlertFn ?? sendOpsAlert;
+
+  const inserted = await supabase
+    .from("bookings")
+    .insert(insertPayload)
+    .select("id, booking_code")
+    .single();
+  let data = inserted.data as { id?: string; booking_code?: string | null } | null;
+  let error = inserted.error as { code?: string; message?: string } | null;
+  let wasNewlyInserted = !error;
+
+  if (error && error.code === PG_UNIQUE_VIOLATION) {
+    // A booking already exists for this order (webhook stub or double-submit).
+    // Upgrade it in place with the real details captured here.
+    const upgraded = await supabase
+      .from("bookings")
+      .update(insertPayload)
+      .eq("razorpay_order_id", orderId)
+      .select("id, booking_code")
+      .single();
+    data = upgraded.data as { id?: string; booking_code?: string | null } | null;
+    error = upgraded.error as { code?: string; message?: string } | null;
+    wasNewlyInserted = false;
+    if (!error) {
+      console.info(
+        "[persistBookingIdempotent] order already had a booking — upgraded in place",
+        orderId,
+      );
+    }
+  }
+
+  if (error) {
+    const amountPaise =
+      typeof insertPayload.booking_fee_paid_paise === "number"
+        ? insertPayload.booking_fee_paid_paise
+        : 0;
+    const amountRupees = Math.round(Number(amountPaise)) / 100;
+    await sendOpsAlertFn({
+      conversationId: null,
+      escalationId: null,
+      patientName: "⚠ PAID — BOOKING SAVE FAILED",
+      patientAge: "—",
+      serviceDisplay: String(insertPayload.service_category ?? "unknown"),
+      location: "DB write failed after capture — reconcile now",
+      context: `Captured payment ${String(
+        insertPayload.razorpay_payment_id ?? "?",
+      )} (order ${orderId}, ₹${amountRupees}) but booking write FAILED: ${
+        error.message ?? "unknown"
+      }. Money in, NO booking.`,
+      patientMobile: String(insertPayload.phone ?? "unknown"),
+    });
+    return { ok: false, wasNewlyInserted: false, error };
+  }
+
+  return {
+    ok: true,
+    bookingId: data?.id,
+    bookingCode: data?.booking_code ?? null,
+    wasNewlyInserted,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// reconcileRazorpayOrphans — the ACTIVE backstop. The webhook safety net only
+// fires if Razorpay is configured to call it (in prod it produced 0 stubs over
+// 2 months — never wired), and runPaymentLeakMonitor only watches existing
+// stubs + pipeline silence. Neither notices a captured payment that simply
+// never became a booking. This polls Razorpay directly for recently-captured
+// payments and ensures each has a booking (creating a reconciliation stub +
+// ops alert for any orphan), so a leak is caught within one cron interval even
+// if the webhook is silent. Idempotent: re-runs over the same window are no-ops
+// once a booking/stub exists.
+// ---------------------------------------------------------------------------
+
+/** Minimal shape of a Razorpay payment entity we depend on. */
+export interface RazorpayPaymentLite {
+  id: string;
+  order_id: string | null;
+  status: string;
+  /** paise */
+  amount: number;
+  contact?: string | null;
+  email?: string | null;
+}
+
+export interface ReconcileOrphansDeps {
+  supabase: SupabaseClient;
+  /** Lists Razorpay payments captured in [fromUnix, toUnix]. Injected so tests
+   *  never hit Razorpay; the cron route wraps razorpay.payments.all(). */
+  listPayments: (fromUnix: number, toUnix: number) => Promise<RazorpayPaymentLite[]>;
+  fetchOrderNotes: (orderId: string) => Promise<Record<string, string>>;
+  sendOpsAlertFn?: typeof sendOpsAlert;
+  now?: Date;
+}
+
+export interface ReconcileOrphansResult {
+  ran: true;
+  windowFromUnix: number;
+  windowToUnix: number;
+  scanned: number;
+  /** orphans that had no booking and got a reconciliation stub + alert. */
+  orphansEnsured: number;
+  /** captured payments that already had a booking. */
+  alreadyPresent: number;
+  errors: number;
+}
+
+export async function reconcileRazorpayOrphans(
+  deps: ReconcileOrphansDeps,
+  opts?: { lookbackMs?: number },
+): Promise<ReconcileOrphansResult> {
+  const now = deps.now ?? new Date();
+  // Default 6h window, run more often than that so consecutive runs overlap and
+  // nothing slips between them. Kept short so a first deploy does NOT re-alert
+  // the historical backlog (those are handled by an explicit data backfill).
+  const lookbackMs = opts?.lookbackMs ?? 6 * 3600_000;
+  const toUnix = Math.floor(now.getTime() / 1000);
+  const fromUnix = Math.floor((now.getTime() - lookbackMs) / 1000);
+
+  const payments = await deps.listPayments(fromUnix, toUnix);
+
+  let scanned = 0;
+  let orphansEnsured = 0;
+  let alreadyPresent = 0;
+  let errors = 0;
+
+  for (const p of payments) {
+    if (p.status !== "captured" || !p.order_id) continue;
+    scanned++;
+    try {
+      const res = await ensureBookingForCapturedOrder(
+        {
+          orderId: p.order_id,
+          paymentId: p.id,
+          amountPaise: Number(p.amount) || 0,
+          contact: p.contact ?? null,
+          email: p.email ?? null,
+        },
+        {
+          supabase: deps.supabase,
+          fetchOrderNotes: deps.fetchOrderNotes,
+          sendOpsAlertFn: deps.sendOpsAlertFn,
+          now,
+        },
+      );
+      if (res.action === "reconciliation_created") orphansEnsured++;
+      else alreadyPresent++;
+    } catch (e) {
+      errors++;
+      console.error(
+        "[reconcileRazorpayOrphans] ensure failed for order",
+        p.order_id,
+        e,
+      );
+    }
+  }
+
+  return {
+    ran: true,
+    windowFromUnix: fromUnix,
+    windowToUnix: toUnix,
+    scanned,
+    orphansEnsured,
+    alreadyPresent,
+    errors,
+  };
+}
