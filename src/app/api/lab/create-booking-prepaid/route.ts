@@ -14,8 +14,11 @@ import {
   validatePatientName,
   lookupCustomerIdByPhone,
 } from "@/lib/booking/customerLink";
+import {
+  persistBookingIdempotent,
+  alertOnPostCaptureFailure,
+} from "@/lib/booking/paymentSafetyNet";
 import { LAB_COLLECTION_FEE_INR } from "@/lib/services/labCatalog";
-import { PHONE_DISPLAY } from "@/lib/contact";
 import { linkBookingToMarketingLead } from "@/lib/marketing/closedLoop";
 
 export const runtime = "nodejs";
@@ -23,39 +26,18 @@ export const runtime = "nodejs";
 /**
  * POST /api/lab/create-booking-prepaid
  *
- * T85 PR4b — full-prepaid lab booking. Verifies Razorpay signature +
- * OTP cookie, RE-VALIDATES the coupon server-side, recomputes the
- * grand total, and inserts the booking row with
- * `service_category='lab-tests'` + `report_payment_status='CAPTURED'`.
+ * T85 PR4b — full-prepaid lab booking. Post-#159 parity: a valid Razorpay
+ * signature proves the money is captured, so this route no longer drops a
+ * proven-paid booking:
+ *   - Signature is verified FIRST — ahead of the OTP cookie (which used to hard
+ *     401 here exactly like the pre-#159 web verify, dropping paid bookings when
+ *     the session cookie had expired at post-checkout verify).
+ *   - The OTP cookie is now a SOFT attestation (stamp otp_verified_at when it
+ *     matches, flag ops when it doesn't) — never a 401.
+ *   - Recoverable validation (name/address) → persist-and-flag, not a 400.
+ *   - The write is idempotent + LOUD (persistBookingIdempotent).
  *
- * Coexists with the legacy `/api/lab/create-booking` (free-at-booking
- * + pay-after-report). The two endpoints write structurally similar
- * rows but populate different lifecycle columns:
- *   - This route: status='PENDING_COLLECTION', report_payment_status='CAPTURED'
- *   - Legacy:     status='PENDING_COLLECTION', report_payment_status='NOT_DUE'
- *
- * The `/reports/[token]` magic-link path checks `report_payment_status`
- * — for PR4b rows it sees CAPTURED, skips the paywall, and unlocks
- * the PDF on token alone. Existing 19 legacy rows keep walking the
- * old NOT_DUE→LINK_SENT→CAPTURED lifecycle until their reports ship;
- * PR5 retires the legacy path after the last legacy row clears.
- *
- * Body:
- *   {
- *     razorpay_order_id, razorpay_payment_id, razorpay_signature,
- *     booking: {
- *       patient_name, phone, manual_address,
- *       gps_location?: { lat, lng, accuracy },
- *       selected_tests: [{ code, name, priceInr, mrpInr, qty }],
- *       subtotalInr,
- *       couponCode?,
- *       scheduledFor: { kind: 'asap' } | { kind: 'slot', iso: string },
- *     }
- *   }
- *
- * Returns:
- *   200 { ok: true, bookingId, bookingCode, finalAmountInr }
- *   400 / 401 / 500 { error }
+ * Coexists with the legacy `/api/lab/create-booking` (free-at-booking).
  */
 export async function POST(req: NextRequest) {
   try {
@@ -77,27 +59,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing booking" }, { status: 400 });
     }
 
-    // === OTP gate ===
-    const verifyCookie = req.cookies.get(VERIFY_COOKIE_NAME)?.value;
-    const verified = verifyToken(verifyCookie);
-    if (!verified) {
-      return NextResponse.json(
-        { error: "Phone verification required. Please request a code first." },
-        { status: 401 },
-      );
-    }
-    const submittedPhone = normaliseIndianPhone(String(booking.phone ?? ""));
-    if (!submittedPhone || submittedPhone !== verified.phone) {
-      return NextResponse.json(
-        {
-          error:
-            "Booking phone does not match the verified number. Please re-verify.",
-        },
-        { status: 401 },
-      );
-    }
-
-    // === Razorpay signature ===
+    // === Razorpay signature FIRST (money is captured once this passes) ===
     const valid = verifyPaymentSignature({
       orderId: razorpay_order_id,
       paymentId: razorpay_payment_id,
@@ -114,30 +76,65 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // === Field validation ===
-    // customer-link-hotpatch: full name validation (rejects empty / <2
-    // chars / placeholder strings like "Patient"). LabBasketWindow gates
-    // on the same rules client-side; this is the actual contract.
-    const nameValidation = validatePatientName(booking.patient_name);
-    if (!nameValidation.ok) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+    if (!supabaseUrl || !serviceRoleKey) {
+      await alertOnPostCaptureFailure({
+        orderId: razorpay_order_id,
+        paymentId: razorpay_payment_id,
+        serviceDisplay: "Lab Tests at Home",
+        reason: "Supabase credentials missing on /api/lab/create-booking-prepaid",
+      });
       return NextResponse.json(
-        { error: nameValidation.error },
-        { status: 400 },
+        { error: "Supabase server credentials missing", razorpay_payment_id },
+        { status: 500 },
       );
     }
-    const patientName = nameValidation.name;
-    const address = String(booking.manual_address ?? "").trim();
-    if (address.length < 10) {
-      return NextResponse.json(
-        { error: "Address is too short." },
-        { status: 400 },
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false },
+    });
+
+    // === OTP attestation — SOFT (never blocks a proven-paid booking) ===
+    const submittedPhone = normaliseIndianPhone(String(booking.phone ?? ""));
+    const verified = verifyToken(req.cookies.get(VERIFY_COOKIE_NAME)?.value);
+    const otpAttested =
+      !!verified && !!submittedPhone && submittedPhone === verified.phone;
+    const phone = submittedPhone ?? String(booking.phone ?? "").trim();
+
+    const flags: string[] = [];
+    if (!otpAttested) {
+      flags.push(
+        "⚠ UNVERIFIED PHONE — OTP attestation missing/expired at payment verify; confirm patient identity before dispatch.",
       );
+    }
+
+    // === Recoverable validation → persist-and-flag (never a 400 post-capture) ===
+    const nameValidation = validatePatientName(booking.patient_name);
+    const patientName = nameValidation.ok
+      ? nameValidation.name
+      : "[Name pending — collect from patient]";
+    if (!nameValidation.ok) flags.push("⚠ NAME NOT CAPTURED — collect patient name.");
+
+    let address = String(booking.manual_address ?? "").trim();
+    if (address.length < 10) {
+      flags.push("⚠ ADDRESS MISSING/SHORT — collect the collection address before dispatch.");
+      address = address || "[Address pending — collect from patient]";
     }
 
     const selectedTests = Array.isArray(booking.selected_tests)
       ? booking.selected_tests
       : [];
     if (selectedTests.length === 0) {
+      // No tests → we can't compute the real basket the payment was for. Money
+      // IS captured — alert loudly (the reconciler will also stub it) rather
+      // than book an empty, mis-priced lab order.
+      await alertOnPostCaptureFailure({
+        orderId: razorpay_order_id,
+        paymentId: razorpay_payment_id,
+        contact: phone || null,
+        serviceDisplay: "Lab Tests at Home",
+        reason: "Empty test basket at verify — cannot reconcile paid basket",
+      });
       return NextResponse.json(
         { error: "Pick at least one lab test before booking." },
         { status: 400 },
@@ -145,10 +142,6 @@ export async function POST(req: NextRequest) {
     }
 
     // === Server-side re-pricing ===
-    // Don't trust client subtotal. Recompute from selected_tests'
-    // priceInr × qty. Each row arrives with `{ code, name, priceInr,
-    // mrpInr, qty }`. mrpInr is for the snapshot only (records what
-    // was struck-through at booking time); not used for pricing.
     type Test = {
       code: string;
       name: string;
@@ -169,30 +162,11 @@ export async function POST(req: NextRequest) {
         ? booking.couponCode.trim().toUpperCase()
         : null;
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-    if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json(
-        { error: "Supabase server credentials missing" },
-        { status: 500 },
-      );
-    }
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false },
-    });
-
-    // T85 PR4b v2 — payment mode. 'full' = full grand total prepaid;
-    // 'partial' = ₹200 collection fee prepaid + balance at door via
-    // UPI. Defaults to 'full' for back-compat with any caller that
-    // pre-dates the v2 wire shape.
     const paymentMode =
       booking.paymentMode === "partial" ? "partial" : "full";
 
     let discountInr = 0;
     let couponDiscountPercent: number | null = null;
-    // Coupons apply only in Mode A (full). Mode B's prepaid amount is
-    // a flat ₹200 collection fee with no discount — see /create-order
-    // route for matching server-side logic.
     if (couponCode && paymentMode === "full") {
       const { data: coupon } = await supabase
         .from("lab_coupons")
@@ -231,15 +205,12 @@ export async function POST(req: NextRequest) {
       0,
       Math.ceil(subtotalInr - discountInr + LAB_COLLECTION_FEE_INR),
     );
-    // T85 PR4b v2 — per-mode billed-now amount.
-    //   Mode A: bill the full grand total at Razorpay capture
-    //   Mode B: bill only the ₹200 collection fee; balance owed at door
     const paidNowInr =
       paymentMode === "full" ? grandTotalInr : LAB_COLLECTION_FEE_INR;
     const balanceAtDoorInr = Math.max(0, grandTotalInr - paidNowInr);
 
     // === Build insert payload ===
-    const opsNotesParts: string[] = [];
+    const opsNotesParts: string[] = [...flags];
     if (!booking.gps_location) {
       opsNotesParts.push(
         "📍 Location auto-capture declined or unavailable — confirm address with patient before dispatch.",
@@ -251,21 +222,10 @@ export async function POST(req: NextRequest) {
       opsNotesParts.push("🗓 ASAP");
     }
 
-    // customer-link-hotpatch: look up existing customer by phone so the
-    // booking row gets its customer_id assigned. SAN-B-00058/00059 had
-    // matching customers but this path was never querying. Auto-create
-    // for unmatched phones lands in T64 PR1's M043 (requires NOT-NULL
-    // drop on customers.full_name + customer_code); until then NULL is
-    // the existing-behavior fallback.
-    const linkedCustomerId = await lookupCustomerIdByPhone(
-      supabase,
-      submittedPhone,
-    );
+    const linkedCustomerId = phone
+      ? await lookupCustomerIdByPhone(supabase, phone)
+      : null;
 
-    // T90 Slice 2 Step 12 — member_id from Pulse-side lab bookings.
-    // Set client-side by LabBasketWindow when entryPoint='pulse' AND
-    // pulseEntryMember.kind === 'member'. Null on marketing entries
-    // and on Pulse self-bookings. Column exists since M042.
     const memberIdInput =
       typeof booking.member_id === "string" && booking.member_id.trim()
         ? booking.member_id.trim()
@@ -273,19 +233,14 @@ export async function POST(req: NextRequest) {
 
     const insertPayload = {
       patient_name: patientName,
-      phone: submittedPhone,
+      phone: phone || "unknown",
       customer_id: linkedCustomerId,
       member_id: memberIdInput,
       service_category: "lab-tests",
       manual_address: address,
       gps_location: booking.gps_location ?? null,
       ops_notes: opsNotesParts.join("\n") || null,
-      // status = PENDING_COLLECTION matches M008's lab lifecycle.
       status: "PENDING_COLLECTION",
-      // === Money fields (per M008/M009 columns) ===
-      // `amount` is the total cost in rupees (grand total — what the
-      // patient ultimately owes for the booking, whether prepaid or
-      // due at door).
       amount: grandTotalInr,
       selected_tests: selectedTests,
       test_total_paise: subtotalInr * 100,
@@ -294,64 +249,45 @@ export async function POST(req: NextRequest) {
       coupon_discount_paise: discountInr * 100,
       final_amount_paise: grandTotalInr * 100,
       lab_partner: "pathcore",
-      // === Payment lifecycle (T85 PR4b v2 — dual mode) ===
-      //   Mode A (full):    report_payment_status = 'CAPTURED'
-      //                     paid_amount_paise     = grandTotalInr * 100
-      //                     balance_due_paise     = 0
-      //   Mode B (partial): report_payment_status = 'PARTIAL_PAID'
-      //                     paid_amount_paise     = 20000 (₹200)
-      //                     balance_due_paise     = (grand - 200) * 100
-      // The `/reports/[token]` unlock path treats both as "no paywall"
-      // — token is the auth, payment is tracked by ops. Mode B
-      // bookings have a doorstep collection event ops needs to fire.
       report_payment_status: paymentMode === "full" ? "CAPTURED" : "PARTIAL_PAID",
       report_razorpay_order_id: razorpay_order_id,
       report_razorpay_payment_id: razorpay_payment_id,
       report_paid_at: new Date().toISOString(),
-      // === Booking-fee fields (mirrors razorpay/verify pattern) ===
-      // For Mode A the Razorpay capture IS the full payment; we
-      // populate both the booking-fee (M007) and report-payment (M008)
-      // fields so ops queries that union both flows still find this
-      // row. For Mode B only the ₹200 was captured at Razorpay —
-      // `booking_fee_paid_paise` reflects that.
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
       payment_status: "CAPTURED",
       booking_fee_paid_paise: paidNowInr * 100,
       payment_captured_at: new Date().toISOString(),
-      otp_verified_at: new Date(verified.verifiedAt * 1000).toISOString(),
+      otp_verified_at:
+        otpAttested && verified
+          ? new Date(verified.verifiedAt * 1000).toISOString()
+          : null,
     };
 
-    const { data, error } = await supabase
-      .from("bookings")
-      .insert(insertPayload)
-      .select("id, booking_code")
-      .single();
-
-    if (error) {
-      console.error("[lab/create-booking-prepaid] insert failed:", error);
+    // Idempotent + LOUD write (fires the ops alert itself on any DB failure).
+    const persist = await persistBookingIdempotent(insertPayload, razorpay_order_id, {
+      supabase,
+    });
+    if (!persist.ok) {
+      console.error("[lab/create-booking-prepaid] persist failed (ops alerted):", persist.error);
       return NextResponse.json(
         {
-          error:
-            `Payment verified but booking could not be saved. Please call ${PHONE_DISPLAY}.`,
+          error: "Payment verified but booking could not be saved. Please call support.",
           razorpay_payment_id,
         },
         { status: 500 },
       );
     }
+    const data = { id: persist.bookingId, booking_code: persist.bookingCode };
 
-    // T64: customer first-write-wins. Sets the customer's display name
-    // on their FIRST booking only. Subsequent bookings for family
-    // members or under different names don't overwrite (the
-    // `is('full_name', null)` filter is the gate). Patient can later
-    // update via Pulse profile editing (T70/T71). Soft-fail discipline
-    // matches the lead-alert pattern — logged + swallowed.
-    if (linkedCustomerId) {
+    // T64: customer first-write-wins — only a real (non-placeholder) name, on a
+    // genuinely new booking.
+    if (persist.wasNewlyInserted && linkedCustomerId && nameValidation.ok) {
       try {
         const { error: nameWriteErr } = await supabase
           .from("customers")
-          .update({ full_name: patientName })
+          .update({ full_name: nameValidation.name })
           .eq("id", linkedCustomerId)
           .is("full_name", null);
         if (nameWriteErr) {
@@ -368,77 +304,60 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Increment coupon usage (best-effort — booking is authoritative).
     if (couponCode && discountInr > 0) {
       void supabase.rpc("increment_lab_coupon_usage", { _code: couponCode });
-      // If the RPC doesn't exist (older schema), fall back to direct
-      // increment. Either way, don't fail the booking response.
     }
 
-    // T85 PR4b v2 + leadalert-hotfix — ops lead alert with standardized
-    // {{5}} Context format (single source of truth in
-    // contextFormat.ts). Mode A → 'lab-full'; Mode B → 'lab-partial'
-    // (the formatter computes the balance string automatically).
-    //
-    // Awaited (not `void`) — see razorpay/verify for the full rationale;
-    // tl;dr Netlify Functions freeze on response, fire-and-forget
-    // promises never run. Prod smoke 2026-06-08 confirmed.
-    const contextText = formatLeadAlertContext(undefined, {
-      paidPaise: paidNowInr * 100,
-      totalPaise: grandTotalInr * 100,
-      mode: paymentMode === "full" ? "lab-full" : "lab-partial",
-    });
-    // Suppress unused-var warning for balance — captured for ops_notes
-    // composition in a future iteration that surfaces the at-door
-    // balance to ops dashboards.
     void balanceAtDoorInr;
-    // Slice 2a — ops lead alert + patient booking confirmation fired
-    // concurrently (both best-effort, never throw). allSettled keeps one
-    // failure from blocking the other. {{4}} next-step for lab resolves
-    // to the phlebotomist-slot line via getBookingNextStep('lab-tests').
-    const bookingRef = data?.booking_code ?? data?.id ?? "?";
-    try {
-      await Promise.allSettled([
-        sendAarogyaLeadAlert({
-          patientName,
-          serviceDisplayName: t85ServiceDisplayName("lab-tests"),
-          location: address,
-          context: contextText,
-          patientPhone: submittedPhone,
-        }).then(({ delivered }) =>
-          console.log(
-            `[lab/create-booking-prepaid] aarogya_lead_alert dispatch: delivered=${delivered} booking=${bookingRef}`,
-          ),
-        ),
-        sendBookingConfirmed({
-          patientName,
-          serviceSlug: "lab-tests",
-          bookingCode: data?.booking_code ?? "",
-          patientPhone: submittedPhone,
-        }).then(({ delivered }) =>
-          console.log(
-            `[lab/create-booking-prepaid] sanocare_booking_confirmed dispatch: delivered=${delivered} booking=${bookingRef}`,
-          ),
-        ),
-      ]);
-    } catch (alertErr) {
-      console.error(
-        "[lab/create-booking-prepaid] template dispatch threw unexpectedly",
-        alertErr,
-      );
-    }
 
-    // Marketing closed-loop (Slice 2) — link this lab booking back to the
-    // marketing lead that drove it (matched by phone): flip to `booked` + roll
-    // up lifetime_value_paise. Same linker the razorpay path uses; soft-fail.
-    // Covers both lab modes (CAPTURED / PARTIAL_PAID) — the lead converts either
-    // way. grandTotalInr is the full case value (rupees) → paise.
-    if (data?.id) {
-      await linkBookingToMarketingLead({
-        phone: submittedPhone,
-        bookingId: data.id as string,
-        amountPaise: grandTotalInr * 100, // = final_amount_paise on this path
+    // Alerts + marketing link — only on a genuinely new booking so the
+    // idempotent-upgrade path can't double-fire.
+    if (persist.wasNewlyInserted) {
+      const contextText = formatLeadAlertContext(undefined, {
+        paidPaise: paidNowInr * 100,
+        totalPaise: grandTotalInr * 100,
+        mode: paymentMode === "full" ? "lab-full" : "lab-partial",
       });
+      const bookingRef = data?.booking_code ?? data?.id ?? "?";
+      try {
+        await Promise.allSettled([
+          sendAarogyaLeadAlert({
+            patientName,
+            serviceDisplayName: t85ServiceDisplayName("lab-tests"),
+            location: address,
+            context:
+              (flags.length ? `${flags.join(" ")} · ` : "") + contextText,
+            patientPhone: phone,
+          }).then(({ delivered }) =>
+            console.log(
+              `[lab/create-booking-prepaid] aarogya_lead_alert dispatch: delivered=${delivered} booking=${bookingRef}`,
+            ),
+          ),
+          sendBookingConfirmed({
+            patientName,
+            serviceSlug: "lab-tests",
+            bookingCode: data?.booking_code ?? "",
+            patientPhone: phone,
+          }).then(({ delivered }) =>
+            console.log(
+              `[lab/create-booking-prepaid] sanocare_booking_confirmed dispatch: delivered=${delivered} booking=${bookingRef}`,
+            ),
+          ),
+        ]);
+      } catch (alertErr) {
+        console.error(
+          "[lab/create-booking-prepaid] template dispatch threw unexpectedly",
+          alertErr,
+        );
+      }
+
+      if (data?.id) {
+        await linkBookingToMarketingLead({
+          phone,
+          bookingId: data.id as string,
+          amountPaise: grandTotalInr * 100,
+        });
+      }
     }
 
     return NextResponse.json({

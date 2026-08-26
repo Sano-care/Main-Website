@@ -79,6 +79,8 @@ export async function POST(req: Request) {
               amount: Number(it.amount) || 0,
               contact: (it.contact as string | null) ?? null,
               email: (it.email as string | null) ?? null,
+              // notes carries `flow` — used to skip the report-fee lane.
+              notes: (it.notes as Record<string, string> | null) ?? null,
             }),
           );
         },

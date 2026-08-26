@@ -2,9 +2,17 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 import { requirePulseCustomer } from "@/app/pulse/_lib/requireCustomer";
-import { verifyPaymentSignature } from "@/lib/razorpay";
+import { verifyPaymentSignature, getRazorpayClient } from "@/lib/razorpay";
 import { getServiceHalfRoundedUp } from "@/constants/pricing";
-import { validatePatientName } from "@/lib/booking/customerLink";
+import {
+  validatePatientName,
+  lookupCustomerIdByPhone,
+} from "@/lib/booking/customerLink";
+import { normaliseIndianPhone } from "@/lib/otp/token";
+import {
+  persistBookingIdempotent,
+  alertOnPostCaptureFailure,
+} from "@/lib/booking/paymentSafetyNet";
 import { createTeleconsultSession } from "@/lib/consult/createSession";
 import { resolveTeleconsultDoctor } from "@/lib/consult/teleconsultDoctor";
 import { sendBookingConfirmed } from "@/lib/aarogya/meta";
@@ -15,31 +23,18 @@ export const dynamic = "force-dynamic";
 /**
  * POST /api/pulse/teleconsult/verify
  *
- * PB4a — the native (bearer) successor to the web /api/razorpay/verify for
- * teleconsultation. Same payment safety (signature verify + #140 idempotency on
- * razorpay_order_id + webhook safety net), but authed via requirePulseCustomer
- * (bearer token / cookie) instead of the OTP cookie phone-match, and scoped to
- * the caller's own customer + (validated) family member.
+ * PB4a — native (bearer) teleconsult booking. Post-#159 parity: once the
+ * signature verifies the money is captured, so this route never silently drops
+ * a proven-paid transaction:
+ *   - Signature is verified FIRST — ahead of auth.
+ *   - Auth is SOFT: a valid signature with a failed/expired session does not
+ *     401; the booking is persisted with the identity recovered from the
+ *     Razorpay payment contact (+ a loud ops alert).
+ *   - Recoverable validation (member/name) → persist-and-flag, not a 400.
+ *   - The booking write is idempotent + LOUD (persistBookingIdempotent).
  *
- * Unlike the web patient path, this also creates the consultation_sessions +
- * participant (join token) via the shared createTeleconsultSession(), writes a
- * typed scheduled_for (clamped to the 09:00–21:00 Asia/Kolkata window server-
- * side), and fires sanocare_booking_confirmed with the slot in {{4}}. It does
- * NOT deliver the join link — the cron sender (PR-B) owns that, ~10 min before.
- *
- * Body:
- *   {
- *     razorpay_order_id, razorpay_payment_id, razorpay_signature,
- *     booking: {
- *       member_id?: string | null,   // family member; validated to belong to caller
- *       manual_address: string,      // required (MoHFW); app has no GPS
- *       earliest?: boolean,          // true = ~15 min; else use scheduled_for
- *       scheduled_for?: string       // ISO; used when earliest !== true
- *     }
- *   }
- *
- *   200 { ok, bookingId, bookingCode, scheduledFor }
- *   400 { error } | 401 { error } | 500 { error }
+ * Still creates the consultation_sessions + participant and fires
+ * sanocare_booking_confirmed with the clamped slot in {{4}}.
  */
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
@@ -72,10 +67,6 @@ function formatIstSlot(iso: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = await requirePulseCustomer(req);
-    if ("response" in auth) return auth.response;
-    const { customer } = auth;
-
     const body = await req.json().catch(() => null);
     const {
       razorpay_order_id,
@@ -91,7 +82,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing booking" }, { status: 400 });
     }
 
-    // === Signature verification (secret stays server-side) ===
+    // === Signature verification FIRST (money is captured once this passes) ===
     const valid = verifyPaymentSignature({
       orderId: razorpay_order_id,
       paymentId: razorpay_payment_id,
@@ -105,45 +96,84 @@ export async function POST(req: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !serviceRoleKey) {
+      await alertOnPostCaptureFailure({
+        orderId: razorpay_order_id,
+        paymentId: razorpay_payment_id,
+        serviceDisplay: "Teleconsultation",
+        reason: "Supabase credentials missing on /api/pulse/teleconsult/verify",
+      });
       return NextResponse.json({ error: "Server credentials missing" }, { status: 500 });
     }
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false },
     });
 
-    // === Resolve patient (self or a validated family member) ===
-    // WhatsApp always goes to the account holder's phone; a member booking just
-    // changes the patient name on the booking row.
+    // === Auth is SOFT — never 401 a proven-paid booking ===
+    const auth = await requirePulseCustomer(req);
+    const authedCustomer = "customer" in auth ? auth.customer : null;
+
+    // === Resolve identity ===
+    // Authed → the signed-in customer. Auth failed but signature valid → recover
+    // the payer from the Razorpay payment contact (teleconsult orders carry no
+    // customer_id in notes) and FLAG it; the booking still lands.
+    const flags: string[] = [];
+    let customerId: string | null = null;
+    let customerPhone = "";
+    let selfName: string | null = null;
+    if (authedCustomer) {
+      customerId = authedCustomer.id;
+      customerPhone = authedCustomer.phone;
+      selfName = authedCustomer.full_name;
+    } else {
+      flags.push(
+        "⚠ SESSION EXPIRED at verify — payer recovered from the payment contact; confirm patient identity.",
+      );
+      try {
+        const payment = await getRazorpayClient().payments.fetch(razorpay_payment_id);
+        const contactPhone = normaliseIndianPhone(String(payment?.contact ?? ""));
+        if (contactPhone) {
+          customerPhone = contactPhone;
+          customerId = await lookupCustomerIdByPhone(supabase, contactPhone);
+        }
+      } catch (e) {
+        console.error("[pulse/teleconsult/verify] payment fetch (identity recovery) failed", e);
+      }
+    }
+
+    // === Resolve patient (self, or a validated family member) ===
     const memberIdRaw =
       typeof booking.member_id === "string" && booking.member_id.trim()
         ? booking.member_id.trim()
         : null;
     let memberId: string | null = null;
-    let rawPatientName: string | null = customer.full_name;
-    if (memberIdRaw) {
+    let rawPatientName: string | null = selfName;
+    if (memberIdRaw && authedCustomer) {
       const { data: member } = await supabase
         .from("family_members")
         .select("id, name")
         .eq("id", memberIdRaw)
-        .eq("customer_id", customer.id) // IDOR guard — member must belong to caller
+        .eq("customer_id", authedCustomer.id) // IDOR guard
         .maybeSingle();
-      if (!member) {
-        return NextResponse.json(
-          { error: "That family member isn't on your account." },
-          { status: 400 },
+      if (member) {
+        memberId = member.id as string;
+        rawPatientName = member.name as string;
+      } else {
+        flags.push(
+          "⚠ MEMBER NOT VALIDATED — the selected family member isn't on this account; booked under the account holder.",
         );
       }
-      memberId = member.id as string;
-      rawPatientName = member.name as string;
-    }
-    const nameValidation = validatePatientName(rawPatientName);
-    if (!nameValidation.ok) {
-      return NextResponse.json({ error: nameValidation.error }, { status: 400 });
+    } else if (memberIdRaw && !authedCustomer) {
+      flags.push("⚠ MEMBER NOT VALIDATED (session expired) — booked under the recovered account.");
     }
 
-    // Address is OPTIONAL for teleconsultation — it's a video consult, so we
-    // don't block the booking on it (the app no longer requires it). Store null
-    // when absent rather than 400-ing.
+    // === Recoverable validation → persist-and-flag (never a 400 post-capture) ===
+    const nameValidation = validatePatientName(rawPatientName);
+    const patientName = nameValidation.ok
+      ? nameValidation.name
+      : "[Name pending — collect from patient]";
+    if (!nameValidation.ok) flags.push("⚠ NAME NOT CAPTURED — collect patient name.");
+
+    // Address is OPTIONAL for teleconsultation (video consult) — null when absent.
     const manualAddressRaw = String(booking.manual_address ?? "").trim();
     const manualAddress: string | null =
       manualAddressRaw.length >= 4 ? manualAddressRaw : null;
@@ -162,18 +192,20 @@ export async function POST(req: NextRequest) {
 
     // === Persist booking (service-role; payment just verified) ===
     const advancePaise = getServiceHalfRoundedUp("teleconsult") * 100; // ₹200 → 20000
+    const baseOpsNotes = manualAddress
+      ? "🎥 Pulse app teleconsult (video) — address provided (no GPS capture)."
+      : "🎥 Pulse app teleconsult (video) — no address (optional for video).";
+    const opsNotes = [flags.join("\n"), baseOpsNotes].filter(Boolean).join("\n");
+
     const insertPayload = {
-      patient_name: nameValidation.name,
-      phone: customer.phone,
-      customer_id: customer.id,
+      patient_name: patientName,
+      phone: customerPhone || "unknown",
+      customer_id: customerId,
       member_id: memberId,
       service_category: "teleconsultation",
       manual_address: manualAddress,
       gps_location: null,
-      // Teleconsult is a video consult with no dispatch; address is optional.
-      ops_notes: manualAddress
-        ? "🎥 Pulse app teleconsult (video) — address provided (no GPS capture)."
-        : "🎥 Pulse app teleconsult (video) — no address (optional for video).",
+      ops_notes: opsNotes,
       amount: getServiceHalfRoundedUp("teleconsult"), // advance in ₹ captured now
       scheduled_for: scheduledForIso,
       status: "CONFIRMED",
@@ -183,38 +215,15 @@ export async function POST(req: NextRequest) {
       payment_status: "CAPTURED",
       booking_fee_paid_paise: advancePaise,
       payment_captured_at: new Date().toISOString(),
-      otp_verified_at: new Date().toISOString(), // bearer session ⇒ prior OTP verify
+      otp_verified_at: authedCustomer ? new Date().toISOString() : null,
     };
 
-    // Idempotent insert — the partial unique index on bookings(razorpay_order_id)
-    // (#140) guarantees one booking per order even if the webhook safety net
-    // already stubbed this capture or the client double-submits. On a unique
-    // violation we upgrade the existing row with the real details.
-    const inserted = await supabase
-      .from("bookings")
-      .insert(insertPayload)
-      .select("id, booking_code")
-      .single();
-    let data = inserted.data;
-    let error = inserted.error;
-
-    if (error && (error as { code?: string }).code === "23505") {
-      const upgraded = await supabase
-        .from("bookings")
-        .update(insertPayload)
-        .eq("razorpay_order_id", razorpay_order_id)
-        .select("id, booking_code")
-        .single();
-      data = upgraded.data;
-      error = upgraded.error;
-      console.info(
-        "[pulse/teleconsult/verify] order already had a booking — upgraded in place",
-        razorpay_order_id,
-      );
-    }
-
-    if (error || !data) {
-      console.error("[pulse/teleconsult/verify] booking insert failed:", error);
+    // Idempotent + LOUD write (fires the ops alert itself on any DB failure).
+    const persist = await persistBookingIdempotent(insertPayload, razorpay_order_id, {
+      supabase,
+    });
+    if (!persist.ok) {
+      console.error("[pulse/teleconsult/verify] booking persist failed (ops alerted):", persist.error);
       return NextResponse.json(
         {
           error: "Payment captured but booking could not be saved. Please contact support.",
@@ -223,20 +232,17 @@ export async function POST(req: NextRequest) {
         { status: 500 },
       );
     }
-
-    const bookingId = data.id as string;
-    const bookingCode = (data.booking_code as string | null) ?? null;
+    const bookingId = persist.bookingId as string;
+    const bookingCode = persist.bookingCode ?? null;
 
     // === Create the consult session (idempotent by booking) + confirm once ===
-    // Guard on an existing session so a retried verify (or a webhook-stub upgrade)
-    // never double-creates a session or re-sends the confirmation.
     const { data: existingSession } = await supabase
       .from("consultation_sessions")
       .select("id")
       .eq("booking_id", bookingId)
       .maybeSingle();
 
-    if (!existingSession) {
+    if (!existingSession && persist.wasNewlyInserted) {
       const doctor = await resolveTeleconsultDoctor(supabase);
       if (doctor) {
         try {
@@ -245,12 +251,10 @@ export async function POST(req: NextRequest) {
             doctorId: doctor.id,
             dutyRoomUrl: doctor.duty_room_join_url,
             scheduledAtIso: scheduledForIso,
-            customerId: customer.id,
+            customerId: customerId,
             createdBy: null, // native path has no ops user (column is nullable)
           });
         } catch (sessionErr) {
-          // Payment is captured + booking is saved — never 500 the client here.
-          // Log loudly so ops can attach a session manually.
           console.error(
             `[pulse/teleconsult/verify] session create failed for booking ${bookingCode ?? bookingId} — ops must attach one:`,
             sessionErr,
@@ -263,22 +267,38 @@ export async function POST(req: NextRequest) {
       }
 
       // Booking-confirmed WhatsApp — best-effort (never throws). Slot → {{4}}.
-      const slotLine = `Scheduled for ${formatIstSlot(scheduledForIso)}. Your video link arrives ~10 min before.`;
-      await sendBookingConfirmed({
-        patientName: nameValidation.name,
-        serviceSlug: "teleconsultation",
-        bookingCode: bookingCode ?? "",
-        patientPhone: customer.phone,
-        nextStepOverride: slotLine,
-      })
-        .then(({ delivered }) =>
-          console.log(
-            `[pulse/teleconsult/verify] sanocare_booking_confirmed delivered=${delivered} booking=${bookingCode ?? bookingId}`,
-          ),
-        )
-        .catch((e) =>
-          console.error("[pulse/teleconsult/verify] booking-confirmed send threw", e),
-        );
+      // Skip if we have no phone (identity recovery failed) — can't message.
+      if (customerPhone) {
+        const slotLine = `Scheduled for ${formatIstSlot(scheduledForIso)}. Your video link arrives ~10 min before.`;
+        await sendBookingConfirmed({
+          patientName,
+          serviceSlug: "teleconsultation",
+          bookingCode: bookingCode ?? "",
+          patientPhone: customerPhone,
+          nextStepOverride: slotLine,
+        })
+          .then(({ delivered }) =>
+            console.log(
+              `[pulse/teleconsult/verify] sanocare_booking_confirmed delivered=${delivered} booking=${bookingCode ?? bookingId}`,
+            ),
+          )
+          .catch((e) =>
+            console.error("[pulse/teleconsult/verify] booking-confirmed send threw", e),
+          );
+      }
+    }
+
+    // Any post-capture flag (session expired / member / name) → loud ops alert
+    // so ops can confirm the patient even when the normal confirmation ran.
+    if (flags.length) {
+      await alertOnPostCaptureFailure({
+        orderId: razorpay_order_id,
+        paymentId: razorpay_payment_id,
+        amountPaise: advancePaise,
+        contact: customerPhone || null,
+        serviceDisplay: "Teleconsultation",
+        reason: `Booking saved WITH FLAGS: ${flags.join(" ")}`,
+      });
     }
 
     return NextResponse.json({
