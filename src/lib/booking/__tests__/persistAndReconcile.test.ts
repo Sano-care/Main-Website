@@ -18,6 +18,7 @@ vi.mock("@/lib/whatsapp/opsAlert", () => ({
 import {
   persistBookingIdempotent,
   reconcileRazorpayOrphans,
+  alertOnPostCaptureFailure,
   WEBHOOK_RECONCILE_MARKER,
   type RazorpayPaymentLite,
 } from "@/lib/booking/paymentSafetyNet";
@@ -270,5 +271,82 @@ describe("reconcileRazorpayOrphans", () => {
     expect(r.ran).toBe(true);
     expect(r.scanned).toBe(0);
     expect(sendOpsAlertFn).not.toHaveBeenCalled();
+  });
+
+  it("skips the report-fee lane (lab_report_payment) — no phantom stub/alert", async () => {
+    const { client, rows } = makeDb([]);
+    const sendOpsAlertFn = okAlert();
+    const r = await reconcileRazorpayOrphans({
+      supabase: client,
+      listPayments: async () => [
+        cap({ id: "pay_report", order_id: "order_report", notes: { flow: "lab_report_payment" } }),
+        cap({ id: "pay_booking", order_id: "order_booking" }), // real booking orphan
+      ],
+      fetchOrderNotes: async () => ({ flow: "pb5_medic_cart" }),
+      sendOpsAlertFn,
+      now: NOW,
+    });
+    expect(r.skippedReportLane).toBe(1);
+    expect(r.scanned).toBe(1); // only the booking payment
+    expect(r.orphansEnsured).toBe(1);
+    expect(sendOpsAlertFn).toHaveBeenCalledTimes(1);
+    expect(rows.find((x) => x.razorpay_order_id === "order_report")).toBeUndefined();
+  });
+
+  it("pb5_medic_cart orphan (no t85_slug) → stub resolves service via the flow map", async () => {
+    const { client, rows } = makeDb([]);
+    const sendOpsAlertFn = okAlert();
+    const r = await reconcileRazorpayOrphans({
+      supabase: client,
+      listPayments: async () => [cap({ id: "pay_medic", order_id: "order_medic" })],
+      // pb5_medic_cart stashes flow + customer_id + cart_hash but NO t85_slug.
+      fetchOrderNotes: async () => ({ flow: "pb5_medic_cart", customer_id: "c1" }),
+      sendOpsAlertFn,
+      now: NOW,
+    });
+    expect(r.orphansEnsured).toBe(1);
+    const stub = rows.find((x) => x.razorpay_order_id === "order_medic");
+    expect(stub).toBeTruthy();
+    expect(stub!.service_category).toBe("medic-at-home"); // NOT "unknown"
+  });
+});
+
+describe("alertOnPostCaptureFailure", () => {
+  it("fires a loud ops alert carrying order/payment/amount/contact/reason", async () => {
+    const sendOpsAlertFn = okAlert();
+    await alertOnPostCaptureFailure(
+      {
+        orderId: "order_ABC",
+        paymentId: "pay_XYZ",
+        amountPaise: 20_000,
+        contact: "+919812345678",
+        serviceDisplay: "Teleconsultation",
+        reason: "Razorpay order fetch failed — integrity uncheckable",
+      },
+      { sendOpsAlertFn },
+    );
+    expect(sendOpsAlertFn).toHaveBeenCalledTimes(1);
+    const arg = (sendOpsAlertFn.mock.calls as unknown as Array<
+      [{ context: string; serviceDisplay: string; patientMobile: string }]
+    >)[0][0];
+    expect(arg.context).toContain("order_ABC");
+    expect(arg.context).toContain("pay_XYZ");
+    expect(arg.context).toContain("₹200");
+    expect(arg.context).toContain("order fetch failed");
+    expect(arg.serviceDisplay).toBe("Teleconsultation");
+    expect(arg.patientMobile).toBe("+919812345678");
+  });
+
+  it("never throws even when the sender rejects (belt-and-braces)", async () => {
+    const throwingAlert = vi.fn(async () => {
+      throw new Error("BSP down");
+    });
+    await expect(
+      alertOnPostCaptureFailure(
+        { orderId: "o", paymentId: "p", reason: "x" },
+        { sendOpsAlertFn: throwingAlert },
+      ),
+    ).resolves.toBeUndefined();
+    expect(throwingAlert).toHaveBeenCalledTimes(1);
   });
 });

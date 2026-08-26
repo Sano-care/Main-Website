@@ -39,6 +39,26 @@ export const WEBHOOK_RECONCILE_MARKER = "🩹 WEBHOOK_RECONCILE";
 /** Postgres unique-violation SQLSTATE — the idempotency backstop tripping. */
 const PG_UNIQUE_VIOLATION = "23505";
 
+/**
+ * Map a Razorpay `notes.flow` to a valid `service_category` when the order
+ * notes carry no `t85_slug`/`service_category` of their own. The native flows
+ * (pb5_medic_cart) stash neither, so without this the reconciler resolves an
+ * invalid "unknown" and the stub insert trips the service_category CHECK — the
+ * orphan then errors out instead of being recorded. Web t85 flows +
+ * teleconsult (via /api/razorpay/create-order t85_slug) + lab_prepaid all carry
+ * t85_slug already, so they never need this fallback. Keep flow strings in sync
+ * with the create-order routes.
+ */
+const FLOW_TO_SERVICE: Record<string, string> = {
+  pb5_medic_cart: "medic-at-home",
+  t85_lab_prepaid: "lab-tests",
+};
+
+/** Report-fee lane (matched by report_razorpay_order_id, handled by the
+ *  webhook's lab_report_payment branch) — NOT a booking orphan. The active
+ *  reconciler must skip it or it would stub a phantom booking + false-alert. */
+const REPORT_PAYMENT_FLOW = "lab_report_payment";
+
 export interface EnsureBookingArgs {
   orderId: string;
   paymentId: string;
@@ -119,8 +139,19 @@ export async function ensureBookingForCapturedOrder(
   const notes = await deps
     .fetchOrderNotes(args.orderId)
     .catch((): Record<string, string> => ({}));
+  // Flow-agnostic service resolution: prefer the explicit t85_slug /
+  // service_category the web flows stash, then fall back to the flow map so
+  // native flows (pb5_medic_cart) resolve a VALID category instead of a CHECK-
+  // violating "unknown". 'unknown' remains only for a genuinely unrecognised
+  // flow — allowed by the service_category CHECK as a reconciliation sentinel.
+  const flow = String(notes.flow ?? "").trim();
   const service =
-    (notes.t85_slug || notes.service_category || "").trim() || "unknown";
+    (
+      notes.t85_slug ||
+      notes.service_category ||
+      FLOW_TO_SERVICE[flow] ||
+      ""
+    ).trim() || "unknown";
   const phone = (args.contact ?? "").trim() || "unknown";
   const amountRupees = Math.round(args.amountPaise) / 100;
 
@@ -396,6 +427,8 @@ export interface RazorpayPaymentLite {
   amount: number;
   contact?: string | null;
   email?: string | null;
+  /** payment.notes (copied from the order) — used to skip the report-fee lane. */
+  notes?: Record<string, string> | null;
 }
 
 export interface ReconcileOrphansDeps {
@@ -417,6 +450,8 @@ export interface ReconcileOrphansResult {
   orphansEnsured: number;
   /** captured payments that already had a booking. */
   alreadyPresent: number;
+  /** report-fee captures skipped (they belong to the report lane, not orphans). */
+  skippedReportLane: number;
   errors: number;
 }
 
@@ -438,9 +473,17 @@ export async function reconcileRazorpayOrphans(
   let orphansEnsured = 0;
   let alreadyPresent = 0;
   let errors = 0;
+  let skippedReportLane = 0;
 
   for (const p of payments) {
     if (p.status !== "captured" || !p.order_id) continue;
+    // Report-fee captures live on report_razorpay_order_id (the webhook's
+    // lab_report_payment branch owns them) — never a booking-fee orphan, so
+    // skip them or we'd stub a phantom booking + false-alert.
+    if (p.notes?.flow === REPORT_PAYMENT_FLOW) {
+      skippedReportLane++;
+      continue;
+    }
     scanned++;
     try {
       const res = await ensureBookingForCapturedOrder(
@@ -477,6 +520,57 @@ export async function reconcileRazorpayOrphans(
     scanned,
     orphansEnsured,
     alreadyPresent,
+    skippedReportLane,
     errors,
   };
+}
+
+// ---------------------------------------------------------------------------
+// alertOnPostCaptureFailure — the LOUD path for a post-capture failure that is
+// NOT a DB write failure (persistBookingIdempotent already alerts on those):
+// an order-fetch failure, a cart/amount integrity mismatch, or an auth failure
+// after a valid signature. Once the Razorpay signature verifies, the money is
+// captured — so no such branch may exit on a bare console.error. This is the
+// single shared "money in, something went wrong" alert used by the web + app
+// verify routes so ops can reconcile or refund. Never throws.
+// ---------------------------------------------------------------------------
+
+export interface PostCaptureFailureArgs {
+  orderId: string;
+  paymentId: string;
+  /** paise captured (order.amount) if known. */
+  amountPaise?: number | null;
+  /** patient phone / Razorpay contact if known. */
+  contact?: string | null;
+  /** human service label, e.g. "Medic at Home". */
+  serviceDisplay?: string;
+  /** short reason, e.g. "cart/amount integrity mismatch" or "order fetch failed". */
+  reason: string;
+}
+
+export async function alertOnPostCaptureFailure(
+  args: PostCaptureFailureArgs,
+  deps: { sendOpsAlertFn?: typeof sendOpsAlert } = {},
+): Promise<void> {
+  const sendOpsAlertFn = deps.sendOpsAlertFn ?? sendOpsAlert;
+  const rupees =
+    args.amountPaise != null ? Math.round(Number(args.amountPaise)) / 100 : null;
+  try {
+    await sendOpsAlertFn({
+      conversationId: null,
+      escalationId: null,
+      patientName: "⚠ PAID — POST-CAPTURE FAILURE",
+      patientAge: "—",
+      serviceDisplay: args.serviceDisplay ?? "unknown",
+      location: "Money captured; booking not completed — reconcile / refund now",
+      context: `${args.reason} · order ${args.orderId}, payment ${args.paymentId}${
+        rupees != null ? `, ₹${rupees}` : ""
+      }. Contact: ${args.contact ?? "unknown"}.`,
+      patientMobile: args.contact ?? "unknown",
+    });
+  } catch (e) {
+    // The hardened sendOpsAlert never throws; this is belt-and-braces so a
+    // post-capture failure path can never turn its own alert into an exception.
+    console.error("[alertOnPostCaptureFailure] alert send threw (swallowed)", e);
+  }
 }
