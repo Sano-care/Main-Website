@@ -688,3 +688,90 @@ export const SEARCH_LAB_TESTS: ToolSchema = {
 
 /** Patient-only lab tools (customer + new). Withheld from medic/doctor/ops. */
 export const AAROGYA_LAB_TOOLS: ToolSchema[] = [SEARCH_LAB_TESTS];
+
+// ---------------------------------------------------------------------------
+// Medic-at-Home cart (patient roles only). search → quote → start-booking.
+// Prices are read LIVE from home_care_procedures by the executors — NEVER put a
+// price in these descriptions or the system prompt. The model supplies intent
+// (procedure codes + qty) only; the server prices, links, and books.
+// ---------------------------------------------------------------------------
+
+const MEDIC_CART_ITEM_SCHEMA = {
+  type: "array",
+  description:
+    "The procedures to price/book, each a catalog CODE from search_medic_procedures with a quantity. " +
+    "units = number of sutures/staples for per-unit procedures; hours = total drip hours for IV drips.",
+  items: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      code: { type: "string", description: "The procedure code from search_medic_procedures." },
+      qty: { type: "integer", description: "How many (>=1)." },
+      units: { type: "integer", description: "Optional: sutures/staples count (per-unit procedures)." },
+      hours: { type: "integer", description: "Optional: total IV-drip hours (the 1st hour is included)." },
+    },
+    required: ["code", "qty"],
+  },
+} as const;
+
+export const SEARCH_MEDIC_PROCEDURES: ToolSchema = {
+  name: "search_medic_procedures",
+  description:
+    "Look up Medic-at-Home procedures (injections, IV drips, wound dressing, catheter care, " +
+    "suture removal, etc.) by name/keyword and return each one's code, starting price, and whether " +
+    "it needs a doctor's prescription. Call when the patient names a procedure they want at home so " +
+    "you can get its CODE before quoting. Read-only. Every visit includes a ₹199 base.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      query: { type: "string", description: "Procedure name/keyword, e.g. 'IV drip', 'wound dressing', 'injection'." },
+    },
+    required: ["query"],
+  },
+};
+
+export const QUOTE_MEDIC_CART: ToolSchema = {
+  name: "quote_medic_cart",
+  description:
+    "Get the exact server-computed price for a Medic-at-Home cart (base visit + the chosen procedures). " +
+    "Call after search_medic_procedures has given you the codes and the patient has said what they want. " +
+    "Read-only — this only prices, it does NOT book or take payment. Returns the pay-now amount, any " +
+    "at-the-visit variable amount, and whether anything needs a prescription.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: { items: MEDIC_CART_ITEM_SCHEMA },
+    required: ["items"],
+  },
+};
+
+export const START_MEDIC_BOOKING: ToolSchema = {
+  name: "start_medic_booking",
+  description:
+    "Start payment for a Medic-at-Home cart the patient has CONFIRMED they want. The server re-prices, " +
+    "and: for procedures needing a prescription it routes to the care team for verification (no payment " +
+    "link); otherwise it sends a secure Razorpay payment link. NEVER tell the patient the booking is " +
+    "confirmed here — a booking is created ONLY when the payment actually clears (you'll be told). Do " +
+    "NOT call this to 'confirm' a payment the patient claims to have made.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      items: MEDIC_CART_ITEM_SCHEMA,
+      payment_mode: {
+        type: "string",
+        enum: ["booking_fee", "full"],
+        description: "'full' (default) charges the whole pay-now amount; 'booking_fee' charges a flat ₹100 to confirm, balance at the visit.",
+      },
+    },
+    required: ["items"],
+  },
+};
+
+/** Patient-only medic-cart tools (customer + new). Withheld from other roles. */
+export const AAROGYA_MEDIC_CART_TOOLS: ToolSchema[] = [
+  SEARCH_MEDIC_PROCEDURES,
+  QUOTE_MEDIC_CART,
+  START_MEDIC_BOOKING,
+];

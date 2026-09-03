@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
 import { getRazorpayClient } from "@/lib/razorpay";
 import { ensureBookingForCapturedOrder } from "@/lib/booking/paymentSafetyNet";
+import { createMedicBookingFromCapture } from "@/lib/medic/medicBookingOnCapture";
 
 export const runtime = "nodejs";
 
@@ -271,6 +272,54 @@ export async function POST(req: NextRequest) {
           .eq("report_razorpay_payment_id", paymentId);
       }
 
+      return NextResponse.json({ ok: true });
+    }
+
+    // === Aarogya Medic-at-Home: create-on-capture from a paid payment link ===
+    // The WhatsApp agent sends a Razorpay payment link (flow=aarogya_medic_cart)
+    // whose notes carry the cart_ref. "Payment received" is driven ONLY by this
+    // signed webhook (§5.3) — never a patient's claim. We rebuild the exact
+    // booking + booking_items from the server-priced cart intent. Idempotent on
+    // razorpay_order_id; if payment.captured also fires it collapses via the
+    // unique index (whichever runs first, the full booking wins).
+    if (eventType === "payment_link.paid") {
+      const link = event?.payload?.payment_link?.entity;
+      const payment = event?.payload?.payment?.entity;
+      const notes = (link?.notes || {}) as Record<string, string>;
+      const cartRef = notes.cart_ref;
+      const orderId = payment?.order_id as string | undefined;
+      const paymentId = payment?.id as string | undefined;
+
+      if (notes.flow === "aarogya_medic_cart" && cartRef && orderId && paymentId) {
+        try {
+          const result = await createMedicBookingFromCapture(
+            {
+              cartRef,
+              orderId,
+              paymentId,
+              amountPaise: Number(payment?.amount) || 0,
+              contact: (payment?.contact as string | undefined) ?? null,
+            },
+            { supabase },
+          );
+          console.info("[webhook payment_link.paid] aarogya medic", {
+            orderId,
+            action: result.action,
+          });
+        } catch (e) {
+          // Never turn a captured payment into a retry storm — log + ACK. The
+          // reconcile cron (#159) is the backstop that guarantees a booking.
+          console.error(
+            "[webhook payment_link.paid] medic create-on-capture failed (captured, booking NOT ensured)",
+            orderId,
+            e,
+          );
+        }
+      } else {
+        console.info("[webhook payment_link.paid] no aarogya_medic_cart cart_ref", {
+          flow: notes.flow,
+        });
+      }
       return NextResponse.json({ ok: true });
     }
 

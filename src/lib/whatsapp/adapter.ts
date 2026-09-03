@@ -86,6 +86,12 @@ import {
 } from "@/lib/whatsapp/slice5Executors";
 import { executeSearchLabTests } from "@/lib/whatsapp/labExecutors";
 import {
+  executeSearchMedicProcedures,
+  executeQuoteMedicCart,
+  executeStartMedicBooking,
+} from "@/lib/whatsapp/medicCartExecutors";
+import { supabaseAdmin } from "@/lib/supabase-server";
+import {
   executeRegisterCustomer,
   type RegisterCustomerInput,
 } from "@/lib/whatsapp/customerRegisterExecutor";
@@ -836,6 +842,40 @@ export async function handleInboundMessage(
             identity,
             input: call.input as unknown as { query?: string },
           });
+          break;
+        // ---- Medic-at-Home cart (patient only) — search → quote → book -------
+        case "search_medic_procedures":
+          toolPatientMsg = await executeSearchMedicProcedures(
+            { identity, input: call.input as unknown as { query?: string } },
+            { supabase: supabaseAdmin },
+          );
+          break;
+        case "quote_medic_cart":
+          toolPatientMsg = await executeQuoteMedicCart(
+            { identity, input: call.input as unknown as { items?: unknown } },
+            { supabase: supabaseAdmin },
+          );
+          break;
+        case "start_medic_booking":
+          // The model supplies intent (procedures) only; phone + customerId are
+          // adapter-injected (never from the model), and the server prices +
+          // links + books. Rx-required carts route to ops instead of a link.
+          toolPatientMsg = await executeStartMedicBooking(
+            {
+              input: call.input as unknown as {
+                items?: unknown;
+                payment_mode?: unknown;
+              },
+            },
+            {
+              identity,
+              phone: inbound.phone,
+              conversationId: conversation.id,
+              customerId:
+                identity.role === "customer" ? identity.customerId ?? null : null,
+            },
+            { supabase: supabaseAdmin },
+          );
           break;
         case "relay_to_patient":
           toolPatientMsg = await executeRelayToPatient(
