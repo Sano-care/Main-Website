@@ -27,6 +27,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { sendOpsAlert } from "@/lib/whatsapp/opsAlert";
+import { attachClickIdsToBooking } from "@/lib/wa/attribution";
 
 /**
  * Marker prefixing `ops_notes` on any booking created by the webhook backstop
@@ -191,6 +192,10 @@ export async function ensureBookingForCapturedOrder(
     }
     throw error; // real failure — webhook logs it and still ACKs 200.
   }
+
+  // Paid attribution — copy any recent WhatsApp gclid for this phone onto the
+  // reconciliation stub (best-effort; uses the global service-role client).
+  await attachClickIdsToBooking({ bookingId: inserted?.id as string, phone: args.contact });
 
   // Loudly tell ops: money in, booking incomplete. Best-effort; sendOpsAlert
   // never throws (retries + OPS_ALERT_FAILED audit on total failure).

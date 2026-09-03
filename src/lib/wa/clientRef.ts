@@ -4,6 +4,8 @@
 // what GclidCapture persisted (first-party cookie + localStorage mirror) and
 // decorates WhatsApp hrefs; it never talks to the DB.
 
+import { useSyncExternalStore } from "react";
+
 import { WHATSAPP_DEEPLINK } from "@/lib/contact";
 
 export const GCLID_COOKIE = "sc_gclid";
@@ -55,21 +57,50 @@ export function readWaRef(): string | null {
 }
 
 /**
- * Build a WhatsApp href. When this visitor arrived from an ad (we hold a ref
- * token), the link carries a prefilled message with `[ref: SC-XXXXXX]` so the
- * inbound handler can re-attach the gclid. Untracked visitors get the plain
- * chat link — we never fabricate a token.
+ * Pure href builder given an explicit ref (null = untracked). When a ref is
+ * present, the link carries a prefilled message with `[ref: SC-XXXXXX]` so the
+ * inbound handler can re-attach the gclid; untracked visitors get the plain
+ * chat link (or whatever prefill the CTA already had) — we never fabricate a
+ * token, and we never change the human-readable prefill.
  */
-export function buildWaHref(message?: string | null): string {
-  const ref = readWaRef();
+export function buildWaHrefFromRef(
+  message?: string | null,
+  ref?: string | null,
+): string {
   const base = (message ?? "").trim();
 
-  // Untracked (organic): keep whatever prefill the CTA already had — a CTA that
-  // passes no message stays a plain chat. We never fabricate a token.
   if (!ref) {
-    return base ? `${WHATSAPP_DEEPLINK}?text=${encodeURIComponent(base)}` : WHATSAPP_DEEPLINK;
+    return base
+      ? `${WHATSAPP_DEEPLINK}?text=${encodeURIComponent(base)}`
+      : WHATSAPP_DEEPLINK;
   }
 
   const text = base || DEFAULT_BOOKING_MESSAGE;
   return `${WHATSAPP_DEEPLINK}?text=${encodeURIComponent(`${text} [ref: ${ref}]`)}`;
+}
+
+/**
+ * Build a WhatsApp href, reading the stored ref at call time. Safe to call from
+ * an already-mounted client context (e.g. after a `mounted` guard). For a
+ * persistent CTA that renders during SSR, prefer the `useWaHref` hook so the
+ * initial render matches the server and can't cause a hydration mismatch.
+ */
+export function buildWaHref(message?: string | null): string {
+  return buildWaHrefFromRef(message, readWaRef());
+}
+
+const noopSubscribe = () => () => {};
+
+/**
+ * Hydration-safe read of the stored ref: null on the server AND on the first
+ * client (hydration) render, then the real `SC-XXXXXX` after mount. Backed by
+ * useSyncExternalStore so it never triggers a setState-in-effect.
+ */
+export function useWaRef(): string | null {
+  return useSyncExternalStore(noopSubscribe, readWaRef, () => null);
+}
+
+/** Hydration-safe wa.me href for a persistent client CTA. */
+export function useWaHref(message?: string | null): string {
+  return buildWaHrefFromRef(message, useWaRef());
 }
