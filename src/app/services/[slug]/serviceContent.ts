@@ -158,7 +158,7 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
     serviceSlug: "medic-at-home",
     metaTitle: "Home Nurse in Delhi NCR — Sanocare | From ₹199",
     metaDescription:
-      "Trained GNM / B.Sc Nursing medic at home for injections, IV drips, wound dressing and post-surgical care across Delhi NCR. Under 30-minute arrival. From ₹199. Serving Kalkaji & Govindpuri Extension.",
+      "Trained GNM / B.Sc Nursing medic at home for injections, IV drips, wound dressing and post-surgical care across Delhi NCR. Under 30-minute arrival. From ₹199. Serving South Delhi, Noida, West Delhi, Gurugram and Faridabad.",
     h1: "Home Nursing Service in Delhi NCR",
     subtitle:
       "From ₹199 · a trained medic at your door in under 30 minutes for injections, IV drips, dressings and more.",
@@ -180,7 +180,7 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
       },
       {
         heading: "Service area & timing",
-        body: `Home nursing covers ${AREA}, with arrival typically under 30 minutes of booking. Standard hours are 9 AM to 9 PM, with extended care available on request for ongoing courses such as a multi-day injection schedule.`,
+        body: `Home nursing covers South Delhi, Noida, West Delhi, Gurugram and Faridabad, with arrival typically under 30 minutes of booking. Standard hours are 9 AM to 9 PM, with extended care available on request for ongoing courses such as a multi-day injection schedule.`,
       },
       {
         heading: "Pricing & compliance",
@@ -235,7 +235,7 @@ export const SERVICE_PAGES: Record<string, ServicePageContent> = {
       },
       {
         q: "Which areas do you cover?",
-        a: `Home nursing covers ${AREA}. Message us on WhatsApp if you're nearby and we'll confirm coverage.`,
+        a: "We cover South Delhi (Kalkaji, Govindpuri Extension, Greater Kailash, Saket, Hauz Khas), Noida, West Delhi, Gurugram and Faridabad. Message us on WhatsApp with your area and we'll confirm coverage.",
       },
     ],
   },
