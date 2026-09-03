@@ -13,6 +13,8 @@
 
 import { z } from "zod";
 
+import { extractWaRefToken, stripWaRef } from "@/lib/wa/refToken";
+
 // ---------------------------------------------------------------------------
 // Message types we recognise. Anything outside this set is normalised to
 // "unsupported" so the orchestrator can log-and-skip without throwing.
@@ -143,8 +145,18 @@ export interface NormalizedInbound {
   phone: string;
   /** Recognised message type, or "unsupported". */
   type: (typeof WHATSAPP_MESSAGE_TYPES)[number];
-  /** Text body for type === "text"; null otherwise. */
+  /**
+   * Text body for type === "text"; null otherwise. The paid-attribution
+   * `[ref: SC-XXXXXX]` fragment is STRIPPED here (see `waRefToken`) so it is
+   * never stored, shown in /ops, or seen by the agent. `raw` keeps the original.
+   */
   text: string | null;
+  /**
+   * The `SC-XXXXXX` click token parsed out of the raw inbound text, or null.
+   * Consumed once (first message) to stamp conversations.gclid; the fragment
+   * itself is removed from `text`.
+   */
+  waRefToken: string | null;
   /** Sender display name from the contacts array, if present. */
   contactName: string | null;
   /** Cloud API phone_number_id the message arrived on. */
@@ -205,11 +217,17 @@ export function extractInboundMessages(
           msg.button?.text ??
           msg.interactive?.button_reply?.title ??
           null;
+        // Paid-attribution: pull the [ref: SC-XXXXXX] click token out of the raw
+        // text and strip it, so everything downstream (stored message, /ops,
+        // agent) sees clean text while the token rides on `waRefToken`.
+        const rawText = msg.type === "text" ? (msg.text?.body ?? null) : null;
+        const waRefToken = extractWaRefToken(rawText);
         out.push({
           providerMessageId: msg.id,
           phone: toE164(msg.from),
           type: normalizeType(msg.type),
-          text: msg.type === "text" ? (msg.text?.body ?? null) : null,
+          text: waRefToken ? stripWaRef(rawText) : rawText,
+          waRefToken,
           contactName: contactsByWaId.get(msg.from) ?? null,
           phoneNumberId,
           timestamp: msg.timestamp,

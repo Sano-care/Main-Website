@@ -152,14 +152,15 @@ export async function recordInboundMessage(args: {
     })
     .eq("id", conversationId);
 
-  // Offline-conversion attribution — if this message carries a `[ref: SC-XXXXXX]`
-  // token from a paid WhatsApp click, resolve it and stamp the gclid onto the
+  // Offline-conversion attribution — if this message carried a `[ref: SC-XXXXXX]`
+  // token from a paid WhatsApp click (parsed + stripped at the normalization
+  // boundary onto `waRefToken`), resolve it and stamp the gclid onto the
   // conversation (first click wins). Tolerant + best-effort: the vast majority of
   // messages carry no token, an unknown token is ignored, and nothing here can
   // block the reply path.
   await stampConversationClickAttribution({
     conversationId,
-    text: inbound.text,
+    refToken: inbound.waRefToken,
   });
 
   return { inserted: true, messageId: (data as { id: string }).id };

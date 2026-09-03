@@ -18,6 +18,7 @@ import {
   persistBookingIdempotent,
   alertOnPostCaptureFailure,
 } from "@/lib/booking/paymentSafetyNet";
+import { attachClickIdsToBooking } from "@/lib/wa/attribution";
 import { LAB_COLLECTION_FEE_INR } from "@/lib/services/labCatalog";
 import { linkBookingToMarketingLead } from "@/lib/marketing/closedLoop";
 
@@ -280,6 +281,10 @@ export async function POST(req: NextRequest) {
       );
     }
     const data = { id: persist.bookingId, booking_code: persist.bookingCode };
+
+    // Paid attribution — copy the phone's recent WhatsApp gclid onto the
+    // booking (best-effort; never fails the paid booking).
+    await attachClickIdsToBooking({ bookingId: data.id, phone });
 
     // T64: customer first-write-wins — only a real (non-placeholder) name, on a
     // genuinely new booking.

@@ -26,7 +26,8 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { ArrowRight, Phone } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { PHONE_TEL, WHATSAPP_DEEPLINK } from "@/lib/contact";
+import { PHONE_TEL } from "@/lib/contact";
+import { buildWaHref } from "@/lib/wa/clientRef";
 
 const WHATSAPP_PREFILL = "Hi, I'd like to book a Sanocare visit";
 // Threshold: if the visual viewport shrinks below 75% of the window,
@@ -111,7 +112,7 @@ export function MobileStickyBar({ onBook }: MobileStickyBarProps) {
 
             {/* WhatsApp — brand green */}
             <a
-              href={`${WHATSAPP_DEEPLINK}?text=${encodeURIComponent(WHATSAPP_PREFILL)}`}
+              href={buildWaHref(WHATSAPP_PREFILL)}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Chat on WhatsApp"
