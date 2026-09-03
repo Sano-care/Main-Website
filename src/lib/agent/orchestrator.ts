@@ -22,6 +22,7 @@ import {
 import {
   AAROGYA_CAREHUB_TOOLS,
   AAROGYA_LAB_TOOLS,
+  AAROGYA_MEDIC_CART_TOOLS,
   AAROGYA_MEDIC_TOOLS,
   AAROGYA_OPS_TOOLS,
   AAROGYA_PULSE_TOOLS,
@@ -72,7 +73,9 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
   // AAROGYA_TOOLS, so append it here only for patient roles instead).
   const isPatient =
     input.identity?.role === "customer" || input.identity?.role === "new";
-  const tools = isPatient ? [...baseTools, ...AAROGYA_LAB_TOOLS] : baseTools;
+  const tools = isPatient
+    ? [...baseTools, ...AAROGYA_LAB_TOOLS, ...AAROGYA_MEDIC_CART_TOOLS]
+    : baseTools;
 
   // Build the message list: capped history (oldest → newest) + the new user turn.
   const trimmed = input.history.slice(-HISTORY_LIMIT);
