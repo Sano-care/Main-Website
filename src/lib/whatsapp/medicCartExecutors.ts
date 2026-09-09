@@ -48,7 +48,45 @@ export interface MedicSearchRow extends CatalogRow {
 const SEARCH_COLS =
   "code, name, category, tier, rx_required, is_base_included, absolute_price_paise, delta_paise, price_type, per_unit_addon_paise, hourly_addon_paise, description, display_order";
 
-/** Live fuzzy search over the active catalog by name/category. */
+// Filler / stopwords + units that carry no catalog meaning. Quantities
+// ("1", "2h", "30ml") are dropped by the digit-led check below, not this set.
+const SEARCH_STOPWORDS = new Set([
+  "at", "home", "my", "a", "an", "the", "for", "please", "need", "needs",
+  "want", "wants", "i", "to", "of", "on", "in", "with", "get", "got", "book",
+  "booking", "some", "and", "is", "do", "would", "like", "can", "you", "me",
+  "us", "pls", "plz", "help", "hi", "hello",
+  "hour", "hours", "hr", "hrs", "min", "mins", "minute", "minutes",
+  "unit", "units", "time", "times", "session", "sessions", "day", "days", "x",
+]);
+
+/**
+ * Tokenize a free-text procedure query: split on non-alphanumerics, drop 1-char
+ * noise, quantities (digit-led tokens like "1" / "2h" / "30ml") and
+ * filler/stopwords, keeping meaningful terms (including the 2-char route codes
+ * "im" / "iv" / "sc"). Deduped, order-preserving. Exported for tests.
+ */
+export function tokenizeProcedureQuery(query: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of query.toLowerCase().split(/[^a-z0-9]+/)) {
+    if (raw.length < 2) continue; // drop 1-char noise
+    if (/^\d/.test(raw)) continue; // drop quantities: 1, 2h, 30ml
+    if (SEARCH_STOPWORDS.has(raw)) continue;
+    if (seen.has(raw)) continue;
+    seen.add(raw);
+    out.push(raw);
+  }
+  return out;
+}
+
+/**
+ * Live fuzzy search over the active catalog. Tokenizes the query and OR-matches
+ * each remaining token against name/category (each `ILIKE %token%`), so
+ * "injection", "Intramuscular injection IM", "IM injection", and "1 IM
+ * injection at home" all resolve to intramuscular_im_injection. Ranked by
+ * display_order. (A single whole-string ILIKE — the old behaviour — matched
+ * nothing for any multi-word phrasing, which dead-looped the agent.)
+ */
 export async function searchMedicProcedures(
   supabase: SupabaseClient,
   query: string,
@@ -56,12 +94,21 @@ export async function searchMedicProcedures(
 ): Promise<MedicSearchRow[]> {
   const q = query.trim();
   if (q.length < 2) return [];
-  const pattern = `%${q.replace(/[%_]/g, "")}%`;
+  // Tokenize; if nothing meaningful survives (query was all filler), fall back
+  // to the whole cleaned string so a lone odd term still searches.
+  const tokens = tokenizeProcedureQuery(q);
+  const terms = (tokens.length ? tokens : [q.toLowerCase()])
+    .map((t) => t.replace(/[%_,()]/g, "").trim()) // strip ILIKE + PostgREST-or chars
+    .filter((t) => t.length >= 2);
+  if (terms.length === 0) return [];
+  const orClause = terms
+    .flatMap((t) => [`name.ilike.%${t}%`, `category.ilike.%${t}%`])
+    .join(",");
   const { data, error } = await supabase
     .from("home_care_procedures")
     .select(SEARCH_COLS)
     .eq("is_active", true)
-    .or(`name.ilike.${pattern},category.ilike.${pattern}`)
+    .or(orClause)
     .order("display_order", { ascending: true })
     .limit(limit);
   if (error) throw new Error(`medic procedure search failed: ${error.message}`);
@@ -319,7 +366,7 @@ export async function executeStartMedicBooking(
     patientName = (cust as { full_name?: string | null } | null)?.full_name ?? null;
   }
 
-  const intent = await createCartIntent(deps.supabase, {
+  const intent = await createCartIntent({
     conversationId: ctx.conversationId,
     customerId: ctx.customerId,
     phone: ctx.phone,
@@ -355,7 +402,7 @@ export async function executeStartMedicBooking(
     return "I couldn't generate the payment link just now — please try again in a moment.";
   }
 
-  await attachLinkToIntent(deps.supabase, intent.cartRef, link.id);
+  await attachLinkToIntent(intent.cartRef, link.id);
 
   const balancePaise = Math.max(0, quote.prepay_paise - chargePaise);
   const modeLine =

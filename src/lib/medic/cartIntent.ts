@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { supabaseAdmin } from "@/lib/supabase-server";
 import type { CartItemInput, CartQuote } from "./cartPricing";
 
 // Server-side store for an Aarogya (WhatsApp) medic cart between "agent sends a
@@ -27,9 +28,15 @@ export interface MedicCartIntent {
   status: "pending" | "consumed";
 }
 
+// medic_cart_intents is RLS deny-all (holds phone + cart data — service-role
+// only, never opened to anon/authenticated). WRITES therefore go through the
+// service-role admin client (same client the payment_link.paid webhook reads
+// them with), NOT the adapter's request-scoped client — mirrors
+// register_customer, which writes `customers` from Aarogya the same way. Using
+// the request client here silently failed every INSERT (0 rows ever written).
+
 /** Persist a priced cart intent. Returns the cart_ref to stash in link notes. */
 export async function createCartIntent(
-  supabase: SupabaseClient,
   args: {
     conversationId?: string | null;
     customerId?: string | null;
@@ -40,7 +47,7 @@ export async function createCartIntent(
     quote: CartQuote;
   },
 ): Promise<{ cartRef: string } | { error: string }> {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("medic_cart_intents")
     .insert({
       conversation_id: args.conversationId ?? null,
@@ -60,11 +67,10 @@ export async function createCartIntent(
 
 /** Record the Razorpay payment-link id once created (traceability). */
 export async function attachLinkToIntent(
-  supabase: SupabaseClient,
   cartRef: string,
   paymentLinkId: string,
 ): Promise<void> {
-  await supabase
+  await supabaseAdmin
     .from("medic_cart_intents")
     .update({ razorpay_payment_link_id: paymentLinkId })
     .eq("cart_ref", cartRef);

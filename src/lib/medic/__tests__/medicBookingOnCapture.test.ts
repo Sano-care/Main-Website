@@ -8,6 +8,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+// cartIntent now imports supabaseAdmin at module load (§3 — intent writes are
+// service-role); stub it so createClient() doesn't run at import. This test
+// drives getCartIntentByRef/markCartIntentConsumed via the injected deps.supabase.
+vi.mock("@/lib/supabase-server", () => ({ supabaseAdmin: {} }));
 
 const persistBookingIdempotent = vi.fn<(...a: unknown[]) => Promise<unknown>>();
 const alertOnPostCaptureFailure = vi.fn<(...a: unknown[]) => Promise<unknown>>(
