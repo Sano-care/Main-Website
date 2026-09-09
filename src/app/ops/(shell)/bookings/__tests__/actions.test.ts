@@ -16,6 +16,9 @@ vi.mock("@/lib/aarogya/meta", () => ({
   labTimeWindowFromDate: vi.fn(),
 }));
 vi.mock("@/lib/aarogya/labels", () => ({ serviceCategoryToSlug: (s: string) => s }));
+// createBooking dynamically imports this (server-only) — mock it so the real
+// supabaseAdmin isn't constructed during the test.
+vi.mock("@/lib/wa/attribution", () => ({ attachClickIdsToBooking: vi.fn() }));
 vi.mock("@/lib/whatsapp/slice3Dispatcher", () => ({
   notifyOnMedicAssigned: vi.fn(async () => ({})),
 }));

@@ -57,7 +57,10 @@ function inboundFromCandidate(c: ReconcileCandidate): NormalizedInbound {
     providerMessageId: c.provider_message_id ?? "",
     phone: c.phone,
     type: t,
+    // Stored content is already ref-stripped; the token was consumed (stamped)
+    // on the original inbound pass, so re-enqueued turns carry none.
     text: c.content ?? "",
+    waRefToken: null,
     contactName: null,
     phoneNumberId: null,
     timestamp: "",

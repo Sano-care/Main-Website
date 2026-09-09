@@ -1223,6 +1223,14 @@ export async function createBooking(formData: FormData) {
     throw new Error(`Could not create booking: ${bookingErr?.message ?? "unknown"}`);
   }
 
+  // Paid attribution — copy the customer's recent WhatsApp gclid onto the
+  // booking (join is by phone, so a WhatsApp-sourced patient still links even
+  // when ops logs the booking). Best-effort: never blocks the booking.
+  // Dynamic import (mirrors notifyOnMedicAssigned below) so the server-only
+  // attribution module's supabaseAdmin isn't constructed at file-import time.
+  const { attachClickIdsToBooking } = await import("@/lib/wa/attribution");
+  await attachClickIdsToBooking({ bookingId: inserted.id, phone: customerPhone });
+
   // ----------------------------------------------------------------
   // C2: teleconsult side-effects — consultation_session + patient
   // participant + Rampwin join-link delivery. Runs only when

@@ -13,6 +13,7 @@ import {
   persistBookingIdempotent,
   alertOnPostCaptureFailure,
 } from "@/lib/booking/paymentSafetyNet";
+import { attachClickIdsToBooking } from "@/lib/wa/attribution";
 import { createTeleconsultSession } from "@/lib/consult/createSession";
 import { resolveTeleconsultDoctor } from "@/lib/consult/teleconsultDoctor";
 import { sendBookingConfirmed } from "@/lib/aarogya/meta";
@@ -234,6 +235,9 @@ export async function POST(req: NextRequest) {
     }
     const bookingId = persist.bookingId as string;
     const bookingCode = persist.bookingCode ?? null;
+
+    // Paid attribution — copy the phone's recent WhatsApp gclid onto the booking.
+    await attachClickIdsToBooking({ bookingId, phone: customerPhone });
 
     // === Create the consult session (idempotent by booking) + confirm once ===
     const { data: existingSession } = await supabase

@@ -6,6 +6,7 @@ import {
   verifyToken,
 } from "@/lib/otp/token";
 import { PHONE_DISPLAY } from "@/lib/contact";
+import { attachClickIdsToBooking } from "@/lib/wa/attribution";
 
 export const runtime = "nodejs";
 
@@ -140,6 +141,10 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+
+  // Paid attribution — copy the phone's recent WhatsApp gclid onto the booking.
+  // Best-effort: never fails the booking.
+  await attachClickIdsToBooking({ bookingId: data?.id, phone: submittedPhone });
 
   return NextResponse.json({ ok: true, bookingId: data?.id });
 }

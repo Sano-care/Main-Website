@@ -4,7 +4,7 @@ import Link from "next/link";
 import { MessageCircle } from "lucide-react";
 
 import { useBookingFlow } from "@/hooks/useBookingFlow";
-import { WHATSAPP_DEEPLINK } from "@/lib/contact";
+import { useWaHref } from "@/lib/wa/clientRef";
 import type { ServiceSlug } from "@/lib/services/catalog";
 
 // Interactive booking CTA for the SEO service pages. The page itself stays a
@@ -85,6 +85,9 @@ export function BookVisitCta({
   fireWhatsAppConversion?: boolean;
 }) {
   const { requestBookingForService, requestBookingForLab } = useBookingFlow();
+  // Carries the `[ref: SC-XXXXXX]` click token for ad-sourced visitors so a
+  // WhatsApp booking can be attributed back to the paid click. Hydration-safe.
+  const waHref = useWaHref();
 
   const onBook = () =>
     serviceSlug === "lab-tests"
@@ -105,7 +108,7 @@ export function BookVisitCta({
         Book a visit
       </button>
       <Link
-        href={WHATSAPP_DEEPLINK}
+        href={waHref}
         target="_blank"
         rel="noopener noreferrer"
         onClick={onWhatsApp}

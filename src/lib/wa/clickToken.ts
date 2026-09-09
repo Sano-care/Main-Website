@@ -3,6 +3,13 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 
 import { supabaseAdmin } from "@/lib/supabase-server";
+import {
+  WA_REF_PREFIX,
+  WA_REF_RE,
+  extractWaRefToken,
+  stripWaRef,
+  buildWaRefSuffix,
+} from "@/lib/wa/refToken";
 
 // WhatsApp click-token — the short, human-typable handle that carries a Google
 // Ads click id (gclid) through the WhatsApp handoff.
@@ -14,11 +21,16 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 // The Aarogya inbound handler regexes it back out and stamps the resolved gclid
 // onto the conversation, so a booking that later gets paid can be uploaded to
 // Google Ads as an offline conversion.
+//
+// The pure regex/parse helpers (WA_REF_RE, extractWaRefToken, stripWaRef,
+// buildWaRefSuffix) live in ./refToken — no DB, no server-only — so the inbound
+// normalization boundary can strip the token without importing this module.
+// Re-exported here so existing importers of clickToken keep working.
+
+export { WA_REF_PREFIX, WA_REF_RE, extractWaRefToken, stripWaRef, buildWaRefSuffix };
 
 const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"; // Crockford base32
 const TOKEN_BODY_LEN = 6;
-
-export const WA_REF_PREFIX = "SC-";
 
 /** `SC-` + 6 Crockford-base32 chars (~1.07e9 space — ample for click volume). */
 export function generateWaClickToken(): string {
@@ -28,24 +40,6 @@ export function generateWaClickToken(): string {
     body += ALPHABET[bytes[i] % ALPHABET.length];
   }
   return `${WA_REF_PREFIX}${body}`;
-}
-
-/**
- * Matches `[ref: SC-XXXXXX]` tolerantly — any case, optional inner whitespace.
- * Patients forward/retype messages, so be generous about what we accept.
- */
-export const WA_REF_RE = /\[\s*ref\s*:\s*(SC-[0-9A-HJKMNP-TV-Z]{6})\s*\]/i;
-
-/** Pull the ref token out of an inbound message body. Null when absent. */
-export function extractWaRefToken(text: string | null | undefined): string | null {
-  if (!text) return null;
-  const match = WA_REF_RE.exec(text);
-  return match ? match[1].toUpperCase() : null;
-}
-
-/** The suffix appended to a WhatsApp prefill message. */
-export function buildWaRefSuffix(token: string): string {
-  return ` [ref: ${token}]`;
 }
 
 /**
