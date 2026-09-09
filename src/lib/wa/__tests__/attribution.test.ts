@@ -130,6 +130,20 @@ describe("refToken helpers", () => {
     expect(stripWaRef("book [ref: SC-AB12CD] now")).toBe("book now");
   });
 
+  it("strips MULTIPLE [ref: …] fragments (forwarded ref + own ref)", () => {
+    const text = "old msg [ref: SC-AA11BB] hi [ref: SC-CC22DD]";
+    expect(stripWaRef(text)).toBe("old msg hi");
+    // no ref must survive into stored/agent/ops text
+    expect(stripWaRef(text)).not.toMatch(/ref/i);
+  });
+
+  it("extractWaRefToken returns the FIRST token, stably on repeat calls (no lastIndex drift)", () => {
+    const text = "old [ref: SC-AA11BB] new [ref: SC-CC22DD]";
+    expect(extractWaRefToken(text)).toBe("SC-AA11BB");
+    expect(extractWaRefToken(text)).toBe("SC-AA11BB");
+    expect(extractWaRefToken(text)).toBe("SC-AA11BB");
+  });
+
   it("token absent → extract null, strip unchanged", () => {
     expect(extractWaRefToken("Hi there")).toBeNull();
     expect(stripWaRef("Hi there")).toBe("Hi there");
